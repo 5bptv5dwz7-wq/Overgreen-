@@ -41,6 +41,7 @@
       <p id="activeUserLabel" class="active-user"></p>
     </div>
     <div class="header-actions">
+      <button id="pendingBtn" class="icon-btn small admin-only" aria-label="Interventi da convalidare">✓<span id="pendingBadge" class="pending-badge hidden">0</span></button>
       <button id="dataBtn" class="icon-btn small" aria-label="Backup dati">⋯</button>
       <button id="addStoreBtn" class="icon-btn" aria-label="Aggiungi punto vendita">＋</button>
     </div>
@@ -109,19 +110,22 @@
       <input type="hidden" id="doneStoreId" />
       <label>Data<input id="doneDate" type="date" required /></label>
       <label>Nota intervento<textarea id="doneNote" rows="3" placeholder="Es. taglio completo, siepe da riprendere…"></textarea></label>
-      <div class="photo-fields">
-        <label class="photo-picker">
-          <span>📷 Foto prima</span>
-          <input id="beforePhoto" type="file" accept="image/*" capture="environment" />
-          <img id="beforePreview" class="photo-preview hidden" alt="Anteprima foto prima" />
-        </label>
-        <label class="photo-picker">
-          <span>📷 Foto dopo</span>
-          <input id="afterPhoto" type="file" accept="image/*" capture="environment" />
-          <img id="afterPreview" class="photo-preview hidden" alt="Anteprima foto dopo" />
-        </label>
-      </div>
-      <p class="helper">In questa prova le foto restano soltanto su questo iPhone.</p>
+      <fieldset class="workers-fieldset">
+        <legend>Chi ha eseguito</legend>
+        <div class="workers-grid">
+          <label><input type="checkbox" name="worker" value="Lorenzo"> Lorenzo</label>
+          <label><input type="checkbox" name="worker" value="Giorgio"> Giorgio</label>
+          <label><input type="checkbox" name="worker" value="Roberto"> Roberto</label>
+          <label><input type="checkbox" name="worker" value="Eros"> Eros</label>
+        </div>
+      </fieldset>
+      <label class="photo-picker">
+        <span>📷 Aggiungi foto</span>
+        <input id="genericPhotos" type="file" accept="image/*" capture="environment" multiple />
+      </label>
+      <div id="genericPreview" class="generic-preview"></div>
+      <p class="helper">Puoi inserire una o più foto generiche. In questa prova restano soltanto su questo dispositivo.</p>
+      <p id="employeeApprovalNotice" class="approval-notice hidden">L'intervento sarà inviato a Lorenzo e diventerà effettivo solo dopo la sua convalida.</p>
       <div class="dialog-actions">
         <button type="button" class="secondary" data-close="doneDialog">Annulla</button>
         <button type="submit">✓ Conferma</button>
@@ -134,6 +138,10 @@
       <div class="dialog-head">
         <h2 id="historyTitle">Storico</h2>
         <button type="button" class="close-btn" data-close="historyDialog">×</button>
+      </div>
+      <div id="pendingSection" class="pending-section hidden">
+        <h3>Da convalidare</h3>
+        <div id="pendingList"></div>
       </div>
       <div id="historyList"></div>
     </div>

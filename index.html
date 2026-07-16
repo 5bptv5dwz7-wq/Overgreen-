@@ -38,6 +38,7 @@
       <p id="activeUserLabel" class="active-user"></p>
     </div>
     <div class="header-actions">
+      <button id="extrasBtn" type="button" class="icon-btn small" aria-label="Apri extra" title="Extra">E</button>
       <button id="scheduleBtn" type="button" class="icon-btn small" aria-label="Apri programmazione" title="Programmazione">📅</button>
       <button id="pendingBtn" class="icon-btn small admin-only" aria-label="Interventi da convalidare">✓<span id="pendingBadge" class="pending-badge hidden">0</span></button>
       <button id="dataBtn" class="icon-btn small" aria-label="Apri impostazioni">⚙</button>
@@ -173,6 +174,73 @@
     </div>
   </section>
 
+
+  <section id="extrasScreen" class="settings-screen hidden" aria-label="Lavori extra">
+    <div class="settings-topbar">
+      <button id="extrasBackBtn" class="settings-back" type="button" aria-label="Torna ai punti vendita">‹</button>
+      <div><p class="eyebrow">OVERGREEN</p><h2 id="extrasPageTitle">Lavori extra</h2></div>
+      <button id="newExtraBtn" type="button" class="icon-btn admin-only" aria-label="Nuovo extra">＋</button>
+    </div>
+    <div class="settings-content">
+      <section class="settings-card extra-summary-card">
+        <div class="extra-filter-row">
+          <button type="button" class="secondary extra-filter active" data-extra-filter="open">Aperti</button>
+          <button type="button" class="secondary extra-filter" data-extra-filter="pending">Da convalidare</button>
+          <button type="button" class="secondary extra-filter" data-extra-filter="completed">Completati</button>
+          <button type="button" class="secondary extra-filter" data-extra-filter="all">Tutti</button>
+        </div>
+      </section>
+      <section class="settings-card">
+        <div class="settings-section-head"><div><h3 id="extrasListTitle">Extra</h3><p id="extrasListHelp">Richieste, programmazione e chiusura lavori.</p></div></div>
+        <div id="extrasList" class="extras-list"></div>
+      </section>
+    </div>
+  </section>
+
+  <dialog id="extraFormDialog">
+    <form id="extraForm">
+      <div class="dialog-head"><h2 id="extraFormTitle">Nuovo extra</h2><button type="button" class="close-btn" data-close="extraFormDialog">×</button></div>
+      <input id="extraId" type="hidden" />
+      <label>Punto vendita<select id="extraStoreId" required></select></label>
+      <label>Titolo lavoro<input id="extraTitle" required placeholder="Es. Ripristino aiuola ingresso" /></label>
+      <label>Descrizione<textarea id="extraDescription" rows="4" placeholder="Descrivi cosa deve essere fatto"></textarea></label>
+      <div class="form-grid"><label>Data richiesta<input id="extraRequestDate" type="date" required /></label><label>Scadenza<input id="extraDueDate" type="date" /></label></div>
+      <label>Note per la squadra<textarea id="extraNotes" rows="3" placeholder="Indicazioni operative, materiali, contatti…"></textarea></label>
+      <label class="file-field">📄 PDF richiesta Eurospin<input id="extraPdf" type="file" accept="application/pdf,.pdf" /></label>
+      <p id="extraPdfName" class="helper">Nessun PDF allegato</p>
+      <div class="dialog-actions"><button type="button" class="secondary" data-close="extraFormDialog">Annulla</button><button type="submit">Salva extra</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="extraScheduleDialog">
+    <form id="extraScheduleForm">
+      <div class="dialog-head"><h2>Programma extra</h2><button type="button" class="close-btn" data-close="extraScheduleDialog">×</button></div>
+      <input id="extraScheduleId" type="hidden" />
+      <label>Giorno<input id="extraScheduleDate" type="date" required /></label>
+      <fieldset class="workers-fieldset"><legend>Squadra</legend><div id="extraScheduleWorkers" class="workers-grid"></div></fieldset>
+      <label>Nota di programmazione<textarea id="extraScheduleNote" rows="3"></textarea></label>
+      <div class="dialog-actions"><button type="button" class="secondary" data-close="extraScheduleDialog">Annulla</button><button type="submit">Assegna</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="extraCloseDialog">
+    <form id="extraCloseForm">
+      <div class="dialog-head"><h2 id="extraCloseTitle">Chiusura extra</h2><button type="button" class="close-btn" data-close="extraCloseDialog">×</button></div>
+      <input id="extraCloseId" type="hidden" />
+      <p class="approval-notice">Per inviare il lavoro servono entrambi i rapportini.</p>
+      <label class="photo-picker"><span>📷 Rapportino Eurospin</span><input id="eurospinReport" type="file" accept="image/*" capture="environment" /></label>
+      <div id="eurospinReportPreview" class="report-preview"></div>
+      <label class="photo-picker"><span>📷 Rapportino Overgreen</span><input id="overgreenReport" type="file" accept="image/*" capture="environment" /></label>
+      <div id="overgreenReportPreview" class="report-preview"></div>
+      <label>Note finali<textarea id="extraCloseNote" rows="3" placeholder="Lavoro svolto, materiali usati, anomalie…"></textarea></label>
+      <div class="dialog-actions"><button type="button" class="secondary" data-close="extraCloseDialog">Annulla</button><button id="submitExtraClose" type="submit" disabled>Invia per convalida</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="pdfDialog" class="pdf-dialog">
+    <div class="pdf-viewer"><div class="dialog-head"><h2 id="pdfTitle">Richiesta PDF</h2><button type="button" class="close-btn" data-close="pdfDialog">×</button></div><iframe id="pdfFrame" title="Anteprima PDF"></iframe></div>
+  </dialog>
+
   <section id="settingsScreen" class="settings-screen hidden" aria-label="Impostazioni">
     <div class="settings-topbar">
       <button id="settingsBackBtn" class="settings-back" type="button" aria-label="Torna ai punti vendita">‹</button>
@@ -239,7 +307,7 @@
 
       <section class="settings-card info-card">
         <h3>ℹ️ Informazioni</h3>
-        <p>Overgreen gestione interventi · Versione 11</p>
+        <p>Overgreen gestione interventi · Versione 13</p>
       </section>
 
       <button id="logoutBtn" class="danger-button settings-logout">Esci dall’app</button>

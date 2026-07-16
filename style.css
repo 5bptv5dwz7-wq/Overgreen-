@@ -200,3 +200,19 @@ body.settings-open{overflow:hidden}
   #scheduleScreen .workers-grid{grid-template-columns:1fr!important}
   #scheduleScreen .settings-card{padding:13px!important}
 }
+
+
+/* v11: i dipendenti vedono soltanto le assegnazioni ricevute */
+body.employee-mode #scheduleCreateCard,
+body.employee-mode #scheduleCreateCard.admin-only,
+#scheduleCreateCard.hidden {
+  display: none !important;
+}
+body.employee-mode #scheduleScreen .settings-content {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+body.employee-mode #scheduleScreen .settings-content > .settings-card:not(#scheduleCreateCard) {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+}

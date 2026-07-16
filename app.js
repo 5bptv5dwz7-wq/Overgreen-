@@ -70,16 +70,23 @@ function openSchedule(){
   try{
     closeSettings();
     const screen=$('scheduleScreen');
+    const admin=isAdmin();
     screen.classList.remove('hidden');
     document.body.classList.add('settings-open');
-    delete $('scheduleForm').dataset.editId;
-    $('scheduleCreateCard').classList.toggle('hidden',!isAdmin());
-    $('scheduleDate').value=tomorrowDate();
-    $('scheduleNote').value='';
-    $('scheduleStoreSearch').value='';
-    if($('scheduleStoreSort'))$('scheduleStoreSort').value='urgency';
-    renderScheduleWorkers();
-    renderScheduleStorePicker();
+    $('scheduleCreateCard').classList.toggle('hidden',!admin);
+    $('scheduleCreateCard').setAttribute('aria-hidden',String(!admin));
+    $('schedulePageTitle').textContent=admin?'Programmazione':'I miei lavori';
+
+    if(admin){
+      delete $('scheduleForm').dataset.editId;
+      $('scheduleDate').value=tomorrowDate();
+      $('scheduleNote').value='';
+      $('scheduleStoreSearch').value='';
+      if($('scheduleStoreSort'))$('scheduleStoreSort').value='urgency';
+      renderScheduleWorkers();
+      renderScheduleStorePicker();
+    }
+
     renderSchedules();
     window.scrollTo(0,0);
   }catch(error){

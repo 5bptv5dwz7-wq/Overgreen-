@@ -201,10 +201,22 @@
     <form id="extraForm">
       <div class="dialog-head"><h2 id="extraFormTitle">Nuovo extra</h2><button type="button" class="close-btn" data-close="extraFormDialog">×</button></div>
       <input id="extraId" type="hidden" />
-      <label>Punto vendita<select id="extraStoreId" required></select></label>
+      <label>Punto vendita
+        <select id="extraStoreMode">
+          <option value="existing">Dalla lista punti vendita</option>
+          <option value="custom">Altro punto vendita</option>
+        </select>
+      </label>
+      <div id="extraExistingStoreFields">
+        <label>Scegli punto vendita<select id="extraStoreId"></select></label>
+      </div>
+      <div id="extraCustomStoreFields" class="hidden">
+        <label>Nome punto vendita<input id="extraCustomStoreName" placeholder="Es. Eurospin Via Roma" /></label>
+        <label>Indirizzo completo<input id="extraCustomStoreAddress" placeholder="Via, numero civico, città" /></label>
+      </div>
       <label>Titolo lavoro<input id="extraTitle" required placeholder="Es. Ripristino aiuola ingresso" /></label>
       <label>Descrizione<textarea id="extraDescription" rows="4" placeholder="Descrivi cosa deve essere fatto"></textarea></label>
-      <div class="form-grid"><label>Data richiesta<input id="extraRequestDate" type="date" required /></label><label>Scadenza<input id="extraDueDate" type="date" /></label></div>
+      <div class="form-grid"><label>Data richiesta<input id="extraRequestDate" type="date" required /></label><label>Giorno intervento<input id="extraDueDate" type="date" required /></label></div>
       <label>Note per la squadra<textarea id="extraNotes" rows="3" placeholder="Indicazioni operative, materiali, contatti…"></textarea></label>
       <label class="file-field">📄 PDF richiesta Eurospin<input id="extraPdf" type="file" accept="application/pdf,.pdf" /></label>
       <p id="extraPdfName" class="helper">Nessun PDF allegato</p>
@@ -216,7 +228,7 @@
     <form id="extraScheduleForm">
       <div class="dialog-head"><h2>Programma extra</h2><button type="button" class="close-btn" data-close="extraScheduleDialog">×</button></div>
       <input id="extraScheduleId" type="hidden" />
-      <label>Giorno<input id="extraScheduleDate" type="date" required /></label>
+      <label>Giorno intervento<input id="extraScheduleDate" type="date" required /></label><p class="helper">Corrisponde al giorno indicato nell’extra. Modificandolo aggiorni anche il giorno dell’intervento.</p>
       <fieldset class="workers-fieldset"><legend>Squadra</legend><div id="extraScheduleWorkers" class="workers-grid"></div></fieldset>
       <label>Nota di programmazione<textarea id="extraScheduleNote" rows="3"></textarea></label>
       <div class="dialog-actions"><button type="button" class="secondary" data-close="extraScheduleDialog">Annulla</button><button type="submit">Assegna</button></div>

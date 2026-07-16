@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#075b31" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Overgreen" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="stylesheet" href="style.css" />
+  <title>Overgreen Lavori</title>
+</head>
+<body>
+  <div id="loginScreen" class="login-screen">
+    <div class="login-card">
+      <div class="login-logo">OG</div>
+      <p class="eyebrow">OVERGREEN</p>
+      <h1>Gestione punti vendita</h1>
+      <p class="helper">Inserisci la password per accedere.</p>
+      <form id="loginForm">
+        <label>Password<input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password" required /></label>
+        <button type="submit">Accedi</button>
+        <p id="loginError" class="login-error hidden">Password non corretta.</p>
+      </form>
+    </div>
+  </div>
+
+  <header>
+    <div>
+      <p class="eyebrow">OVERGREEN</p>
+      <h1>Punti vendita</h1>
+      <p id="todayLabel" class="today-label"></p>
+    </div>
+    <div class="header-actions">
+      <button id="dataBtn" class="icon-btn small" aria-label="Backup dati">⋯</button>
+      <button id="addStoreBtn" class="icon-btn" aria-label="Aggiungi punto vendita">＋</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="summary">
+      <button class="summary-card" data-filter="all"><strong id="totalCount">0</strong><span>Totali</span></button>
+      <button class="summary-card danger-card" data-filter="due"><strong id="dueCount">0</strong><span>Scaduti</span></button>
+      <button class="summary-card warning-card" data-filter="warning"><strong id="warningCount">0</strong><span>In scadenza</span></button>
+      <button class="summary-card success-card" data-filter="today"><strong id="todayCount">0</strong><span>Fatti oggi</span></button>
+    </section>
+
+    <div class="toolbar">
+      <input id="searchInput" type="search" placeholder="Cerca nome, città o indirizzo…" />
+      <div class="toolbar-selects">
+        <select id="filterSelect" aria-label="Filtra punti vendita">
+          <option value="all">Tutti</option>
+          <option value="due">Scaduti</option>
+          <option value="warning">In scadenza</option>
+          <option value="ok">Regolari</option>
+          <option value="today">Fatti oggi</option>
+        </select>
+        <select id="sortSelect" aria-label="Ordina punti vendita">
+          <option value="urgent">Più urgenti</option>
+          <option value="alphabetical">Ordine alfabetico</option>
+        </select>
+      </div>
+    </div>
+
+    <section id="storeList" class="store-list"></section>
+    <div id="emptyState" class="empty hidden">
+      <strong>Nessun punto vendita</strong>
+      <span>Prova a cambiare ricerca o filtro.</span>
+    </div>
+  </main>
+
+  <dialog id="storeDialog">
+    <form id="storeForm">
+      <div class="dialog-head">
+        <h2 id="dialogTitle">Aggiungi punto vendita</h2>
+        <button type="button" class="close-btn" data-close="storeDialog">×</button>
+      </div>
+      <input type="hidden" id="storeId" />
+      <label>Nome<input id="storeName" required placeholder="Es. Eurospin Ceriale" /></label>
+      <div class="form-grid">
+        <label>Città<input id="storeCity" placeholder="Es. Ceriale" /></label>
+        <label>Intervallo giorni<input id="storeInterval" type="number" min="1" max="365" value="15" /></label>
+      </div>
+      <label>Indirizzo<input id="storeAddress" placeholder="Via e numero civico" /></label>
+      <label>Ultimo intervento<input id="lastDone" type="date" /></label>
+      <label>Note permanenti<textarea id="storeNotes" rows="3" placeholder="Accessi, chiavi, lavori particolari…"></textarea></label>
+      <div class="dialog-actions">
+        <button type="button" class="secondary" data-close="storeDialog">Annulla</button>
+        <button type="submit">Salva</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="doneDialog">
+    <form id="doneForm">
+      <div class="dialog-head">
+        <h2 id="doneTitle">Registra intervento</h2>
+        <button type="button" class="close-btn" data-close="doneDialog">×</button>
+      </div>
+      <input type="hidden" id="doneStoreId" />
+      <label>Data<input id="doneDate" type="date" required /></label>
+      <label>Nota intervento<textarea id="doneNote" rows="3" placeholder="Es. taglio completo, siepe da riprendere…"></textarea></label>
+      <div class="photo-fields">
+        <label class="photo-picker">
+          <span>📷 Foto prima</span>
+          <input id="beforePhoto" type="file" accept="image/*" capture="environment" />
+          <img id="beforePreview" class="photo-preview hidden" alt="Anteprima foto prima" />
+        </label>
+        <label class="photo-picker">
+          <span>📷 Foto dopo</span>
+          <input id="afterPhoto" type="file" accept="image/*" capture="environment" />
+          <img id="afterPreview" class="photo-preview hidden" alt="Anteprima foto dopo" />
+        </label>
+      </div>
+      <p class="helper">In questa prova le foto restano soltanto su questo iPhone.</p>
+      <div class="dialog-actions">
+        <button type="button" class="secondary" data-close="doneDialog">Annulla</button>
+        <button type="submit">✓ Conferma</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="historyDialog">
+    <div class="history-wrap">
+      <div class="dialog-head">
+        <h2 id="historyTitle">Storico</h2>
+        <button type="button" class="close-btn" data-close="historyDialog">×</button>
+      </div>
+      <div id="historyList"></div>
+    </div>
+  </dialog>
+
+  <dialog id="dataDialog">
+    <div class="history-wrap">
+      <div class="dialog-head">
+        <h2>Dati, backup e accesso</h2>
+        <button type="button" class="close-btn" data-close="dataDialog">×</button>
+      </div>
+      <p class="helper">Il backup ti permette di recuperare tutto se cambi telefono o cancelli i dati di Safari.</p>
+      <div class="stack-actions">
+        <button id="exportBtn">Esporta backup</button>
+        <button id="importBtn" class="secondary">Importa backup</button>
+        <input id="importFile" class="hidden" type="file" accept="application/json,.json" />
+      </div>
+      <p id="storageInfo" class="storage-info"></p>
+      <hr class="divider" />
+      <h3>Password di accesso</h3>
+      <form id="passwordForm" class="stack-actions">
+        <input id="newPassword" type="password" minlength="4" placeholder="Nuova password" required />
+        <button type="submit" class="secondary">Cambia password</button>
+      </form>
+      <button id="logoutBtn" class="danger-button">Esci dall’app</button>
+    </div>
+  </dialog>
+
+  <template id="storeTemplate">
+    <article class="store-card">
+      <div class="status-bar"></div>
+      <div class="store-top">
+        <div class="store-heading">
+          <h3 class="store-name"></h3>
+          <p class="store-city"></p>
+        </div>
+        <span class="days-badge"></span>
+      </div>
+      <p class="store-meta"></p>
+      <p class="store-notes"></p>
+      <div class="primary-actions">
+        <button class="done-btn">✓ Eseguito</button>
+        <button class="map-btn secondary">↗ Mappe</button>
+      </div>
+      <div class="minor-actions">
+        <button class="history-btn text-btn">Storico</button>
+        <button class="edit-btn text-btn">Modifica</button>
+        <button class="delete-btn text-btn danger-text">Elimina</button>
+      </div>
+    </article>
+  </template>
+
+  <dialog id="photoDialog" class="photo-dialog">
+    <div class="photo-viewer">
+      <button type="button" class="close-btn photo-close" data-close="photoDialog">×</button>
+      <img id="fullPhoto" alt="Foto intervento" />
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,138 +1,375 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#075b31">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css">
-  <title>Overgreen Cloud</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#075b31" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Overgreen" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="stylesheet" href="style.css" />
+  <title>Overgreen Lavori</title>
 </head>
 <body>
-  <section id="loginScreen" class="auth-screen">
-    <div class="auth-card">
-      <div class="logo">OG</div>
-      <p class="eyebrow">OVERGREEN CLOUD</p>
-      <h1>Centro operativo</h1>
-      <p class="muted">Accedi con l’email e la password create in Supabase.</p>
+  <div id="loginScreen" class="login-screen">
+    <div class="login-card">
+      <div class="login-logo">OG</div>
+      <p class="eyebrow">OVERGREEN</p>
+      <h1>Gestione punti vendita</h1>
+      <p class="helper">Scegli come vuoi entrare.</p>
       <form id="loginForm">
-        <label>Email<input id="loginEmail" type="email" autocomplete="username" required></label>
-        <label>Password<input id="loginPassword" type="password" autocomplete="current-password" required></label>
-        <button id="loginBtn" type="submit">Accedi</button>
-        <p id="loginError" class="error hidden"></p>
+        <label class="login-role-label">Profilo
+          <select id="loginRole" aria-label="Scegli il profilo di accesso"></select>
+        </label>
+        <label>Password<input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password" required /></label>
+        <button type="submit">Accedi</button>
+        <p id="loginError" class="login-error hidden">Password non corretta.</p>
       </form>
+    </div>
+  </div>
+
+  <header>
+    <div>
+      <p class="eyebrow">OVERGREEN</p>
+      <h1>Punti vendita</h1>
+      <p id="todayLabel" class="today-label"></p>
+      <p id="activeUserLabel" class="active-user"></p>
+    </div>
+    <div class="header-actions">
+      <button id="extrasBtn" type="button" class="icon-btn small" aria-label="Apri extra" title="Extra">E</button>
+      <button id="scheduleBtn" type="button" class="icon-btn small" aria-label="Apri programmazione" title="Programmazione">📅</button>
+      <button id="pendingBtn" class="icon-btn small admin-only" aria-label="Interventi da convalidare">✓<span id="pendingBadge" class="pending-badge hidden">0</span></button>
+      <button id="dataBtn" class="icon-btn small" aria-label="Apri impostazioni">⚙</button>
+      <button id="addStoreBtn" class="icon-btn" aria-label="Aggiungi punto vendita">＋</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="summary">
+      <button class="summary-card" data-filter="all"><strong id="totalCount">0</strong><span>Totali</span></button>
+      <button class="summary-card danger-card" data-filter="due"><strong id="dueCount">0</strong><span>Scaduti</span></button>
+      <button class="summary-card warning-card" data-filter="warning"><strong id="warningCount">0</strong><span>In scadenza</span></button>
+      <button class="summary-card success-card" data-filter="today"><strong id="todayCount">0</strong><span>Fatti oggi</span></button>
+    </section>
+
+    <div class="toolbar">
+      <input id="searchInput" type="search" placeholder="Cerca nome, città o indirizzo…" />
+      <div class="toolbar-selects">
+        <select id="filterSelect" aria-label="Filtra punti vendita">
+          <option value="all">Tutti</option>
+          <option value="due">Scaduti</option>
+          <option value="warning">In scadenza</option>
+          <option value="ok">Regolari</option>
+          <option value="today">Fatti oggi</option>
+        </select>
+        <select id="sortSelect" aria-label="Ordina punti vendita">
+          <option value="urgent">Più urgenti</option>
+          <option value="alphabetical">Ordine alfabetico</option>
+        </select>
+      </div>
+    </div>
+
+    <section id="storeList" class="store-list"></section>
+    <div id="emptyState" class="empty hidden">
+      <strong>Nessun punto vendita</strong>
+      <span>Prova a cambiare ricerca o filtro.</span>
+    </div>
+  </main>
+
+  <dialog id="storeDialog">
+    <form id="storeForm">
+      <div class="dialog-head">
+        <h2 id="dialogTitle">Aggiungi punto vendita</h2>
+        <button type="button" class="close-btn" data-close="storeDialog">×</button>
+      </div>
+      <input type="hidden" id="storeId" />
+      <label>Nome<input id="storeName" required placeholder="Es. Eurospin Ceriale" /></label>
+      <div class="form-grid">
+        <label>Città<input id="storeCity" placeholder="Es. Ceriale" /></label>
+        <label>Intervallo giorni<input id="storeInterval" type="number" min="1" max="365" value="15" /></label>
+      </div>
+      <label>Indirizzo<input id="storeAddress" placeholder="Via e numero civico" /></label>
+      <label>Ultimo intervento<input id="lastDone" type="date" /></label>
+      <label>Note permanenti<textarea id="storeNotes" rows="3" placeholder="Accessi, chiavi, lavori particolari…"></textarea></label>
+      <div class="dialog-actions">
+        <button type="button" class="secondary" data-close="storeDialog">Annulla</button>
+        <button type="submit">Salva</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="doneDialog">
+    <form id="doneForm">
+      <div class="dialog-head">
+        <h2 id="doneTitle">Registra intervento</h2>
+        <button type="button" class="close-btn" data-close="doneDialog">×</button>
+      </div>
+      <input type="hidden" id="doneStoreId" />
+      <label>Data<input id="doneDate" type="date" required /></label>
+      <label>Nota intervento<textarea id="doneNote" rows="3" placeholder="Es. taglio completo, siepe da riprendere…"></textarea></label>
+      <fieldset class="workers-fieldset">
+        <legend>Chi ha eseguito</legend>
+        <div id="workersGrid" class="workers-grid"></div>
+      </fieldset>
+      <label class="photo-picker">
+        <span>📷 Scatta o aggiungi una foto</span>
+        <input id="genericPhotos" type="file" accept="image/*" capture="environment" multiple />
+      </label>
+      <div id="genericPreview" class="generic-preview"></div>
+      <p id="photoCount" class="photo-count">Nessuna foto aggiunta</p>
+      <p class="helper">Dopo ogni scatto puoi premere di nuovo “Scatta o aggiungi una foto”: le immagini si sommano senza cancellare le precedenti.</p>
+      <p id="employeeApprovalNotice" class="approval-notice hidden">L'intervento sarà inviato a Lorenzo e diventerà effettivo solo dopo la sua convalida.</p>
+      <div class="dialog-actions">
+        <button type="button" class="secondary" data-close="doneDialog">Annulla</button>
+        <button type="submit">✓ Conferma</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="historyDialog">
+    <div class="history-wrap">
+      <div class="dialog-head">
+        <h2 id="historyTitle">Storico</h2>
+        <button type="button" class="close-btn" data-close="historyDialog">×</button>
+      </div>
+      <div id="pendingSection" class="pending-section hidden">
+        <h3>Da convalidare</h3>
+        <div id="pendingList"></div>
+      </div>
+      <div id="historyList"></div>
+    </div>
+  </dialog>
+
+
+  <dialog id="historyEditDialog">
+    <form id="historyEditForm">
+      <div class="dialog-head"><h2>Modifica intervento</h2><button type="button" class="close-btn" data-close="historyEditDialog">×</button></div>
+      <input id="historyEditId" type="hidden" />
+      <label>Data<input id="historyEditDate" type="date" required /></label>
+      <label>Note<textarea id="historyEditNotes" rows="4"></textarea></label>
+      <fieldset class="workers-fieldset"><legend>Chi ha eseguito</legend><div id="historyEditWorkers" class="workers-grid"></div></fieldset>
+      <div class="dialog-actions"><button type="button" class="secondary" data-close="historyEditDialog">Annulla</button><button type="submit">Salva modifiche</button></div>
+    </form>
+  </dialog>
+
+  <section id="scheduleScreen" class="settings-screen hidden" aria-label="Programmazione">
+    <div class="settings-topbar">
+      <button id="scheduleBackBtn" class="settings-back" type="button" aria-label="Torna ai punti vendita">‹</button>
+      <div>
+        <p class="eyebrow">OVERGREEN</p>
+        <h2 id="schedulePageTitle">Programmazione</h2>
+      </div>
+    </div>
+    <div class="settings-content">
+      <section id="scheduleCreateCard" class="settings-card admin-only">
+        <div class="settings-section-head"><div><h3>📅 Nuova programmazione</h3><p>Assegna una squadra e i punti vendita da eseguire.</p></div></div>
+        <form id="scheduleForm" class="settings-form">
+          <label>Giorno<input id="scheduleDate" type="date" required /></label>
+          <fieldset class="workers-fieldset"><legend>Squadra</legend><div id="scheduleWorkers" class="workers-grid"></div></fieldset>
+          <label>Nota generale<textarea id="scheduleNote" rows="2" placeholder="Partenza, mezzi, indicazioni…"></textarea></label>
+          <div class="schedule-picker-tools">
+            <label>Cerca punti vendita<input id="scheduleStoreSearch" type="search" placeholder="Cerca negozio…" /></label>
+            <label>Ordina<select id="scheduleStoreSort"><option value="urgency">Più urgenti</option><option value="alpha">Ordine alfabetico</option></select></label>
+          </div>
+          <div id="scheduleStoreList" class="schedule-store-picker"></div>
+          <p id="scheduleSelectedCount" class="photo-count">Nessun punto vendita selezionato</p>
+          <button type="submit">Salva programmazione</button>
+        </form>
+      </section>
+      <section class="settings-card">
+        <div class="settings-section-head"><div><h3 id="scheduleListTitle">Programmazioni</h3><p id="scheduleListHelp">Le programmazioni salvate su questo dispositivo.</p></div></div>
+        <div id="scheduleList" class="schedule-list"></div>
+      </section>
     </div>
   </section>
 
-  <div id="app" class="hidden">
-    <header>
-      <div><p class="eyebrow">OVERGREEN CLOUD</p><h1 id="pageTitle">Punti vendita</h1><p id="userLabel" class="muted"></p></div>
-      <div class="header-actions">
-        <button class="icon" data-view="stores" title="Punti vendita">🏪</button>
-        <button class="icon" data-view="schedule" title="Programmazione">📅</button>
-        <button class="icon" data-view="extras" title="Extra">E</button>
-        <button id="pendingBtn" class="icon admin-only" title="Convalide">✓<b id="pendingBadge" class="badge hidden">0</b></button>
-        <button class="icon" data-view="settings" title="Impostazioni">⚙</button>
+
+  <section id="extrasScreen" class="settings-screen hidden" aria-label="Lavori extra">
+    <div class="settings-topbar">
+      <button id="extrasBackBtn" class="settings-back" type="button" aria-label="Torna ai punti vendita">‹</button>
+      <div><p class="eyebrow">OVERGREEN</p><h2 id="extrasPageTitle">Lavori extra</h2></div>
+      <button id="newExtraBtn" type="button" class="icon-btn admin-only" aria-label="Nuovo extra">＋</button>
+    </div>
+    <div class="settings-content">
+      <section class="settings-card extra-summary-card">
+        <div class="extra-filter-row">
+          <button type="button" class="secondary extra-filter active" data-extra-filter="open">Aperti</button>
+          <button type="button" class="secondary extra-filter" data-extra-filter="pending">Da convalidare</button>
+          <button type="button" class="secondary extra-filter" data-extra-filter="completed">Completati</button>
+          <button type="button" class="secondary extra-filter" data-extra-filter="all">Tutti</button>
+        </div>
+      </section>
+      <section class="settings-card">
+        <div class="settings-section-head"><div><h3 id="extrasListTitle">Extra</h3><p id="extrasListHelp">Richieste, programmazione e chiusura lavori.</p></div></div>
+        <div id="extrasList" class="extras-list"></div>
+      </section>
+    </div>
+  </section>
+
+  <dialog id="extraFormDialog">
+    <form id="extraForm">
+      <div class="dialog-head"><h2 id="extraFormTitle">Nuovo extra</h2><button type="button" class="close-btn" data-close="extraFormDialog">×</button></div>
+      <input id="extraId" type="hidden" />
+      <label>Punto vendita
+        <select id="extraStoreMode">
+          <option value="existing">Dalla lista punti vendita</option>
+          <option value="custom">Altro punto vendita</option>
+        </select>
+      </label>
+      <div id="extraExistingStoreFields">
+        <label>Scegli punto vendita<select id="extraStoreId"></select></label>
       </div>
-    </header>
+      <div id="extraCustomStoreFields" class="hidden">
+        <label>Nome punto vendita<input id="extraCustomStoreName" placeholder="Es. Eurospin Via Roma" /></label>
+        <label>Indirizzo completo<input id="extraCustomStoreAddress" placeholder="Via, numero civico, città" /></label>
+      </div>
+      <label>Titolo lavoro<input id="extraTitle" required placeholder="Es. Ripristino aiuola ingresso" /></label>
+      <label>Descrizione<textarea id="extraDescription" rows="4" placeholder="Descrivi cosa deve essere fatto"></textarea></label>
+      <div class="form-grid"><label>Data richiesta<input id="extraRequestDate" type="date" required /></label><label>Giorno intervento<input id="extraDueDate" type="date" required /></label></div>
+      <label>Note per la squadra<textarea id="extraNotes" rows="3" placeholder="Indicazioni operative, materiali, contatti…"></textarea></label>
+      <label class="file-field">📄 PDF richiesta Eurospin<input id="extraPdf" type="file" accept="application/pdf,.pdf" /></label>
+      <p id="extraPdfName" class="helper">Nessun PDF allegato</p>
+      <div class="dialog-actions"><button type="button" class="secondary" data-close="extraFormDialog">Annulla</button><button type="submit">Salva extra</button></div>
+    </form>
+  </dialog>
 
-    <main>
-      <section id="storesView" class="view">
-        <div class="summary">
-          <button data-filter="all"><strong id="totalCount">0</strong><span>Totali</span></button>
-          <button data-filter="due" class="danger"><strong id="dueCount">0</strong><span>Scaduti</span></button>
-          <button data-filter="warning" class="warning"><strong id="warningCount">0</strong><span>In scadenza</span></button>
-          <button data-filter="today" class="success"><strong id="todayCount">0</strong><span>Fatti oggi</span></button>
+  <dialog id="extraScheduleDialog">
+    <form id="extraScheduleForm">
+      <div class="dialog-head"><h2>Programma extra</h2><button type="button" class="close-btn" data-close="extraScheduleDialog">×</button></div>
+      <input id="extraScheduleId" type="hidden" />
+      <label>Giorno intervento<input id="extraScheduleDate" type="date" required /></label><p class="helper">Corrisponde al giorno indicato nell’extra. Modificandolo aggiorni anche il giorno dell’intervento.</p>
+      <fieldset class="workers-fieldset"><legend>Squadra</legend><div id="extraScheduleWorkers" class="workers-grid"></div></fieldset>
+      <label>Nota di programmazione<textarea id="extraScheduleNote" rows="3"></textarea></label>
+      <div class="dialog-actions"><button type="button" class="secondary" data-close="extraScheduleDialog">Annulla</button><button type="submit">Assegna</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="extraCloseDialog">
+    <form id="extraCloseForm">
+      <div class="dialog-head"><h2 id="extraCloseTitle">Chiusura extra</h2><button type="button" class="close-btn" data-close="extraCloseDialog">×</button></div>
+      <input id="extraCloseId" type="hidden" />
+      <p class="approval-notice">Per inviare il lavoro servono entrambi i rapportini.</p>
+      <label class="photo-picker"><span>📷 Rapportino Eurospin</span><input id="eurospinReport" type="file" accept="image/*" capture="environment" /></label>
+      <div id="eurospinReportPreview" class="report-preview"></div>
+      <label class="photo-picker"><span>📷 Rapportino Overgreen</span><input id="overgreenReport" type="file" accept="image/*" capture="environment" /></label>
+      <div id="overgreenReportPreview" class="report-preview"></div>
+      <label>Note finali<textarea id="extraCloseNote" rows="3" placeholder="Lavoro svolto, materiali usati, anomalie…"></textarea></label>
+      <div class="dialog-actions"><button type="button" class="secondary" data-close="extraCloseDialog">Annulla</button><button id="submitExtraClose" type="submit" disabled>Invia per convalida</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="pdfDialog" class="pdf-dialog">
+    <div class="pdf-viewer"><div class="dialog-head"><h2 id="pdfTitle">Richiesta PDF</h2><button type="button" class="close-btn" data-close="pdfDialog">×</button></div><iframe id="pdfFrame" title="Anteprima PDF"></iframe></div>
+  </dialog>
+
+  <section id="settingsScreen" class="settings-screen hidden" aria-label="Impostazioni">
+    <div class="settings-topbar">
+      <button id="settingsBackBtn" class="settings-back" type="button" aria-label="Torna ai punti vendita">‹</button>
+      <div>
+        <p class="eyebrow">OVERGREEN</p>
+        <h2>Impostazioni</h2>
+      </div>
+    </div>
+
+    <div class="settings-content">
+      <section class="settings-card account-card">
+        <div class="settings-icon">👤</div>
+        <div>
+          <h3>Account</h3>
+          <p id="settingsAccountName">Lorenzo · Amministratore</p>
         </div>
-        <div class="toolbar">
-          <input id="searchInput" type="search" placeholder="Cerca punto vendita…">
-          <select id="sortSelect"><option value="urgent">Più urgenti</option><option value="alpha">Alfabetico</option></select>
-        </div>
-        <button id="addStoreBtn" class="admin-only full secondary">＋ Nuovo punto vendita</button>
-        <div id="storesList" class="cards"></div>
       </section>
 
-      <section id="scheduleView" class="view hidden">
-        <article id="scheduleAdmin" class="panel admin-only">
-          <h2>Nuova programmazione</h2>
-          <form id="scheduleForm">
-            <label>Giorno<input id="scheduleDate" type="date" required></label>
-            <fieldset><legend>Squadra</legend><div id="scheduleWorkers" class="check-grid"></div></fieldset>
-            <label>Nota<textarea id="scheduleNote" rows="2"></textarea></label>
-            <label>Cerca punti vendita<input id="scheduleSearch" type="search"></label>
-            <div id="scheduleStores" class="picker"></div>
-            <button type="submit">Salva programmazione</button>
+      <section class="settings-card">
+        <div class="settings-section-head">
+          <div>
+            <h3>🔐 Password di Lorenzo</h3>
+            <p>Modifica la password dell’amministratore.</p>
+          </div>
+        </div>
+        <form id="passwordForm" class="settings-form">
+          <input id="newPassword" type="password" minlength="4" placeholder="Nuova password Lorenzo" required />
+          <button type="submit">Cambia password</button>
+        </form>
+      </section>
+
+      <section id="employeeManager" class="settings-card admin-only">
+        <div class="settings-section-head">
+          <div>
+            <h3>👥 Gestione dipendenti</h3>
+            <p>Aggiungi utenti e modifica le loro password.</p>
+          </div>
+        </div>
+        <div id="employeeList" class="employee-list"></div>
+        <div class="settings-subsection">
+          <h4>➕ Nuovo dipendente</h4>
+          <form id="addEmployeeForm" class="settings-form">
+            <input id="employeeName" type="text" placeholder="Nome dipendente" required />
+            <input id="employeePassword" type="password" minlength="4" placeholder="Password iniziale" required />
+            <button type="submit">Aggiungi dipendente</button>
           </form>
-        </article>
-        <article class="panel"><h2 id="scheduleTitle">Programmazioni</h2><div id="scheduleList" class="cards"></div></article>
+        </div>
       </section>
 
-      <section id="extrasView" class="view hidden">
-        <button id="newExtraBtn" class="admin-only full">＋ Nuovo extra</button>
-        <div id="extrasList" class="cards"></div>
+      <section class="settings-card">
+        <div class="settings-section-head">
+          <div>
+            <h3>💾 Backup dati</h3>
+            <p>Esporta o importa punti vendita e storico. Le foto non sono incluse.</p>
+          </div>
+        </div>
+        <div class="settings-actions">
+          <button id="exportBtn">Esporta backup</button>
+          <button id="importBtn" class="secondary">Importa backup</button>
+          <input id="importFile" class="hidden" type="file" accept="application/json,.json" />
+        </div>
+        <p id="storageInfo" class="storage-info"></p>
       </section>
 
-      <section id="settingsView" class="view hidden">
-        <article class="panel"><h2>Account</h2><p id="settingsUser"></p><button id="logoutBtn" class="danger-btn">Esci</button></article>
-        <article class="panel admin-only"><h2>Avvio dati</h2><p class="muted">Se il database è vuoto, importa i 123 punti vendita iniziali.</p><button id="seedBtn" class="secondary">Importa punti vendita iniziali</button></article>
-        <article class="panel"><h2>Sincronizzazione</h2><p id="syncStatus" class="muted">Online</p><button id="refreshBtn" class="secondary">Aggiorna ora</button></article>
+      <section class="settings-card info-card">
+        <h3>ℹ️ Informazioni</h3>
+        <p>Overgreen gestione interventi · Versione 13</p>
       </section>
-    </main>
-  </div>
 
-  <dialog id="storeDialog"><form id="storeForm">
-    <div class="dialog-head"><h2>Punto vendita</h2><button type="button" data-close>×</button></div>
-    <input id="storeId" type="hidden">
-    <label>Nome<input id="storeName" required></label>
-    <label>Indirizzo<input id="storeAddress"></label>
-    <label>Città<input id="storeCity"></label>
-    <div class="two"><label>Ultimo passaggio<input id="storeLast" type="date"></label><label>Intervallo giorni<input id="storeInterval" type="number" min="1" value="15"></label></div>
-    <label>Note<textarea id="storeNotes" rows="3"></textarea></label>
-    <button type="submit">Salva</button>
-  </form></dialog>
+      <button id="logoutBtn" class="danger-button settings-logout">Esci dall’app</button>
+    </div>
+  </section>
 
-  <dialog id="doneDialog"><form id="doneForm">
-    <div class="dialog-head"><h2 id="doneTitle">Intervento</h2><button type="button" data-close>×</button></div>
-    <input id="doneStoreId" type="hidden"><input id="doneScheduleItemId" type="hidden">
-    <label>Data<input id="doneDate" type="date" required></label>
-    <label>Note<textarea id="doneNotes" rows="3"></textarea></label>
-    <fieldset><legend>Chi ha eseguito</legend><div id="doneWorkers" class="check-grid"></div></fieldset>
-    <label class="file-label">📷 Foto generiche<input id="donePhotos" type="file" accept="image/*" capture="environment" multiple></label>
-    <small id="photoLabel" class="muted">Nessuna foto</small>
-    <button type="submit">Invia intervento</button>
-  </form></dialog>
+  <template id="storeTemplate">
+    <article class="store-card">
+      <div class="status-bar"></div>
+      <div class="store-top">
+        <div class="store-heading">
+          <h3 class="store-name"></h3>
+          <p class="store-city"></p>
+        </div>
+        <span class="days-badge"></span>
+      </div>
+      <p class="store-meta"></p>
+      <p class="store-pending hidden">⏳ Intervento in attesa di convalida</p>
+      <p class="store-notes"></p>
+      <div class="primary-actions">
+        <button class="done-btn">✓ Eseguito</button>
+        <button class="map-btn secondary">↗ Mappe</button>
+      </div>
+      <div class="minor-actions">
+        <button class="history-btn text-btn">Storico</button>
+        <button class="edit-btn text-btn">Modifica</button>
+        <button class="delete-btn text-btn danger-text">Elimina</button>
+      </div>
+    </article>
+  </template>
 
-  <dialog id="historyDialog"><div class="dialog-body"><div class="dialog-head"><h2 id="historyTitle">Storico</h2><button type="button" data-close>×</button></div><div id="historyList"></div></div></dialog>
-  <dialog id="pendingDialog"><div class="dialog-body"><div class="dialog-head"><h2>Da convalidare</h2><button type="button" data-close>×</button></div><div id="pendingList" class="cards"></div></div></dialog>
+  <dialog id="photoDialog" class="photo-dialog">
+    <div class="photo-viewer">
+      <button type="button" class="close-btn photo-close" data-close="photoDialog">×</button>
+      <img id="fullPhoto" alt="Foto intervento" />
+    </div>
+  </dialog>
 
-  <dialog id="extraDialog"><form id="extraForm">
-    <div class="dialog-head"><h2>Nuovo extra</h2><button type="button" data-close>×</button></div>
-    <label>Destinazione<select id="extraDestination"><option value="list">Dalla lista</option><option value="external">Altro punto vendita</option></select></label>
-    <label id="extraStoreWrap">Punto vendita<select id="extraStore"></select></label>
-    <div id="extraExternalWrap" class="hidden"><label>Nome luogo<input id="extraExternalName"></label><label>Indirizzo<input id="extraExternalAddress"></label></div>
-    <label>Titolo<input id="extraTitle" required></label>
-    <label>Descrizione<textarea id="extraDescription" rows="3"></textarea></label>
-    <label>Giorno intervento<input id="extraDate" type="date" required></label>
-    <fieldset><legend>Assegna a</legend><div id="extraWorkers" class="check-grid"></div></fieldset>
-    <label>PDF richiesta<input id="extraPdf" type="file" accept="application/pdf" required></label>
-    <button type="submit">Crea e programma</button>
-  </form></dialog>
-
-  <dialog id="closeExtraDialog"><form id="closeExtraForm">
-    <div class="dialog-head"><h2>Chiusura extra</h2><button type="button" data-close>×</button></div>
-    <input id="closeExtraId" type="hidden">
-    <label>Rapportino Eurospin<input id="reportEurospin" type="file" accept="image/*" capture="environment" required></label>
-    <label>Rapportino Overgreen<input id="reportOvergreen" type="file" accept="image/*" capture="environment" required></label>
-    <label>Nota finale<textarea id="extraFinalNote" rows="3"></textarea></label>
-    <button type="submit">Invia per convalida</button>
-  </form></dialog>
-
-  <div id="toast" class="toast"></div>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js"></script>
+  <div id="toast" class="toast" role="status"></div>
   <script src="app.js"></script>
 </body>
 </html>

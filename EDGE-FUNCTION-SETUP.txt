@@ -1,0 +1,7 @@
+Per attivare “Crea dipendente” e “Cambia password dipendente” va pubblicata la Edge Function manage-user.
+La modifica della propria password funziona invece subito.
+
+Percorso incluso nello ZIP:
+supabase/functions/manage-user/index.ts
+
+La funzione usa le variabili Supabase standard SUPABASE_URL, SUPABASE_ANON_KEY e SUPABASE_SERVICE_ROLE_KEY, disponibili nell’ambiente Edge Functions.

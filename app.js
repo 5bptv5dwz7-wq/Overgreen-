@@ -4,6 +4,75 @@ const SEED_STORES=[{"name": "ABBIATEGRASSO", "lastDone": "2026-06-17"}, {"name":
 const $=id=>document.getElementById(id);
 let session=null,profile=null,profiles=[],stores=[],interventions=[],schedules=[],scheduleMembers=[],scheduleItems=[],extras=[],extraWorkers=[],attachments=[];
 let storeFilter='all';
+
+// ---- Coda persistente per caricamenti in background ----
+const UPLOAD_DB='overgreen-upload-queue-v1', UPLOAD_STORE='jobs';
+let uploadWorkerRunning=false;
+function openUploadDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(UPLOAD_DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(UPLOAD_STORE))r.result.createObjectStore(UPLOAD_STORE,{keyPath:'id'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+async function queueTx(mode,fn){const db=await openUploadDb();return new Promise((resolve,reject)=>{const tx=db.transaction(UPLOAD_STORE,mode),st=tx.objectStore(UPLOAD_STORE);let out;try{out=fn(st)}catch(e){reject(e);return}tx.oncomplete=()=>resolve(out);tx.onerror=()=>reject(tx.error)})}
+async function getUploadJobs(){const db=await openUploadDb();return new Promise((resolve,reject)=>{const tx=db.transaction(UPLOAD_STORE,'readonly'),r=tx.objectStore(UPLOAD_STORE).getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error)})}
+async function putUploadJob(job){await queueTx('readwrite',st=>st.put(job));updateSyncUi()}
+async function deleteUploadJob(id){await queueTx('readwrite',st=>st.delete(id));updateSyncUi()}
+async function enqueueInterventionPhotos(interventionId,files){
+  for(let n=0;n<files.length;n++){
+    const f=files[n];
+    await putUploadJob({id:crypto.randomUUID(),kind:'intervention-photo',interventionId,file:f,fileName:f.name||`foto-${n+1}.jpg`,mimeType:f.type||'image/jpeg',createdAt:Date.now(),retries:0,lastError:''});
+  }
+  processUploadQueue();
+}
+async function processUploadQueue(){
+  if(uploadWorkerRunning||!navigator.onLine||!session)return;
+  uploadWorkerRunning=true;updateSyncUi();
+  try{
+    const jobs=(await getUploadJobs()).sort((a,b)=>a.createdAt-b.createdAt);
+    for(const job of jobs){
+      try{
+        let file=job.file;
+        if(job.kind==='intervention-photo')file=await compressImage(file);
+        const safe=(file.name||job.fileName||'file').replace(/[^a-zA-Z0-9._-]/g,'-');
+        const path=`interventi/${job.interventionId}/${Date.now()}-${safe}`;
+        await uploadFile(path,file);
+        await addAttachment({tipo:'foto_generica',intervention_id:job.interventionId,storage_path:path,nome_file:file.name||job.fileName,mime_type:file.type||job.mimeType,dimensione_bytes:file.size,caricato_da:profile.id});
+        await deleteUploadJob(job.id);
+        toast('✓ Foto sincronizzata');
+      }catch(err){
+        job.retries=(job.retries||0)+1;job.lastError=err?.message||String(err);await putUploadJob(job);
+        if(job.retries>=3)break;
+      }
+    }
+  }finally{uploadWorkerRunning=false;updateSyncUi();try{await loadAll()}catch{}}
+}
+async function retryUploads(){const jobs=await getUploadJobs();for(const j of jobs){j.retries=0;j.lastError='';await putUploadJob(j)}processUploadQueue()}
+async function updateSyncUi(){
+  let jobs=[];try{jobs=await getUploadJobs()}catch{}
+  const failed=jobs.filter(j=>(j.retries||0)>=3).length;
+  const text=uploadWorkerRunning?`⬆️ ${jobs.length} foto in caricamento…`:failed?`⚠️ ${failed} caricamenti da riprovare`:jobs.length?`☁️ ${jobs.length} foto in coda`:'🟢 Tutto sincronizzato';
+  for(const id of ['backgroundSyncStatus','syncStatus']){const el=$(id);if(el)el.textContent=text}
+  const badge=$('syncFloatingBadge');if(badge){badge.textContent=text;badge.classList.toggle('hidden',!jobs.length&&!uploadWorkerRunning)}
+}
+window.addEventListener('online',processUploadQueue);
+
+// ---- Impostazioni account e dipendenti ----
+function ensureCloudSettingsUi(){
+  const host=$('settingsView')||$('settingsScreen');if(!host||$('cloudAccountSettings'))return;
+  const wrap=host.querySelector('.settings-content')||host;
+  const sec=document.createElement('section');sec.id='cloudAccountSettings';sec.className='settings-card cloud-account-settings';
+  sec.innerHTML=`<div class="settings-section-head"><div><h3>🔐 Account e accessi</h3><p>Cambia la tua password. Lorenzo può anche creare dipendenti e modificare le loro password.</p></div></div>
+  <form id="selfPasswordForm" class="settings-form"><input id="selfNewPassword" type="password" minlength="8" placeholder="Nuova password" required><button type="submit">Cambia la mia password</button></form>
+  <div id="adminUsersArea" class="admin-only"><hr><h4>👥 Dipendenti</h4><div id="cloudEmployeeList" class="employee-list"></div>
+  <form id="cloudAddEmployeeForm" class="settings-form"><input id="cloudEmployeeName" placeholder="Nome" required><input id="cloudEmployeeEmail" type="email" placeholder="Email di accesso" required><input id="cloudEmployeePassword" type="password" minlength="8" placeholder="Password iniziale" required><button type="submit">Crea dipendente</button></form></div>`;
+  wrap.appendChild(sec);
+  const sync=document.createElement('section');sync.className='settings-card';sync.innerHTML=`<h3>☁️ Sincronizzazione</h3><p id="backgroundSyncStatus">Controllo…</p><button id="retryUploadsBtn" type="button" class="secondary">Riprova caricamenti</button>`;wrap.appendChild(sync);
+  const badge=document.createElement('button');badge.id='syncFloatingBadge';badge.type='button';badge.className='sync-floating hidden';badge.onclick=()=>{setView?.('settings');};document.body.appendChild(badge);
+  $('selfPasswordForm').onsubmit=async e=>{e.preventDefault();const pw=$('selfNewPassword').value;const {error}=await sb.auth.updateUser({password:pw});if(error)return alert(error.message);e.target.reset();toast('Password aggiornata')};
+  $('cloudAddEmployeeForm').onsubmit=async e=>{e.preventDefault();const payload={action:'create',nome:$('cloudEmployeeName').value.trim(),email:$('cloudEmployeeEmail').value.trim(),password:$('cloudEmployeePassword').value};const {data,error}=await sb.functions.invoke('manage-user',{body:payload});if(error||data?.error)return alert(data?.error||error.message);e.target.reset();toast('Dipendente creato');await loadAll()};
+  $('retryUploadsBtn').onclick=retryUploads;renderCloudEmployeeList();updateSyncUi();
+}
+function renderCloudEmployeeList(){
+  const box=$('cloudEmployeeList');if(!box)return;box.innerHTML='';
+  for(const p of profiles.filter(x=>x.ruolo==='dipendente')){const row=document.createElement('div');row.className='employee-row';row.innerHTML=`<div><strong>${esc(p.nome)}</strong><small>${p.attivo?'Attivo':'Disattivato'}</small></div><button type="button" class="secondary compact">Cambia password</button>`;row.querySelector('button').onclick=async()=>{const password=prompt(`Nuova password per ${p.nome} (minimo 8 caratteri)`);if(!password)return;if(password.length<8)return alert('La password deve avere almeno 8 caratteri.');const {data,error}=await sb.functions.invoke('manage-user',{body:{action:'password',user_id:p.id,password}});if(error||data?.error)return alert(data?.error||error.message);toast('Password aggiornata')};box.appendChild(row)}
+}
+
 const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 const tomorrow=()=>{const d=new Date();d.setDate(d.getDate()+1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 const fmt=d=>d?new Intl.DateTimeFormat('it-IT').format(new Date(d+'T12:00:00')):'Mai eseguito';
@@ -25,8 +94,8 @@ async function loadAll(){
   profile=profiles.find(x=>x.id===session.user.id);if(!profile)throw new Error('Profilo non trovato');
   $('userLabel').textContent=`${profile.nome} · ${admin()?'Amministratore':'Dipendente'}`;$('settingsUser').textContent=`${profile.nome} — ${session.user.email}`;
   document.querySelectorAll('.admin-only').forEach(x=>x.classList.toggle('hidden',!admin()));
-  renderStores();renderWorkers();renderPending();renderSchedules();renderExtras();
-  $('syncStatus').textContent='Ultimo aggiornamento: '+new Date().toLocaleTimeString('it-IT');
+  renderStores();renderWorkers();renderPending();renderSchedules();renderExtras();ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();processUploadQueue();
+  if($('syncStatus')&&!$('backgroundSyncStatus'))$('syncStatus').textContent='Ultimo aggiornamento: '+new Date().toLocaleTimeString('it-IT');
 }
 function renderStores(){
  const q=$('searchInput').value.trim().toLowerCase(),sort=$('sortSelect').value;
@@ -40,9 +109,43 @@ function renderStores(){
 function renderWorkers(){for(const id of ['doneWorkers','scheduleWorkers','extraWorkers']){const w=$(id);if(!w)continue;w.innerHTML='';profiles.filter(p=>p.attivo).forEach(p=>{const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${p.id}"> ${esc(p.nome)}`;w.appendChild(l)})}}
 function openStore(s=null){$('storeForm').reset();$('storeId').value=s?.id||'';$('storeName').value=s?.nome||'';$('storeAddress').value=s?.indirizzo||'';$('storeCity').value=s?.citta||'';$('storeLast').value=s?.ultimo_passaggio||'';$('storeInterval').value=s?.intervallo_giorni||15;$('storeNotes').value=s?.note||'';openDialog('storeDialog')}
 function openDone(s,scheduleItemId=''){$('doneForm').reset();$('doneStoreId').value=s.id;$('doneScheduleItemId').value=scheduleItemId;$('doneTitle').textContent='Intervento · '+s.nome;$('doneDate').value=today();$('photoLabel').textContent='Nessuna foto';openDialog('doneDialog')}
-async function uploadFile(path,file){const {error}=await sb.storage.from('documenti').upload(path,file,{upsert:false});if(error)throw error;return path}
+async function compressImage(file){
+  if(!file.type.startsWith('image/'))return file;
+  try{
+    const bitmap=await createImageBitmap(file);
+    const max=1600,scale=Math.min(1,max/Math.max(bitmap.width,bitmap.height));
+    const canvas=document.createElement('canvas');canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);
+    canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
+    const blob=await new Promise(r=>canvas.toBlob(r,'image/jpeg',0.76));
+    return blob&&blob.size<file.size?new File([blob],file.name.replace(/\.[^.]+$/,'.jpg'),{type:'image/jpeg'}):file;
+  }catch{return file}
+}
+async function uploadFile(path,file){const {error}=await sb.storage.from('documenti').upload(path,file,{upsert:false,cacheControl:'3600'});if(error)throw error;return path}
 async function addAttachment(data){const {error}=await sb.from('attachments').insert(data);if(error)throw error}
-async function showHistory(s){const rows=interventions.filter(i=>i.store_id===s.id);$('historyTitle').textContent='Storico · '+s.nome;$('historyList').innerHTML=rows.length?'':'<p class="muted">Nessun intervento.</p>';for(const i of rows){const names=await workerNames(i.id);const d=document.createElement('article');d.className=`schedule-item ${i.stato}`;d.innerHTML=`<strong>${fmt(i.data_intervento)} · ${esc(i.stato)}</strong><p>${esc(i.note||'')}</p><small>${esc(names.join(' + '))}</small>`;$('historyList').appendChild(d)}openDialog('historyDialog')}
+async function showHistory(s){
+  const rows=interventions.filter(i=>i.store_id===s.id);
+  $('historyTitle').textContent='Storico · '+s.nome;
+  $('historyList').innerHTML=rows.length?'':'<p class="muted">Nessun intervento.</p>';
+  for(const i of rows){
+    const names=await workerNames(i.id),pics=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica');
+    const d=document.createElement('article');d.className=`schedule-item ${i.stato}`;
+    d.innerHTML=`<div class="history-head"><strong>${fmt(i.data_intervento)} · ${esc(i.stato.replaceAll('_',' '))}</strong>${admin()?'<button class="secondary compact" data-edit-history>Modifica</button>':''}</div><p>${esc(i.note||'Nessuna nota')}</p><small>${esc(names.join(' + ')||'Operatori non indicati')}</small><div class="history-photos" data-photos>${pics.length?'<span class="muted">Caricamento foto…</span>':''}</div>`;
+    d.querySelector('[data-edit-history]')?.addEventListener('click',()=>openHistoryEdit(i));
+    $('historyList').appendChild(d);
+    if(pics.length){
+      const box=d.querySelector('[data-photos]');box.innerHTML='';
+      const urls=await Promise.all(pics.map(async a=>{const {data,error}=await sb.storage.from('documenti').createSignedUrl(a.storage_path,600);return error?null:{a,url:data.signedUrl}}));
+      for(const x of urls.filter(Boolean)){const img=document.createElement('img');img.src=x.url;img.alt=x.a.nome_file||'Foto intervento';img.loading='lazy';img.onclick=()=>window.open(x.url,'_blank');box.appendChild(img)}
+    }
+  }
+  openDialog('historyDialog')
+}
+function openHistoryEdit(i){
+  $('historyEditId').value=i.id;$('historyEditDate').value=i.data_intervento;$('historyEditNotes').value=i.note||'';
+  $('historyEditWorkers').innerHTML=profiles.filter(p=>p.attivo).map(p=>`<label><input type="checkbox" value="${p.id}"><span>${esc(p.nome)}</span></label>`).join('');
+  sb.from('intervention_workers').select('profile_id').eq('intervention_id',i.id).then(({data})=>{const ids=new Set((data||[]).map(x=>x.profile_id));$('historyEditWorkers').querySelectorAll('input').forEach(x=>x.checked=ids.has(x.value))});
+  openDialog('historyEditDialog');
+}
 async function workerNames(interventionId){const {data}=await sb.from('intervention_workers').select('profile_id').eq('intervention_id',interventionId);return (data||[]).map(x=>profiles.find(p=>p.id===x.profile_id)?.nome).filter(Boolean)}
 function renderPending(){const p=interventions.filter(i=>i.stato==='in_attesa');$('pendingBadge').textContent=p.length;$('pendingBadge').classList.toggle('hidden',!p.length);$('pendingList').innerHTML='';for(const i of p){const s=stores.find(x=>x.id===i.store_id);const c=document.createElement('article');c.className='card pending';c.innerHTML=`<h3>${esc(s?.nome||'Intervento')}</h3><p>${fmt(i.data_intervento)} · ${esc(i.note||'')}</p><div class="actions"><button data-ok>Convalida</button><button class="danger-btn" data-no>Rifiuta</button></div>`;c.querySelector('[data-ok]').onclick=()=>approveIntervention(i);c.querySelector('[data-no]').onclick=()=>rejectIntervention(i);$('pendingList').appendChild(c)}}
 async function approveIntervention(i){const {error}=await sb.from('interventions').update({stato:'convalidato',convalidato_da:profile.id,convalidato_il:new Date().toISOString()}).eq('id',i.id);if(error)return alert(error.message);const {error:e2}=await sb.from('stores').update({ultimo_passaggio:i.data_intervento}).eq('id',i.store_id);if(e2)return alert(e2.message);if(i.schedule_item_id)await sb.from('schedule_items').update({stato:'completato'}).eq('id',i.schedule_item_id);toast('Intervento convalidato');await loadAll()}
@@ -60,7 +163,8 @@ document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeDialog(b
 $('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('pendingBtn').onclick=()=>openDialog('pendingDialog');$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('newExtraBtn').onclick=()=>{$('extraForm').reset();$('extraDate').value=tomorrow();renderExtraStoreOptions();openDialog('extraDialog')};
 $('donePhotos').onchange=e=>$('photoLabel').textContent=`${e.target.files.length} foto selezionate`;
 $('storeForm').onsubmit=async e=>{e.preventDefault();const id=$('storeId').value,payload={nome:$('storeName').value.trim(),indirizzo:$('storeAddress').value.trim()||null,citta:$('storeCity').value.trim()||null,ultimo_passaggio:$('storeLast').value||null,intervallo_giorni:Number($('storeInterval').value)||15,note:$('storeNotes').value.trim()||null};const r=id?await sb.from('stores').update(payload).eq('id',id):await sb.from('stores').insert(payload);if(r.error)return alert(r.error.message);$('storeDialog').close();toast('Punto vendita salvato');await loadAll()};
-$('doneForm').onsubmit=async e=>{e.preventDefault();const workers=[...$('doneWorkers').querySelectorAll('input:checked')].map(x=>x.value);if(!workers.length)return alert('Seleziona chi ha eseguito.');const payload={store_id:$('doneStoreId').value,schedule_item_id:$('doneScheduleItemId').value||null,data_intervento:$('doneDate').value,note:$('doneNotes').value.trim()||null,stato:admin()?'convalidato':'in_attesa',inserito_da:profile.id,convalidato_da:admin()?profile.id:null,convalidato_il:admin()?new Date().toISOString():null};const {data,error}=await sb.from('interventions').insert(payload).select().single();if(error)return alert(error.message);const ir=await sb.from('intervention_workers').insert(workers.map(profile_id=>({intervention_id:data.id,profile_id})));if(ir.error)return alert(ir.error.message);for(const [n,file] of [...$('donePhotos').files].entries()){const path=`interventi/${data.id}/${Date.now()}-${n}-${file.name}`;try{await uploadFile(path,file);await addAttachment({tipo:'foto_generica',intervention_id:data.id,storage_path:path,nome_file:file.name,mime_type:file.type,dimensione_bytes:file.size,caricato_da:profile.id})}catch(err){alert('Intervento salvato, ma una foto non è stata caricata: '+err.message)}}if(payload.schedule_item_id)await sb.from('schedule_items').update({stato:admin()?'completato':'in_attesa'}).eq('id',payload.schedule_item_id);if(admin())await sb.from('stores').update({ultimo_passaggio:payload.data_intervento}).eq('id',payload.store_id);$('doneDialog').close();toast(admin()?'Intervento convalidato':'Inviato a Lorenzo');await loadAll()};
+$('doneForm').onsubmit=async e=>{e.preventDefault();const btn=e.submitter||$('doneForm').querySelector('[type=submit]');const oldText=btn.textContent;btn.disabled=true;btn.textContent='Salvataggio…';try{const workers=[...$('doneWorkers').querySelectorAll('input:checked')].map(x=>x.value);if(!workers.length)throw new Error('Seleziona chi ha eseguito.');const files=[...$('donePhotos').files];const payload={store_id:$('doneStoreId').value,schedule_item_id:$('doneScheduleItemId').value||null,data_intervento:$('doneDate').value,note:$('doneNotes').value.trim()||null,stato:admin()?'convalidato':'in_attesa',inserito_da:profile.id,convalidato_da:admin()?profile.id:null,convalidato_il:admin()?new Date().toISOString():null};const {data,error}=await sb.from('interventions').insert(payload).select().single();if(error)throw error;const ir=await sb.from('intervention_workers').insert(workers.map(profile_id=>({intervention_id:data.id,profile_id})));if(ir.error)throw ir.error;if(payload.schedule_item_id){const r=await sb.from('schedule_items').update({stato:admin()?'completato':'in_attesa'}).eq('id',payload.schedule_item_id);if(r.error)throw r.error}if(admin()){const r=await sb.from('stores').update({ultimo_passaggio:payload.data_intervento}).eq('id',payload.store_id);if(r.error)throw r.error}$('doneDialog').close();toast(files.length?`Intervento salvato · ${files.length} foto in caricamento`:admin()?'Intervento convalidato':'Inviato a Lorenzo');loadAll();if(files.length)enqueueInterventionPhotos(data.id,files).catch(err=>{console.error(err);toast('⚠️ Foto in attesa di sincronizzazione')})}catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=oldText}};
+$('historyEditForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const id=$('historyEditId').value,workers=[...$('historyEditWorkers').querySelectorAll('input:checked')].map(x=>x.value);if(!workers.length)return alert('Seleziona almeno un operatore.');const {error}=await sb.from('interventions').update({data_intervento:$('historyEditDate').value,note:$('historyEditNotes').value.trim()||null}).eq('id',id);if(error)return alert(error.message);let r=await sb.from('intervention_workers').delete().eq('intervention_id',id);if(r.error)return alert(r.error.message);r=await sb.from('intervention_workers').insert(workers.map(profile_id=>({intervention_id:id,profile_id})));if(r.error)return alert(r.error.message);const intervention=interventions.find(x=>x.id===id);if(intervention?.stato==='convalidato')await sb.from('stores').update({ultimo_passaggio:$('historyEditDate').value}).eq('id',intervention.store_id);$('historyEditDialog').close();toast('Storico aggiornato');await loadAll();const st=stores.find(x=>x.id===intervention?.store_id);if(st)showHistory(st)};
 $('scheduleForm').onsubmit=async e=>{e.preventDefault();const members=[...$('scheduleWorkers').querySelectorAll('input:checked')].map(x=>x.value),selected=[...$('scheduleStores').querySelectorAll('input:checked')].map(x=>x.value);if(!members.length||!selected.length)return alert('Seleziona squadra e punti vendita.');const {data,error}=await sb.from('schedules').insert({giorno:$('scheduleDate').value,nota_generale:$('scheduleNote').value.trim()||null,creato_da:profile.id}).select().single();if(error)return alert(error.message);let r=await sb.from('schedule_members').insert(members.map(profile_id=>({schedule_id:data.id,profile_id})));if(r.error)return alert(r.error.message);r=await sb.from('schedule_items').insert(selected.map((store_id,i)=>({schedule_id:data.id,tipo:'ordinario',store_id,posizione:i+1,stato:'da_fare'})));if(r.error)return alert(r.error.message);toast('Programmazione salvata');$('scheduleForm').reset();$('scheduleDate').value=tomorrow();renderSchedulePicker();await loadAll()};
 function renderExtraStoreOptions(){$('extraStore').innerHTML=stores.map(s=>`<option value="${s.id}">${esc(s.nome)}</option>`).join('')}
 $('extraDestination').onchange=()=>{const ext=$('extraDestination').value==='external';$('extraStoreWrap').classList.toggle('hidden',ext);$('extraExternalWrap').classList.toggle('hidden',!ext)};

@@ -20,15 +20,12 @@
       <h1>Gestione punti vendita</h1>
       <p class="helper">Scegli come vuoi entrare.</p>
       <form id="loginForm">
-        <div class="role-picker" role="radiogroup" aria-label="Tipo di accesso">
-          <button type="button" class="role-option active" data-role="lorenzo">
-            <strong>Lorenzo</strong><span>Amministratore</span>
-          </button>
-          <button type="button" class="role-option" data-role="employee">
-            <strong>Dipendente</strong><span>Accesso operativo</span>
-          </button>
-        </div>
-        <input id="loginRole" type="hidden" value="lorenzo" />
+        <label class="login-role-label">Profilo
+          <select id="loginRole" aria-label="Scegli il profilo di accesso">
+            <option value="lorenzo">Lorenzo — Amministratore</option>
+            <option value="employee">Dipendente — Accesso operativo</option>
+          </select>
+        </label>
         <label>Password<input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password" required /></label>
         <button type="submit">Accedi</button>
         <p id="loginError" class="login-error hidden">Password non corretta.</p>

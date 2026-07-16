@@ -57,14 +57,16 @@ window.addEventListener('online',processUploadQueue);
 
 // ---- Impostazioni account e dipendenti ----
 function ensureCloudSettingsUi(){
-  const host=$('settingsView')||$('settingsScreen');if(!host||$('cloudAccountSettings'))return;
+  const host=$('settingsView')||$('settingsScreen');if(!host)return;
   const wrap=host.querySelector('.settings-content')||host;
-  const sec=document.createElement('section');sec.id='cloudAccountSettings';sec.className='settings-card cloud-account-settings';
+  let sec=$('cloudAccountSettings');
+  if(sec?.dataset.ready==='1')return;
+  if(!sec){sec=document.createElement('section');sec.id='cloudAccountSettings';wrap.appendChild(sec)}
+  sec.dataset.ready='1';sec.className='settings-card cloud-account-settings';
   sec.innerHTML=`<div class="settings-section-head"><div><h3>🔐 Account e accessi</h3><p>Cambia la tua password. Lorenzo può creare utenti e modificarne nome, email, ruolo, stato e password.</p></div></div>
   <form id="selfPasswordForm" class="settings-form"><input id="selfNewPassword" type="password" minlength="8" placeholder="Nuova password" required><button type="submit">Cambia la mia password</button></form>
   <div id="adminUsersArea" class="admin-only"><hr><h4>👥 Dipendenti</h4><div id="cloudEmployeeList" class="employee-list"></div>
   <form id="cloudAddEmployeeForm" class="settings-form"><input id="cloudEmployeeName" placeholder="Nome" required><input id="cloudEmployeeEmail" type="email" placeholder="Email di accesso" required><input id="cloudEmployeePassword" type="password" minlength="8" placeholder="Password iniziale" required><button type="submit">Crea dipendente</button></form></div>`;
-  wrap.appendChild(sec);
   const sync=document.createElement('section');sync.className='settings-card';sync.innerHTML=`<h3>☁️ Sincronizzazione</h3><p id="backgroundSyncStatus">Controllo…</p><button id="retryUploadsBtn" type="button" class="secondary">Riprova caricamenti</button>`;wrap.appendChild(sync);
   const badge=document.createElement('button');badge.id='syncFloatingBadge';badge.type='button';badge.className='sync-floating hidden';badge.onclick=()=>{setView?.('settings');};document.body.appendChild(badge);
   $('selfPasswordForm').onsubmit=async e=>{e.preventDefault();const pw=$('selfNewPassword').value;const {error}=await sb.auth.updateUser({password:pw});if(error)return alert(error.message);e.target.reset();toast('Password aggiornata')};
@@ -114,7 +116,7 @@ document.querySelectorAll('dialog').forEach(dialog=>dialog.addEventListener('clo
   if(realtimeRefreshPending)requestRealtimeRefresh(150);
 }));
 function status(s){const n=days(s.ultimo_passaggio),lim=s.intervallo_giorni||15;if(n===null||n>lim)return'due';if(n>=lim-3)return'warning';return'ok'}
-function setView(name){document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');$('pageTitle').textContent={stores:'Punti vendita',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',settings:'Impostazioni'}[name];if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();}
+function setView(name){document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');$('pageTitle').textContent={stores:'Punti vendita',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',settings:'Impostazioni'}[name];if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='settings'){ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();}}
 async function signIn(email,password){const {error}=await sb.auth.signInWithPassword({email,password});if(error)throw error;}
 async function signOut(){await sb.auth.signOut();location.reload()}
 async function loadAll(){

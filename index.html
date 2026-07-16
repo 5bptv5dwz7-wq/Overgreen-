@@ -18,18 +18,21 @@
       <div class="login-logo">OG</div>
       <p class="eyebrow">OVERGREEN</p>
       <h1>Gestione punti vendita</h1>
-      <p class="helper">Scegli come vuoi entrare.</p>
+      <p class="helper">Accedi con l’account Supabase.</p>
       <form id="loginForm">
-        <label class="login-role-label">Profilo
-          <select id="loginRole" aria-label="Scegli il profilo di accesso"></select>
+        <label>Email
+          <input id="loginEmail" type="email" autocomplete="username" placeholder="nome@overgreen-app.it" required />
         </label>
-        <label>Password<input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password" required /></label>
+        <label>Password
+          <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password" required />
+        </label>
         <button type="submit">Accedi</button>
-        <p id="loginError" class="login-error hidden">Password non corretta.</p>
+        <p id="loginError" class="login-error hidden"></p>
       </form>
     </div>
   </div>
 
+  <div id="app" class="hidden">
   <header>
     <div>
       <p class="eyebrow">OVERGREEN</p>
@@ -370,6 +373,9 @@
   </dialog>
 
   <div id="toast" class="toast" role="status"></div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -1,0 +1,15 @@
+OVERGREEN CLOUD V10
+
+1. Carica su GitHub i file principali: index.html, app.js, style.css, config.js, manifest.json, sw.js e le icone.
+
+2. IMPORTANTE: aggiorna anche la Edge Function Supabase manage-user usando il file:
+   supabase/functions/manage-user/index.ts
+
+Senza l’aggiornamento della Edge Function, la modifica utenti e l’eliminazione degli interventi non funzioneranno.
+
+La V10 permette:
+- modifica nome, email, ruolo e stato attivo degli utenti;
+- reimpostazione password;
+- eliminazione definitiva degli interventi dallo storico;
+- eliminazione automatica delle foto collegate;
+- ricalcolo automatico dell’ultimo passaggio del punto vendita.

@@ -157,7 +157,10 @@
           <label>Giorno<input id="scheduleDate" type="date" required /></label>
           <fieldset class="workers-fieldset"><legend>Squadra</legend><div id="scheduleWorkers" class="workers-grid"></div></fieldset>
           <label>Nota generale<textarea id="scheduleNote" rows="2" placeholder="Partenza, mezzi, indicazioni…"></textarea></label>
-          <label>Cerca punti vendita<input id="scheduleStoreSearch" type="search" placeholder="Cerca negozio…" /></label>
+          <div class="schedule-picker-tools">
+            <label>Cerca punti vendita<input id="scheduleStoreSearch" type="search" placeholder="Cerca negozio…" /></label>
+            <label>Ordina<select id="scheduleStoreSort"><option value="urgency">Più urgenti</option><option value="alpha">Ordine alfabetico</option></select></label>
+          </div>
           <div id="scheduleStoreList" class="schedule-store-picker"></div>
           <p id="scheduleSelectedCount" class="photo-count">Nessun punto vendita selezionato</p>
           <button type="submit">Salva programmazione</button>

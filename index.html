@@ -39,7 +39,7 @@
     </div>
     <div class="header-actions">
       <button id="pendingBtn" class="icon-btn small admin-only" aria-label="Interventi da convalidare">✓<span id="pendingBadge" class="pending-badge hidden">0</span></button>
-      <button id="dataBtn" class="icon-btn small" aria-label="Backup dati">⋯</button>
+      <button id="dataBtn" class="icon-btn small" aria-label="Apri impostazioni">⚙</button>
       <button id="addStoreBtn" class="icon-btn" aria-label="Aggiungi punto vendita">＋</button>
     </div>
   </header>
@@ -140,39 +140,78 @@
     </div>
   </dialog>
 
-  <dialog id="dataDialog">
-    <div class="history-wrap">
-      <div class="dialog-head">
-        <h2>Dati, backup e accesso</h2>
-        <button type="button" class="close-btn" data-close="dataDialog">×</button>
+  <section id="settingsScreen" class="settings-screen hidden" aria-label="Impostazioni">
+    <div class="settings-topbar">
+      <button id="settingsBackBtn" class="settings-back" type="button" aria-label="Torna ai punti vendita">‹</button>
+      <div>
+        <p class="eyebrow">OVERGREEN</p>
+        <h2>Impostazioni</h2>
       </div>
-      <p class="helper">Il backup ti permette di recuperare tutto se cambi telefono o cancelli i dati di Safari.</p>
-      <div class="stack-actions">
-        <button id="exportBtn">Esporta backup</button>
-        <button id="importBtn" class="secondary">Importa backup</button>
-        <input id="importFile" class="hidden" type="file" accept="application/json,.json" />
-      </div>
-      <p id="storageInfo" class="storage-info"></p>
-      <hr class="divider" />
-      <h3>Password Lorenzo</h3>
-      <form id="passwordForm" class="stack-actions">
-        <input id="newPassword" type="password" minlength="4" placeholder="Nuova password Lorenzo" required />
-        <button type="submit" class="secondary">Cambia password Lorenzo</button>
-      </form>
-      <hr class="divider" />
-      <section id="employeeManager" class="employee-manager admin-only">
-        <h3>Gestione dipendenti</h3>
-        <p class="helper">I nuovi dipendenti compaiono automaticamente nel login e tra le persone che hanno eseguito il lavoro.</p>
-        <form id="addEmployeeForm" class="employee-add-form">
-          <input id="employeeName" type="text" placeholder="Nome dipendente" required />
-          <input id="employeePassword" type="password" minlength="4" placeholder="Password iniziale" required />
-          <button type="submit">＋ Aggiungi dipendente</button>
-        </form>
-        <div id="employeeList" class="employee-list"></div>
-      </section>
-      <button id="logoutBtn" class="danger-button">Esci dall’app</button>
     </div>
-  </dialog>
+
+    <div class="settings-content">
+      <section class="settings-card account-card">
+        <div class="settings-icon">👤</div>
+        <div>
+          <h3>Account</h3>
+          <p id="settingsAccountName">Lorenzo · Amministratore</p>
+        </div>
+      </section>
+
+      <section class="settings-card">
+        <div class="settings-section-head">
+          <div>
+            <h3>🔐 Password di Lorenzo</h3>
+            <p>Modifica la password dell’amministratore.</p>
+          </div>
+        </div>
+        <form id="passwordForm" class="settings-form">
+          <input id="newPassword" type="password" minlength="4" placeholder="Nuova password Lorenzo" required />
+          <button type="submit">Cambia password</button>
+        </form>
+      </section>
+
+      <section id="employeeManager" class="settings-card admin-only">
+        <div class="settings-section-head">
+          <div>
+            <h3>👥 Gestione dipendenti</h3>
+            <p>Aggiungi utenti e modifica le loro password.</p>
+          </div>
+        </div>
+        <div id="employeeList" class="employee-list"></div>
+        <div class="settings-subsection">
+          <h4>➕ Nuovo dipendente</h4>
+          <form id="addEmployeeForm" class="settings-form">
+            <input id="employeeName" type="text" placeholder="Nome dipendente" required />
+            <input id="employeePassword" type="password" minlength="4" placeholder="Password iniziale" required />
+            <button type="submit">Aggiungi dipendente</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="settings-card">
+        <div class="settings-section-head">
+          <div>
+            <h3>💾 Backup dati</h3>
+            <p>Esporta o importa punti vendita e storico. Le foto non sono incluse.</p>
+          </div>
+        </div>
+        <div class="settings-actions">
+          <button id="exportBtn">Esporta backup</button>
+          <button id="importBtn" class="secondary">Importa backup</button>
+          <input id="importFile" class="hidden" type="file" accept="application/json,.json" />
+        </div>
+        <p id="storageInfo" class="storage-info"></p>
+      </section>
+
+      <section class="settings-card info-card">
+        <h3>ℹ️ Informazioni</h3>
+        <p>Overgreen gestione interventi · Versione 6</p>
+      </section>
+
+      <button id="logoutBtn" class="danger-button settings-logout">Esci dall’app</button>
+    </div>
+  </section>
 
   <template id="storeTemplate">
     <article class="store-card">

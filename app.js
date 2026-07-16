@@ -1,6 +1,8 @@
 const STORAGE_KEY = 'overgreen_stores_real_v1';
 const PASSWORD_KEY = 'overgreen_access_password_v1';
+const EMPLOYEE_PASSWORD_KEY = 'overgreen_employee_password_v1';
 const SESSION_KEY = 'overgreen_unlocked';
+const SESSION_ROLE_KEY = 'overgreen_role';
 const DEFAULT_INTERVAL = 15;
 
 const PHOTO_DB = 'overgreen_photos_v1';
@@ -56,12 +58,15 @@ $('importFile').addEventListener('change',async e=>{const file=e.target.files?.[
 $('beforePhoto').addEventListener('change',e=>{beforeFile=e.target.files?.[0]||null;setPreview(beforeFile,'beforePreview');});
 $('afterPhoto').addEventListener('change',e=>{afterFile=e.target.files?.[0]||null;setPreview(afterFile,'afterPreview');});
 
-function currentPassword(){return localStorage.getItem(PASSWORD_KEY)||'prova';}
-function lockApp(){sessionStorage.removeItem(SESSION_KEY);$('loginScreen').classList.remove('hidden');$('loginPassword').value='';setTimeout(()=>$('loginPassword').focus(),100);}
-function unlockApp(){sessionStorage.setItem(SESSION_KEY,'1');$('loginScreen').classList.add('hidden');render();}
-$('loginForm').addEventListener('submit',e=>{e.preventDefault();if($('loginPassword').value===currentPassword()){$('loginError').classList.add('hidden');unlockApp();}else{$('loginError').classList.remove('hidden');$('loginPassword').select();}});
-$('passwordForm').addEventListener('submit',e=>{e.preventDefault();const value=$('newPassword').value;if(value.length<4)return;localStorage.setItem(PASSWORD_KEY,value);$('newPassword').value='';showToast('Password cambiata');});
+function passwordForRole(role){return role==='employee'?(localStorage.getItem(EMPLOYEE_PASSWORD_KEY)||'test'):(localStorage.getItem(PASSWORD_KEY)||'prova');}
+function currentRole(){return sessionStorage.getItem(SESSION_ROLE_KEY)||'lorenzo';}
+function applyRole(role){const isEmployee=role==='employee';document.body.classList.toggle('employee-mode',isEmployee);$('activeUserLabel').textContent=isEmployee?'Accesso: Dipendente':'Accesso: Lorenzo';}
+function lockApp(){sessionStorage.removeItem(SESSION_KEY);sessionStorage.removeItem(SESSION_ROLE_KEY);document.body.classList.remove('employee-mode');$('loginScreen').classList.remove('hidden');$('loginPassword').value='';$('loginRole').value='lorenzo';document.querySelectorAll('.role-option').forEach(b=>b.classList.toggle('active',b.dataset.role==='lorenzo'));setTimeout(()=>$('loginPassword').focus(),100);}
+function unlockApp(role){sessionStorage.setItem(SESSION_KEY,'1');sessionStorage.setItem(SESSION_ROLE_KEY,role);applyRole(role);$('loginScreen').classList.add('hidden');render();}
+document.querySelectorAll('.role-option').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.role-option').forEach(b=>b.classList.remove('active'));btn.classList.add('active');$('loginRole').value=btn.dataset.role;$('loginError').classList.add('hidden');$('loginPassword').focus();}));
+$('loginForm').addEventListener('submit',e=>{e.preventDefault();const role=$('loginRole').value||'lorenzo';if($('loginPassword').value===passwordForRole(role)){$('loginError').classList.add('hidden');unlockApp(role);}else{$('loginError').classList.remove('hidden');$('loginPassword').select();}});
+$('passwordForm').addEventListener('submit',e=>{e.preventDefault();if(currentRole()!=='lorenzo'){showToast('Solo Lorenzo può cambiare la password');return;}const value=$('newPassword').value;if(value.length<4)return;localStorage.setItem(PASSWORD_KEY,value);$('newPassword').value='';showToast('Password Lorenzo cambiata');});
 $('logoutBtn').addEventListener('click',()=>{closeDialog('dataDialog');lockApp();});
 $('addStoreBtn').addEventListener('click',()=>openStoreDialog());$('dataBtn').addEventListener('click',()=>openDialog('dataDialog'));$('searchInput').addEventListener('input',render);$('filterSelect').addEventListener('change',render);$('sortSelect').addEventListener('change',render);document.querySelectorAll('[data-close]').forEach(btn=>btn.addEventListener('click',()=>closeDialog(btn.dataset.close)));document.querySelectorAll('.summary-card').forEach(btn=>btn.addEventListener('click',()=>{$('filterSelect').value=btn.dataset.filter;render();}));document.querySelectorAll('dialog').forEach(dialog=>dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close();}));$('todayLabel').textContent=new Intl.DateTimeFormat('it-IT',{weekday:'long',day:'numeric',month:'long'}).format(new Date());
 if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js'));
-if(sessionStorage.getItem(SESSION_KEY)==='1')unlockApp();else lockApp();
+if(sessionStorage.getItem(SESSION_KEY)==='1')unlockApp(currentRole());else lockApp();

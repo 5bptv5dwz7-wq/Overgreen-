@@ -6,6 +6,7 @@ const SEED_STORES=[{"name": "ABBIATEGRASSO", "lastDone": "2026-06-17"}, {"name":
 const $=id=>document.getElementById(id);
 let session=null,profile=null,profiles=[],stores=[],interventions=[],schedules=[],scheduleMembers=[],scheduleItems=[],extras=[],extraWorkers=[],attachments=[];
 let storeFilter='all';
+let realtimeRefreshTimer=null, realtimeRefreshPending=false, loadAllPromise=null;
 
 // ---- Coda persistente per caricamenti in background ----
 const UPLOAD_DB='overgreen-upload-queue-v1', UPLOAD_STORE='jobs';
@@ -42,14 +43,14 @@ async function processUploadQueue(){
         if(job.retries>=3)break;
       }
     }
-  }finally{uploadWorkerRunning=false;updateSyncUi();try{await loadAll()}catch{}}
+  }finally{uploadWorkerRunning=false;updateSyncUi();requestRealtimeRefresh(300)}
 }
 async function retryUploads(){const jobs=await getUploadJobs();for(const j of jobs){j.retries=0;j.lastError='';await putUploadJob(j)}processUploadQueue()}
 async function updateSyncUi(){
   let jobs=[];try{jobs=await getUploadJobs()}catch{}
   const failed=jobs.filter(j=>(j.retries||0)>=3).length;
   const text=uploadWorkerRunning?`⬆️ ${jobs.length} foto in caricamento…`:failed?`⚠️ ${failed} caricamenti da riprovare`:jobs.length?`☁️ ${jobs.length} foto in coda`:'🟢 Tutto sincronizzato';
-  for(const id of ['backgroundSyncStatus','syncStatus']){const el=$(id);if(el)el.textContent=text}
+  const background=$('backgroundSyncStatus');if(background)background.textContent=text
   const badge=$('syncFloatingBadge');if(badge){badge.textContent=text;badge.classList.toggle('hidden',!jobs.length&&!uploadWorkerRunning)}
 }
 window.addEventListener('online',processUploadQueue);
@@ -82,12 +83,28 @@ const days=d=>{if(!d)return null;const a=new Date(d+'T00:00:00'),b=new Date();b.
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 const admin=()=>profile?.ruolo==='admin';
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
-function openDialog(id){$ (id)?.showModal()}function closeDialog(d){d.closest('dialog')?.close()}
+function openDialog(id){$(id)?.showModal()}
+function closeDialog(d){d.closest('dialog')?.close()}
+function editorOpen(){return !!document.querySelector('dialog[open]')}
+function requestRealtimeRefresh(delay=650){
+  realtimeRefreshPending=true;
+  clearTimeout(realtimeRefreshTimer);
+  realtimeRefreshTimer=setTimeout(async()=>{
+    if(editorOpen()||!session)return;
+    realtimeRefreshPending=false;
+    try{await loadAll()}catch(err){console.error('Aggiornamento realtime non riuscito',err)}
+  },delay);
+}
+document.querySelectorAll('dialog').forEach(dialog=>dialog.addEventListener('close',()=>{
+  if(realtimeRefreshPending)requestRealtimeRefresh(150);
+}));
 function status(s){const n=days(s.ultimo_passaggio),lim=s.intervallo_giorni||15;if(n===null||n>lim)return'due';if(n>=lim-3)return'warning';return'ok'}
 function setView(name){document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');$('pageTitle').textContent={stores:'Punti vendita',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',settings:'Impostazioni'}[name];if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();}
 async function signIn(email,password){const {error}=await sb.auth.signInWithPassword({email,password});if(error)throw error;}
 async function signOut(){await sb.auth.signOut();location.reload()}
 async function loadAll(){
+  if(loadAllPromise)return loadAllPromise;
+  loadAllPromise=(async()=>{
   const [p,s,i,sch,sm,si,e,ew,a]=await Promise.all([
     sb.from('profiles').select('*').order('nome'),sb.from('stores').select('*').eq('attivo',true),sb.from('interventions').select('*').order('created_at',{ascending:false}),sb.from('schedules').select('*').order('giorno'),sb.from('schedule_members').select('*'),sb.from('schedule_items').select('*').order('posizione'),sb.from('extras').select('*').order('giorno_intervento'),sb.from('extra_workers').select('*'),sb.from('attachments').select('*').order('created_at',{ascending:false})
   ]);
@@ -97,7 +114,9 @@ async function loadAll(){
   $('userLabel').textContent=`${profile.nome} · ${admin()?'Amministratore':'Dipendente'}`;$('settingsUser').textContent=`${profile.nome} — ${session.user.email}`;
   document.querySelectorAll('.admin-only').forEach(x=>x.classList.toggle('hidden',!admin()));
   renderStores();renderWorkers();renderPending();renderSchedules();renderExtras();ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();processUploadQueue();
-  if($('syncStatus')&&!$('backgroundSyncStatus'))$('syncStatus').textContent='Ultimo aggiornamento: '+new Date().toLocaleTimeString('it-IT');
+  const lastUpdate=$('syncStatus');if(lastUpdate)lastUpdate.textContent='Ultimo aggiornamento dati: '+new Date().toLocaleTimeString('it-IT');
+  })();
+  try{return await loadAllPromise}finally{loadAllPromise=null}
 }
 function renderStores(){
  const q=$('searchInput').value.trim().toLowerCase(),sort=$('sortSelect').value;
@@ -175,5 +194,5 @@ $('closeExtraForm').onsubmit=async e=>{e.preventDefault();const id=$('closeExtra
 
 sb.auth.onAuthStateChange(async(_event,s)=>{session=s;if(!s){$('loginScreen').classList.remove('hidden');$('app').classList.add('hidden');return}$('loginScreen').classList.add('hidden');$('app').classList.remove('hidden');try{await loadAll();setView('stores')}catch(err){alert('Errore collegamento: '+err.message)}});
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-const channel=sb.channel('overgreen-live').on('postgres_changes',{event:'*',schema:'public'},()=>loadAll()).subscribe();
+const channel=sb.channel('overgreen-live').on('postgres_changes',{event:'*',schema:'public'},()=>requestRealtimeRefresh()).subscribe();
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(console.error));

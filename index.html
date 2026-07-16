@@ -21,10 +21,7 @@
       <p class="helper">Scegli come vuoi entrare.</p>
       <form id="loginForm">
         <label class="login-role-label">Profilo
-          <select id="loginRole" aria-label="Scegli il profilo di accesso">
-            <option value="lorenzo">Lorenzo — Amministratore</option>
-            <option value="employee">Dipendente — Accesso operativo</option>
-          </select>
+          <select id="loginRole" aria-label="Scegli il profilo di accesso"></select>
         </label>
         <label>Password<input id="loginPassword" type="password" autocomplete="current-password" placeholder="Password" required /></label>
         <button type="submit">Accedi</button>
@@ -112,19 +109,15 @@
       <label>Nota intervento<textarea id="doneNote" rows="3" placeholder="Es. taglio completo, siepe da riprendere…"></textarea></label>
       <fieldset class="workers-fieldset">
         <legend>Chi ha eseguito</legend>
-        <div class="workers-grid">
-          <label><input type="checkbox" name="worker" value="Lorenzo"> Lorenzo</label>
-          <label><input type="checkbox" name="worker" value="Giorgio"> Giorgio</label>
-          <label><input type="checkbox" name="worker" value="Roberto"> Roberto</label>
-          <label><input type="checkbox" name="worker" value="Eros"> Eros</label>
-        </div>
+        <div id="workersGrid" class="workers-grid"></div>
       </fieldset>
       <label class="photo-picker">
-        <span>📷 Aggiungi foto</span>
+        <span>📷 Scatta o aggiungi una foto</span>
         <input id="genericPhotos" type="file" accept="image/*" capture="environment" multiple />
       </label>
       <div id="genericPreview" class="generic-preview"></div>
-      <p class="helper">Puoi inserire una o più foto generiche. In questa prova restano soltanto su questo dispositivo.</p>
+      <p id="photoCount" class="photo-count">Nessuna foto aggiunta</p>
+      <p class="helper">Dopo ogni scatto puoi premere di nuovo “Scatta o aggiungi una foto”: le immagini si sommano senza cancellare le precedenti.</p>
       <p id="employeeApprovalNotice" class="approval-notice hidden">L'intervento sarà inviato a Lorenzo e diventerà effettivo solo dopo la sua convalida.</p>
       <div class="dialog-actions">
         <button type="button" class="secondary" data-close="doneDialog">Annulla</button>
@@ -161,11 +154,22 @@
       </div>
       <p id="storageInfo" class="storage-info"></p>
       <hr class="divider" />
-      <h3>Password di accesso</h3>
+      <h3>Password Lorenzo</h3>
       <form id="passwordForm" class="stack-actions">
-        <input id="newPassword" type="password" minlength="4" placeholder="Nuova password" required />
-        <button type="submit" class="secondary">Cambia password</button>
+        <input id="newPassword" type="password" minlength="4" placeholder="Nuova password Lorenzo" required />
+        <button type="submit" class="secondary">Cambia password Lorenzo</button>
       </form>
+      <hr class="divider" />
+      <section id="employeeManager" class="employee-manager admin-only">
+        <h3>Gestione dipendenti</h3>
+        <p class="helper">I nuovi dipendenti compaiono automaticamente nel login e tra le persone che hanno eseguito il lavoro.</p>
+        <form id="addEmployeeForm" class="employee-add-form">
+          <input id="employeeName" type="text" placeholder="Nome dipendente" required />
+          <input id="employeePassword" type="password" minlength="4" placeholder="Password iniziale" required />
+          <button type="submit">＋ Aggiungi dipendente</button>
+        </form>
+        <div id="employeeList" class="employee-list"></div>
+      </section>
       <button id="logoutBtn" class="danger-button">Esci dall’app</button>
     </div>
   </dialog>
@@ -181,6 +185,7 @@
         <span class="days-badge"></span>
       </div>
       <p class="store-meta"></p>
+      <p class="store-pending hidden">⏳ Intervento in attesa di convalida</p>
       <p class="store-notes"></p>
       <div class="primary-actions">
         <button class="done-btn">✓ Eseguito</button>

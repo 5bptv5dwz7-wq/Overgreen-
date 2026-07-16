@@ -38,6 +38,7 @@
       <p id="activeUserLabel" class="active-user"></p>
     </div>
     <div class="header-actions">
+      <button id="scheduleBtn" class="icon-btn small" aria-label="Apri programmazione">📅</button>
       <button id="pendingBtn" class="icon-btn small admin-only" aria-label="Interventi da convalidare">✓<span id="pendingBadge" class="pending-badge hidden">0</span></button>
       <button id="dataBtn" class="icon-btn small" aria-label="Apri impostazioni">⚙</button>
       <button id="addStoreBtn" class="icon-btn" aria-label="Aggiungi punto vendita">＋</button>
@@ -140,6 +141,35 @@
     </div>
   </dialog>
 
+
+  <section id="scheduleScreen" class="settings-screen hidden" aria-label="Programmazione">
+    <div class="settings-topbar">
+      <button id="scheduleBackBtn" class="settings-back" type="button" aria-label="Torna ai punti vendita">‹</button>
+      <div>
+        <p class="eyebrow">OVERGREEN</p>
+        <h2>Programmazione</h2>
+      </div>
+    </div>
+    <div class="settings-content">
+      <section id="scheduleCreateCard" class="settings-card admin-only">
+        <div class="settings-section-head"><div><h3>📅 Nuova programmazione</h3><p>Assegna una squadra e i punti vendita da eseguire.</p></div></div>
+        <form id="scheduleForm" class="settings-form">
+          <label>Giorno<input id="scheduleDate" type="date" required /></label>
+          <fieldset class="workers-fieldset"><legend>Squadra</legend><div id="scheduleWorkers" class="workers-grid"></div></fieldset>
+          <label>Nota generale<textarea id="scheduleNote" rows="2" placeholder="Partenza, mezzi, indicazioni…"></textarea></label>
+          <label>Cerca punti vendita<input id="scheduleStoreSearch" type="search" placeholder="Cerca negozio…" /></label>
+          <div id="scheduleStoreList" class="schedule-store-picker"></div>
+          <p id="scheduleSelectedCount" class="photo-count">Nessun punto vendita selezionato</p>
+          <button type="submit">Salva programmazione</button>
+        </form>
+      </section>
+      <section class="settings-card">
+        <div class="settings-section-head"><div><h3 id="scheduleListTitle">Programmazioni</h3><p id="scheduleListHelp">Le programmazioni salvate su questo dispositivo.</p></div></div>
+        <div id="scheduleList" class="schedule-list"></div>
+      </section>
+    </div>
+  </section>
+
   <section id="settingsScreen" class="settings-screen hidden" aria-label="Impostazioni">
     <div class="settings-topbar">
       <button id="settingsBackBtn" class="settings-back" type="button" aria-label="Torna ai punti vendita">‹</button>
@@ -206,7 +236,7 @@
 
       <section class="settings-card info-card">
         <h3>ℹ️ Informazioni</h3>
-        <p>Overgreen gestione interventi · Versione 6</p>
+        <p>Overgreen gestione interventi · Versione 7</p>
       </section>
 
       <button id="logoutBtn" class="danger-button settings-logout">Esci dall’app</button>

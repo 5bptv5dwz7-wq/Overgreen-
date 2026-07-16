@@ -41,6 +41,7 @@
       <p id="activeUserLabel" class="active-user"></p>
     </div>
     <div class="header-actions">
+      <button id="approvalBtn" class="icon-btn small hidden" aria-label="Interventi da convalidare">✓<span id="pendingCount" class="pending-count">0</span></button>
       <button id="dataBtn" class="icon-btn small" aria-label="Backup dati">⋯</button>
       <button id="addStoreBtn" class="icon-btn" aria-label="Aggiungi punto vendita">＋</button>
     </div>
@@ -108,20 +109,13 @@
       </div>
       <input type="hidden" id="doneStoreId" />
       <label>Data<input id="doneDate" type="date" required /></label>
+      <fieldset class="operator-field"><legend>Eseguito da</legend><div id="operatorChoices" class="operator-choices">
+        <label><input type="checkbox" value="Lorenzo"> Lorenzo</label><label><input type="checkbox" value="Giorgio"> Giorgio</label><label><input type="checkbox" value="Roberto"> Roberto</label><label><input type="checkbox" value="Eros"> Eros</label>
+      </div></fieldset>
       <label>Nota intervento<textarea id="doneNote" rows="3" placeholder="Es. taglio completo, siepe da riprendere…"></textarea></label>
-      <div class="photo-fields">
-        <label class="photo-picker">
-          <span>📷 Foto prima</span>
-          <input id="beforePhoto" type="file" accept="image/*" capture="environment" />
-          <img id="beforePreview" class="photo-preview hidden" alt="Anteprima foto prima" />
-        </label>
-        <label class="photo-picker">
-          <span>📷 Foto dopo</span>
-          <input id="afterPhoto" type="file" accept="image/*" capture="environment" />
-          <img id="afterPreview" class="photo-preview hidden" alt="Anteprima foto dopo" />
-        </label>
-      </div>
-      <p class="helper">In questa prova le foto restano soltanto su questo iPhone.</p>
+      <label class="photo-picker"><span>📷 Aggiungi foto</span><input id="genericPhotos" type="file" accept="image/*" capture="environment" multiple /></label>
+      <div id="photoPreviewList" class="photo-preview-list"></div><p id="existingPhotosInfo" class="helper"></p>
+      <p class="helper">Le foto non sono divise in prima e dopo. Sul profilo Dipendente l’intervento resta in attesa finché Lorenzo non lo convalida.</p>
       <div class="dialog-actions">
         <button type="button" class="secondary" data-close="doneDialog">Annulla</button>
         <button type="submit">✓ Conferma</button>
@@ -173,7 +167,7 @@
         <span class="days-badge"></span>
       </div>
       <p class="store-meta"></p>
-      <p class="store-notes"></p>
+      <p class="store-notes"></p><p class="pending-label hidden"></p>
       <div class="primary-actions">
         <button class="done-btn">✓ Eseguito</button>
         <button class="map-btn secondary">↗ Mappe</button>
@@ -186,6 +180,8 @@
     </article>
   </template>
 
+
+  <dialog id="approvalDialog"><div class="history-wrap"><div class="dialog-head"><h2>Interventi da convalidare</h2><button type="button" class="close-btn" data-close="approvalDialog">×</button></div><div id="approvalList"></div></div></dialog>
   <dialog id="photoDialog" class="photo-dialog">
     <div class="photo-viewer">
       <button type="button" class="close-btn photo-close" data-close="photoDialog">×</button>

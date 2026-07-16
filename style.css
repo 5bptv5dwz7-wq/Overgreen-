@@ -6,3 +6,26 @@
 .sync-floating{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:2000;border:0;border-radius:14px;padding:10px 14px;background:#173c2c;color:#fff;box-shadow:0 8px 30px #0003;font-weight:700}
 .cloud-account-settings hr{border:0;border-top:1px solid #dfe7e2;margin:20px 0}.employee-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #e7ece9}.employee-row>div{display:flex;flex-direction:column;min-width:0}.employee-row small{color:#66756d;margin-top:3px}.compact{padding:8px 10px;font-size:.88rem;white-space:nowrap}
 @media(max-width:560px){.employee-row{align-items:stretch;flex-direction:column}.employee-row button{width:100%}.cloud-account-settings .settings-form{display:grid;grid-template-columns:1fr}.sync-floating{font-size:.9rem}}
+
+
+/* Cloud v9: Maps e storico ridisegnato */
+#historyDialog{width:min(680px,calc(100% - 14px));background:#f5f8f6}
+#historyDialog .dialog-body{padding:18px}
+#historyDialog .dialog-head{position:sticky;top:0;z-index:4;background:#f5f8f6;padding-bottom:12px}
+#historyTitle{margin:0;font-size:1.35rem;line-height:1.15}
+.history-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:4px 0 16px}
+.history-summary>div{background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px 8px;text-align:center;box-shadow:0 4px 18px #102d1d0a}
+.history-summary strong{display:block;font-size:1.35rem;color:#075b31}.history-summary span{display:block;font-size:.75rem;color:#6b7b72;margin-top:2px}
+.history-subtitle{font-size:.8rem;text-transform:uppercase;letter-spacing:.09em;font-weight:800;color:#6b7b72;margin:0 0 10px 20px}
+.history-timeline{position:relative;padding-left:20px}.history-timeline:before{content:"";position:absolute;left:7px;top:10px;bottom:12px;width:2px;background:#cfe0d5}
+.history-card{position:relative;background:#fff;border:1px solid var(--line);border-radius:18px;padding:15px;margin:0 0 12px;box-shadow:0 7px 24px #102d1d0b}
+.history-dot{position:absolute;left:-20px;top:22px;width:12px;height:12px;border-radius:50%;background:#15904f;border:3px solid #e6f4eb;box-sizing:content-box}
+.history-in_attesa .history-dot{background:#d99620;border-color:#fff1d7}.history-rifiutato .history-dot{background:#c84b4b;border-color:#fde4e4}
+.history-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.history-date span{display:block;font-weight:850;font-size:1.02rem}.history-date small{display:block;color:#78877f;margin-top:2px}
+.history-status{border-radius:999px;padding:6px 9px;background:#e9f6ee;color:#08723c;font-size:.72rem;font-weight:850;white-space:nowrap}.history-in_attesa .history-status{background:#fff1d7;color:#9a6100}.history-rifiutato .history-status{background:#fde6e6;color:#a72e2e}
+.history-note{background:#f6f9f7;border-radius:12px;padding:11px 12px;margin-top:12px;line-height:1.4;white-space:pre-wrap}
+.history-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:11px}.history-workers{display:flex;flex-wrap:wrap;gap:6px}.history-workers span,.history-photo-count{font-size:.75rem;background:#edf3ef;color:#385246;border-radius:999px;padding:6px 8px}
+.history-photos{display:flex;gap:9px;overflow-x:auto;margin-top:11px;padding:1px 1px 5px}.history-photo{position:relative;border:0;padding:0;background:none;min-width:108px;width:108px;height:88px;border-radius:13px;overflow:hidden}.history-photo img{width:100%;height:100%;object-fit:cover;border:0;border-radius:13px}.history-photo span{position:absolute;right:6px;bottom:6px;background:#071a11cc;color:#fff;border-radius:999px;padding:4px 7px;font-size:.68rem;font-weight:750}
+.history-edit-btn{width:100%;margin-top:12px;background:#edf3ef;color:#173c2c;padding:10px;border-radius:12px}.history-loading{font-size:.8rem;color:#6b7b72}
+.history-empty{text-align:center;background:#fff;border:1px dashed #bfd0c5;border-radius:18px;padding:34px 18px;color:#6b7b72}.history-empty div{font-size:2rem}.history-empty strong,.history-empty span{display:block}.history-empty strong{color:#173c2c;margin:8px 0 3px}
+@media(max-width:430px){#historyDialog .dialog-body{padding:14px}.history-summary>div{padding:10px 5px}.history-summary strong{font-size:1.18rem}.history-summary span{font-size:.68rem}.history-card{padding:13px}.history-card-top{align-items:center}.history-date small{font-size:.72rem}}

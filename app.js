@@ -118,13 +118,26 @@ async function loadAll(){
   })();
   try{return await loadAllPromise}finally{loadAllPromise=null}
 }
+
+function openAppleMaps(address,name=''){
+  const query=encodeURIComponent(address||name||'');
+  const appUrl=`maps://?q=${query}`;
+  const webUrl=`https://maps.apple.com/?q=${query}`;
+  const started=Date.now();
+  window.location.href=appUrl;
+  setTimeout(()=>{if(Date.now()-started<1800)window.location.href=webUrl},900);
+}
+function historyStatusLabel(stato){
+  return ({convalidato:'Convalidato',in_attesa:'In attesa',rifiutato:'Rifiutato'})[stato]||stato.replaceAll('_',' ');
+}
+
 function renderStores(){
  const q=$('searchInput').value.trim().toLowerCase(),sort=$('sortSelect').value;
  let list=stores.filter(s=>`${s.nome} ${s.citta||''} ${s.indirizzo||''}`.toLowerCase().includes(q));
  if(storeFilter!=='all')list=list.filter(s=>storeFilter==='today'?s.ultimo_passaggio===today():status(s)===storeFilter);
  list.sort((a,b)=>sort==='alpha'?a.nome.localeCompare(b.nome,'it'):(days(b.ultimo_passaggio)??9999)-(days(a.ultimo_passaggio)??9999));
- $('storesList').innerHTML='';for(const s of list){const n=days(s.ultimo_passaggio),pending=interventions.some(i=>i.store_id===s.id&&i.stato==='in_attesa');const c=document.createElement('article');c.className=`card store-card ${status(s)}`;c.innerHTML=`<div class="status-bar"></div><div><div class="card-top"><div><h3>${esc(s.nome)}</h3><p class="muted">${esc(s.citta||s.indirizzo||'')}</p></div><div class="days">${n===null?'—':n+' gg'}</div></div>${pending?'<p class="pending">⏳ In attesa di convalida</p>':''}<p class="muted">Ultimo passaggio: ${fmt(s.ultimo_passaggio)}</p><div class="actions"><button class="secondary" data-map>Mappe</button><button data-history>Storico</button>${!pending?'<button data-done>Eseguito</button>':''}${admin()?'<button class="secondary" data-edit>Modifica</button>':''}</div></div>`;
- c.querySelector('[data-map]').onclick=()=>window.open(`https://maps.apple.com/?q=${encodeURIComponent(s.indirizzo||('Eurospin '+s.nome))}`,'_blank');c.querySelector('[data-history]').onclick=()=>showHistory(s);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(s));c.querySelector('[data-edit]')?.addEventListener('click',()=>openStore(s));$('storesList').appendChild(c)}
+ $('storesList').innerHTML='';for(const s of list){const n=days(s.ultimo_passaggio),pending=interventions.some(i=>i.store_id===s.id&&i.stato==='in_attesa');const c=document.createElement('article');c.className=`card store-card ${status(s)}`;c.innerHTML=`<div class="status-bar"></div><div><div class="card-top"><div><h3>${esc(s.nome)}</h3><p class="muted">${esc(s.citta||s.indirizzo||'')}</p></div><div class="days">${n===null?'—':n+' gg'}</div></div>${pending?'<p class="pending">⏳ In attesa di convalida</p>':''}<p class="muted">Ultimo passaggio: ${fmt(s.ultimo_passaggio)}</p><div class="actions"><button class="secondary" data-map>Maps</button><button data-history>Storico</button>${!pending?'<button data-done>Eseguito</button>':''}${admin()?'<button class="secondary" data-edit>Modifica</button>':''}</div></div>`;
+ c.querySelector('[data-map]').onclick=()=>openAppleMaps(s.indirizzo,'Eurospin '+s.nome);c.querySelector('[data-history]').onclick=()=>showHistory(s);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(s));c.querySelector('[data-edit]')?.addEventListener('click',()=>openStore(s));$('storesList').appendChild(c)}
  $('totalCount').textContent=stores.length;$('dueCount').textContent=stores.filter(s=>status(s)==='due').length;$('warningCount').textContent=stores.filter(s=>status(s)==='warning').length;$('todayCount').textContent=stores.filter(s=>s.ultimo_passaggio===today()).length;
 }
 function renderWorkers(){for(const id of ['doneWorkers','scheduleWorkers','extraWorkers']){const w=$(id);if(!w)continue;w.innerHTML='';profiles.filter(p=>p.attivo).forEach(p=>{const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${p.id}"> ${esc(p.nome)}`;w.appendChild(l)})}}
@@ -144,23 +157,27 @@ async function compressImage(file){
 async function uploadFile(path,file){const {error}=await sb.storage.from('documenti').upload(path,file,{upsert:false,cacheControl:'3600'});if(error)throw error;return path}
 async function addAttachment(data){const {error}=await sb.from('attachments').insert(data);if(error)throw error}
 async function showHistory(s){
-  const rows=interventions.filter(i=>i.store_id===s.id);
-  $('historyTitle').textContent='Storico · '+s.nome;
-  $('historyList').innerHTML=rows.length?'':'<p class="muted">Nessun intervento.</p>';
+  const rows=interventions.filter(i=>i.store_id===s.id).sort((a,b)=>String(b.data_intervento).localeCompare(String(a.data_intervento)));
+  $('historyTitle').textContent=s.nome;
+  $('historyList').innerHTML=`<div class="history-summary"><div><strong>${rows.length}</strong><span>interventi</span></div><div><strong>${rows.filter(x=>x.stato==='convalidato').length}</strong><span>convalidati</span></div><div><strong>${attachments.filter(a=>rows.some(r=>r.id===a.intervention_id)&&a.tipo==='foto_generica').length}</strong><span>foto</span></div></div><div class="history-subtitle">Cronologia interventi</div>`;
+  if(!rows.length){$('historyList').insertAdjacentHTML('beforeend','<div class="history-empty"><div>🗂️</div><strong>Nessun intervento</strong><span>Gli interventi registrati compariranno qui.</span></div>');openDialog('historyDialog');return}
+  const timeline=document.createElement('div');timeline.className='history-timeline';$('historyList').appendChild(timeline);
   for(const i of rows){
     const names=await workerNames(i.id),pics=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica');
-    const d=document.createElement('article');d.className=`schedule-item ${i.stato}`;
-    d.innerHTML=`<div class="history-head"><strong>${fmt(i.data_intervento)} · ${esc(i.stato.replaceAll('_',' '))}</strong>${admin()?'<button class="secondary compact" data-edit-history>Modifica</button>':''}</div><p>${esc(i.note||'Nessuna nota')}</p><small>${esc(names.join(' + ')||'Operatori non indicati')}</small><div class="history-photos" data-photos>${pics.length?'<span class="muted">Caricamento foto…</span>':''}</div>`;
+    const d=document.createElement('article');d.className=`history-card history-${i.stato}`;
+    const statusText=historyStatusLabel(i.stato);
+    d.innerHTML=`<div class="history-dot"></div><div class="history-card-top"><div class="history-date"><span>${fmt(i.data_intervento)}</span><small>Intervento ordinario</small></div><span class="history-status">${esc(statusText)}</span></div>${i.note?`<div class="history-note">${esc(i.note)}</div>`:'<div class="history-note muted">Nessuna nota inserita</div>'}<div class="history-meta"><div class="history-workers">${names.length?names.map(n=>`<span>👤 ${esc(n)}</span>`).join(''):'<span>👤 Operatori non indicati</span>'}</div>${pics.length?`<span class="history-photo-count">📷 ${pics.length}</span>`:''}</div><div class="history-photos" data-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':''}</div>${admin()?'<button class="history-edit-btn" data-edit-history>Modifica intervento</button>':''}`;
     d.querySelector('[data-edit-history]')?.addEventListener('click',()=>openHistoryEdit(i));
-    $('historyList').appendChild(d);
+    timeline.appendChild(d);
     if(pics.length){
       const box=d.querySelector('[data-photos]');box.innerHTML='';
       const urls=await Promise.all(pics.map(async a=>{const {data,error}=await sb.storage.from('documenti').createSignedUrl(a.storage_path,600);return error?null:{a,url:data.signedUrl}}));
-      for(const x of urls.filter(Boolean)){const img=document.createElement('img');img.src=x.url;img.alt=x.a.nome_file||'Foto intervento';img.loading='lazy';img.onclick=()=>window.open(x.url,'_blank');box.appendChild(img)}
+      for(const x of urls.filter(Boolean)){const wrap=document.createElement('button');wrap.type='button';wrap.className='history-photo';wrap.innerHTML=`<img src="${x.url}" alt="${esc(x.a.nome_file||'Foto intervento')}" loading="lazy"><span>Apri</span>`;wrap.onclick=()=>window.open(x.url,'_blank');box.appendChild(wrap)}
     }
   }
   openDialog('historyDialog')
 }
+
 function openHistoryEdit(i){
   $('historyEditId').value=i.id;$('historyEditDate').value=i.data_intervento;$('historyEditNotes').value=i.note||'';
   $('historyEditWorkers').innerHTML=profiles.filter(p=>p.attivo).map(p=>`<label><input type="checkbox" value="${p.id}"><span>${esc(p.nome)}</span></label>`).join('');
@@ -172,7 +189,7 @@ function renderPending(){const p=interventions.filter(i=>i.stato==='in_attesa');
 async function approveIntervention(i){const {error}=await sb.from('interventions').update({stato:'convalidato',convalidato_da:profile.id,convalidato_il:new Date().toISOString()}).eq('id',i.id);if(error)return alert(error.message);const {error:e2}=await sb.from('stores').update({ultimo_passaggio:i.data_intervento}).eq('id',i.store_id);if(e2)return alert(e2.message);if(i.schedule_item_id)await sb.from('schedule_items').update({stato:'completato'}).eq('id',i.schedule_item_id);toast('Intervento convalidato');await loadAll()}
 async function rejectIntervention(i){const reason=prompt('Motivo del rifiuto','')||'';const {error}=await sb.from('interventions').update({stato:'rifiutato',motivo_rifiuto:reason,convalidato_da:profile.id,convalidato_il:new Date().toISOString()}).eq('id',i.id);if(error)return alert(error.message);if(i.schedule_item_id)await sb.from('schedule_items').update({stato:'da_fare'}).eq('id',i.schedule_item_id);toast('Intervento rifiutato');await loadAll()}
 function visibleSchedules(){return admin()?schedules:schedules.filter(s=>scheduleMembers.some(m=>m.schedule_id===s.id&&m.profile_id===profile.id))}
-function renderSchedules(){$('scheduleTitle').textContent=admin()?'Programmazioni':'I miei lavori';$('scheduleList').innerHTML='';for(const s of visibleSchedules()){const members=scheduleMembers.filter(m=>m.schedule_id===s.id).map(m=>profiles.find(p=>p.id===m.profile_id)?.nome).filter(Boolean);const items=scheduleItems.filter(i=>i.schedule_id===s.id);const c=document.createElement('article');c.className='card';c.innerHTML=`<h3>${fmt(s.giorno)}</h3><p class="muted">${esc(members.join(' + '))}</p><p>${esc(s.nota_generale||'')}</p>`;for(const item of items){if(item.tipo==='ordinario'){const st=stores.find(x=>x.id===item.store_id);const r=document.createElement('div');r.className=`schedule-item ${item.stato}`;r.innerHTML=`<strong>${esc(st?.nome||'Punto vendita')}</strong><small>${esc(item.stato.replaceAll('_',' '))}</small><div class="actions"><button class="secondary" data-map>Mappe</button>${item.stato==='da_fare'?'<button data-done>Eseguito</button>':''}</div>`;r.querySelector('[data-map]').onclick=()=>window.open(`https://maps.apple.com/?q=${encodeURIComponent(st?.indirizzo||('Eurospin '+st?.nome))}`,'_blank');r.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,item.id));c.appendChild(r)}}$('scheduleList').appendChild(c)}}
+function renderSchedules(){$('scheduleTitle').textContent=admin()?'Programmazioni':'I miei lavori';$('scheduleList').innerHTML='';for(const s of visibleSchedules()){const members=scheduleMembers.filter(m=>m.schedule_id===s.id).map(m=>profiles.find(p=>p.id===m.profile_id)?.nome).filter(Boolean);const items=scheduleItems.filter(i=>i.schedule_id===s.id);const c=document.createElement('article');c.className='card';c.innerHTML=`<h3>${fmt(s.giorno)}</h3><p class="muted">${esc(members.join(' + '))}</p><p>${esc(s.nota_generale||'')}</p>`;for(const item of items){if(item.tipo==='ordinario'){const st=stores.find(x=>x.id===item.store_id);const r=document.createElement('div');r.className=`schedule-item ${item.stato}`;r.innerHTML=`<strong>${esc(st?.nome||'Punto vendita')}</strong><small>${esc(item.stato.replaceAll('_',' '))}</small><div class="actions"><button class="secondary" data-map>Maps</button>${item.stato==='da_fare'?'<button data-done>Eseguito</button>':''}</div>`;r.querySelector('[data-map]').onclick=()=>openAppleMaps(st?.indirizzo,'Eurospin '+(st?.nome||''));r.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,item.id));c.appendChild(r)}}$('scheduleList').appendChild(c)}}
 function renderSchedulePicker(){const q=$('scheduleSearch').value.toLowerCase(),w=$('scheduleStores');const selected=new Set([...w.querySelectorAll('input:checked')].map(x=>x.value));w.innerHTML='';stores.filter(s=>s.nome.toLowerCase().includes(q)).sort((a,b)=>(days(b.ultimo_passaggio)??9999)-(days(a.ultimo_passaggio)??9999)).forEach(s=>{const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${s.id}" ${selected.has(s.id)?'checked':''}><span><strong>${esc(s.nome)}</strong><br><small>${days(s.ultimo_passaggio)??'—'} giorni · ultimo ${fmt(s.ultimo_passaggio)}</small></span>`;w.appendChild(l)})}
 function renderExtras(){$('extrasList').innerHTML='';const visible=admin()?extras:extras.filter(e=>extraWorkers.some(w=>w.extra_id===e.id&&w.profile_id===profile.id));for(const e of visible){const st=stores.find(s=>s.id===e.store_id),pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');const c=document.createElement('article');c.className=`card extra-card ${e.stato}`;c.innerHTML=`<h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3><p><strong>${esc(e.titolo)}</strong></p><p>${esc(e.descrizione||'')}</p><p class="muted">${fmt(e.giorno_intervento)} · ${esc(e.stato.replaceAll('_',' '))}</p><div class="actions">${pdf?'<button class="secondary" data-pdf>Apri PDF</button>':''}${!admin()&&['programmato','ricevuto','da_integrare'].includes(e.stato)?'<button data-close-extra>Chiudi lavoro</button>':''}${admin()&&e.stato==='in_attesa'?'<button data-approve-extra>Convalida</button>':''}</div>`;c.querySelector('[data-pdf]')?.addEventListener('click',()=>openAttachment(pdf));c.querySelector('[data-close-extra]')?.addEventListener('click',()=>{$('closeExtraId').value=e.id;openDialog('closeExtraDialog')});c.querySelector('[data-approve-extra]')?.addEventListener('click',()=>approveExtra(e));$('extrasList').appendChild(c)}}
 async function openAttachment(a){const {data,error}=await sb.storage.from('documenti').createSignedUrl(a.storage_path,300);if(error)return alert(error.message);window.open(data.signedUrl,'_blank')}

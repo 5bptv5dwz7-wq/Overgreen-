@@ -1,0 +1,7 @@
+OVERGREEN CLOUD v32 - CONTATORE PROGRAMMATI
+
+- Aggiunto nella Dashboard il contatore "Programmati".
+- Il conteggio mostra i punti vendita presenti in almeno una programmazione attiva e non completata.
+- Toccando il contatore si apre la lista Punti vendita filtrata sui soli punti vendita in programma.
+- Il valore si aggiorna dopo aggiunte, rimozioni e completamenti grazie al normale aggiornamento dei dati.
+- Nessuna modifica richiesta a Supabase.

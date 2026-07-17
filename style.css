@@ -81,3 +81,7 @@
 
 /* v31 - stato punti vendita programmati */
 .store-card.scheduled .status-bar{background:#3978c8}.programmed-label{display:inline-flex;align-items:center;gap:6px;width:max-content;margin:7px 0;padding:6px 10px;border-radius:999px;background:#e7f0ff;color:#245c9f;font-size:.82rem;font-weight:850}.store-state.scheduled{background:#e7f0ff;color:#245c9f}.schedule-item.da_fare small{color:#245c9f;font-weight:850}.picker-programmed{display:inline-flex;margin-left:6px;padding:3px 7px;border-radius:999px;background:#e7f0ff;color:#245c9f;font-style:normal;font-size:.7rem;font-weight:850;vertical-align:middle}
+
+/* v32 - contatore punti vendita programmati */
+.dash-card.scheduled{border-color:#d6a800;background:#fff8d9}
+.dash-card.scheduled strong{color:#8a6a00}

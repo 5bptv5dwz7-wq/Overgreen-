@@ -1,0 +1,9 @@
+OVERGREEN CLOUD V12
+
+Modifiche rispetto alla v11:
+- realtime eliminato;
+- eliminati i refresh automatici dei dati;
+- dati aggiornati solo all'avvio, con il pulsante Aggiorna e dopo salvataggi, modifiche o convalide;
+- mantenuta la sincronizzazione in background delle foto, senza ricaricare automaticamente tutti i dati.
+
+Per installare la v12 sostituire tutti i file della versione precedente.

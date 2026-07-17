@@ -1,0 +1,12 @@
+OVERGREEN CLOUD V27
+
+Correzioni di compatibilità e affidabilità:
+- Foto degli extra salvate come foto_generica, valore già previsto dall'ENUM Supabase.
+- Foto extra compresse prima del caricamento.
+- Rapportini Eurospin/Overgreen sostituiti senza creare duplicati nei nuovi tentativi.
+- Gestione più sicura degli upload parziali e messaggi di avanzamento.
+- Rimossi caricamenti duplicati di extras ed extra_workers.
+- Il prossimo intervento nella scheda punto vendita considera solo oggi e date future.
+- Tutte le viste (convalide, extra e scheda punto vendita) leggono correttamente le foto extra.
+
+Non richiede modifiche SQL a Supabase.

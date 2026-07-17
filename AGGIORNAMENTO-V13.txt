@@ -1,0 +1,6 @@
+OVERGREEN CLOUD V13
+
+Modifiche rispetto alla V12:
+- Eliminazione interventi dallo storico con semplice conferma, senza digitare ELIMINA.
+- Per Lorenzo, negli extra in attesa e completati sono visibili e apribili i file Eurospin e Overgreen allegati alla chiusura.
+- Se uno dei due file manca, viene indicato chiaramente.

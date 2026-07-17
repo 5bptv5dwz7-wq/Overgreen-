@@ -231,15 +231,111 @@ async function uploadStoreArchiveFiles(store,kind,files){
   toast(`${files.length} file caricati`);await showStoreDetail(stores.find(x=>x.id===store.id)||store)
 }
 async function showStoreDetail(s){
-  $('storeDetailTitle').textContent=s.nome;const archive=await storeArchiveFiles(s.id);const rows=interventions.filter(i=>i.store_id===s.id).sort((a,b)=>String(b.data_intervento).localeCompare(String(a.data_intervento))),ex=extras.filter(e=>e.store_id===s.id),n=days(s.ultimo_passaggio),plans=archive.filter(a=>archiveKind(a)==='planimetria'),photos=archive.filter(a=>archiveKind(a)==='foto');
-  $('storeDetailBody').innerHTML=`<div class="store-detail-grid"><div class="store-detail-stat"><strong>${n===null?'—':n}</strong><span>giorni dall'ultimo passaggio</span></div><div class="store-detail-stat"><strong>${rows.length}</strong><span>interventi registrati</span></div><div class="store-detail-stat"><strong>${ex.length}</strong><span>extra collegati</span></div><div class="store-detail-stat"><strong>${fmt(s.ultimo_passaggio)}</strong><span>ultimo passaggio</span></div></div><div class="store-detail-actions"><button data-detail-map>Maps</button><button data-detail-history>Storico</button>${admin()?'<button class="secondary" data-detail-edit>Modifica</button>':''}</div><h3>Indirizzo</h3><p>${esc([s.indirizzo,s.citta].filter(Boolean).join(', ')||'Non inserito')}</p><h3>Note permanenti</h3><div class="detail-note">${esc(s.note||'Nessuna nota')}</div><section class="store-archive"><div class="archive-head"><h3>Archivio punto vendita</h3><span>${archive.length} file</span></div>${admin()?`<div class="archive-upload-grid"><label class="file-label small"><span>＋ Planimetria</span><input data-upload-plan type="file" accept="application/pdf,image/*"></label><label class="file-label small"><span>＋ Foto</span><input data-upload-photo type="file" accept="image/*" multiple></label></div>`:''}<h4>Planimetrie</h4><div class="archive-list" data-plans>${plans.length?'':'<p class="muted">Nessuna planimetria.</p>'}</div><h4>Foto del punto vendita</h4><div class="archive-gallery" data-archive-photos>${photos.length?'':'<p class="muted">Nessuna foto.</p>'}</div></section><h3>Ultimi interventi</h3>${rows.slice(0,3).map(i=>`<p><strong>${fmt(i.data_intervento)}</strong> <span class="badge-state">${esc(historyStatusLabel(i.stato))}</span><br><small>${esc(i.note||'Nessuna nota')}</small></p>`).join('')||'<p class="muted">Nessun intervento.</p>'}`;
-  const body=$('storeDetailBody');body.querySelector('[data-detail-map]').onclick=()=>openAppleMaps(s.indirizzo,'Eurospin '+s.nome);body.querySelector('[data-detail-history]').onclick=()=>showHistory(s);body.querySelector('[data-detail-edit]')?.addEventListener('click',()=>openStore(s));
+  $('storeDetailTitle').textContent=s.nome;
+  $('storeDetailBody').innerHTML='<p class="muted">Caricamento scheda completa…</p>';
+  if(!$('storeDetailDialog').open)openDialog('storeDetailDialog');
+
+  const archive=await storeArchiveFiles(s.id);
+  const rows=interventions.filter(i=>i.store_id===s.id).sort((a,b)=>String(b.data_intervento).localeCompare(String(a.data_intervento)));
+  const ex=extras.filter(e=>e.store_id===s.id).sort((a,b)=>String(b.giorno_intervento).localeCompare(String(a.giorno_intervento)));
+  const plans=archive.filter(a=>archiveKind(a)==='planimetria');
+  const manualPhotos=archive.filter(a=>archiveKind(a)==='foto');
+  const interventionIds=new Set(rows.map(i=>i.id));
+  const extraIds=new Set(ex.map(e=>e.id));
+  const linkedAttachments=attachments.filter(a=>(a.intervention_id&&interventionIds.has(a.intervention_id))||(a.extra_id&&extraIds.has(a.extra_id)));
+  const interventionPhotos=linkedAttachments.filter(a=>a.intervention_id&&a.tipo==='foto_generica');
+  const extraPhotos=linkedAttachments.filter(a=>a.extra_id&&a.tipo==='foto_extra');
+  const documents=linkedAttachments.filter(a=>!['foto_generica','foto_extra'].includes(a.tipo));
+  const allPhotos=[...interventionPhotos,...extraPhotos,...manualPhotos];
+  const n=days(s.ultimo_passaggio),lim=s.intervallo_giorni||15;
+  const state=status(s),stateLabel=state==='ok'?'Regolare':state==='warning'?'In scadenza':'In ritardo';
+  const futureItems=scheduleItems.filter(i=>i.store_id===s.id&&effectiveScheduleState(i)==='da_fare').map(i=>schedules.find(x=>x.id===i.schedule_id)).filter(Boolean).sort((a,b)=>String(a.giorno).localeCompare(String(b.giorno)));
+  const nextDate=futureItems[0]?.giorno||null;
+
+  const workerRows=[];
+  for(const i of rows){
+    const names=await workerNames(i.id);
+    workerRows.push({intervention:i,names});
+  }
+  const operatorCounts=new Map();
+  for(const r of workerRows)for(const name of r.names)operatorCounts.set(name,(operatorCounts.get(name)||0)+1);
+  for(const e of ex){
+    for(const w of extraWorkers.filter(x=>x.extra_id===e.id)){
+      const name=profiles.find(p=>p.id===w.profile_id)?.nome;
+      if(name)operatorCounts.set(name,(operatorCounts.get(name)||0)+1);
+    }
+  }
+  const sortedOperators=[...operatorCounts.entries()].sort((a,b)=>b[1]-a[1]);
+
+  const extraStatus=e=>e.stato==='completato'?'Completato':e.stato==='in_attesa'?'In attesa':e.stato==='rifiutato'?'Rifiutato':'Aperto';
+  const attachmentLabel=a=>({pdf_richiesta:'Richiesta extra',rapportino_eurospin:'File Eurospin',rapportino_overgreen:'File Overgreen'}[a.tipo]||a.nome_file||'Documento');
+
+  $('storeDetailBody').innerHTML=`
+    <div class="store-sheet-hero">
+      <div><span class="store-state ${state}">${stateLabel}</span><h3>${esc(s.nome)}</h3><p>${esc([s.indirizzo,s.citta].filter(Boolean).join(', ')||'Indirizzo non inserito')}</p></div>
+      <div class="store-detail-actions"><button data-detail-map>Maps</button>${admin()?'<button class="secondary" data-detail-edit>Modifica punto vendita</button>':''}</div>
+    </div>
+    <div class="store-detail-grid">
+      <div class="store-detail-stat"><strong>${n===null?'—':n}</strong><span>giorni dall’ultimo passaggio</span></div>
+      <div class="store-detail-stat"><strong>${fmt(s.ultimo_passaggio)}</strong><span>ultimo intervento</span></div>
+      <div class="store-detail-stat"><strong>${nextDate?fmt(nextDate):'—'}</strong><span>prossimo intervento</span></div>
+      <div class="store-detail-stat"><strong>${rows.length+ex.length}</strong><span>lavori totali registrati</span></div>
+    </div>
+    <div class="store-sheet-tabs" role="tablist">
+      <button class="active" data-sheet-tab="overview">Panoramica</button>
+      <button data-sheet-tab="interventions">Interventi <span>${rows.length}</span></button>
+      <button data-sheet-tab="extras">Extra <span>${ex.length}</span></button>
+      <button data-sheet-tab="photos">Foto <span>${allPhotos.length}</span></button>
+      <button data-sheet-tab="documents">Documenti <span>${documents.length+plans.length}</span></button>
+      <button data-sheet-tab="operators">Operatori</button>
+    </div>
+    <section class="store-sheet-panel" data-sheet-panel="overview">
+      <h3>Note permanenti</h3><div class="detail-note">${esc(s.note||'Nessuna nota permanente inserita.')}</div>
+      <div class="sheet-two-columns">
+        <div><h3>Riepilogo attività</h3><div class="sheet-kpi-list"><p><strong>${rows.filter(x=>x.stato==='convalidato').length}</strong><span>interventi convalidati</span></p><p><strong>${ex.filter(x=>x.stato==='completato').length}</strong><span>extra completati</span></p><p><strong>${allPhotos.length}</strong><span>foto archiviate</span></p><p><strong>${documents.length+plans.length}</strong><span>documenti disponibili</span></p></div></div>
+        <div><h3>Ultime attività</h3><div class="sheet-mini-list">${[
+          ...rows.slice(0,3).map(i=>({date:i.data_intervento,title:'Intervento ordinario',sub:i.note||historyStatusLabel(i.stato)})),
+          ...ex.slice(0,3).map(e=>({date:e.giorno_intervento,title:'Extra · '+e.titolo,sub:extraStatus(e)}))
+        ].sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,5).map(x=>`<p><strong>${fmt(x.date)} · ${esc(x.title)}</strong><span>${esc(x.sub)}</span></p>`).join('')||'<p class="muted">Nessuna attività registrata.</p>'}</div></div>
+      </div>
+    </section>
+    <section class="store-sheet-panel hidden" data-sheet-panel="interventions">
+      <div class="sheet-section-head"><h3>Storico interventi</h3><button class="secondary" data-open-full-history>Apri storico modificabile</button></div>
+      <div class="sheet-timeline">${workerRows.map(({intervention:i,names})=>{const pics=interventionPhotos.filter(a=>a.intervention_id===i.id);return `<article class="sheet-record"><div><strong>${fmt(i.data_intervento)}</strong><span class="badge-state">${esc(historyStatusLabel(i.stato))}</span></div><p>${esc(i.note||'Nessuna nota')}</p><small>${names.length?'👤 '+names.map(esc).join(' · '):'Operatori non indicati'}${pics.length?` · 📷 ${pics.length} foto`:''}</small></article>`}).join('')||'<p class="muted">Nessun intervento registrato.</p>'}</div>
+    </section>
+    <section class="store-sheet-panel hidden" data-sheet-panel="extras">
+      <h3>Extra del punto vendita</h3>
+      <div class="sheet-timeline">${ex.map(e=>{const names=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean),pics=extraPhotos.filter(a=>a.extra_id===e.id);return `<article class="sheet-record"><div><strong>${fmt(e.giorno_intervento)} · ${esc(e.titolo)}</strong><span class="badge-state">${extraStatus(e)}</span></div><p>${esc(e.note_lorenzo||e.descrizione||'Nessuna nota')}</p><small>${names.length?'👤 '+names.map(esc).join(' · '):'Operatori non indicati'}${pics.length?` · 📷 ${pics.length} foto`:''}</small><button class="secondary compact-btn" data-open-extra-id="${e.id}">Apri extra</button></article>`}).join('')||'<p class="muted">Nessun extra collegato.</p>'}</div>
+    </section>
+    <section class="store-sheet-panel hidden" data-sheet-panel="photos">
+      <div class="sheet-section-head"><h3>Archivio fotografico</h3>${admin()?'<label class="file-label small"><span>＋ Aggiungi foto</span><input data-upload-photo type="file" accept="image/*" multiple></label>':''}</div>
+      <div class="sheet-photo-gallery" data-all-photos>${allPhotos.length?'<p class="muted">Caricamento anteprime…</p>':'<p class="muted">Nessuna foto disponibile.</p>'}</div>
+    </section>
+    <section class="store-sheet-panel hidden" data-sheet-panel="documents">
+      <div class="sheet-section-head"><h3>Archivio documenti</h3>${admin()?'<label class="file-label small"><span>＋ Planimetria</span><input data-upload-plan type="file" accept="application/pdf,image/*"></label>':''}</div>
+      <div class="sheet-doc-list" data-doc-list>${documents.length||plans.length?'':'<p class="muted">Nessun documento disponibile.</p>'}</div>
+    </section>
+    <section class="store-sheet-panel hidden" data-sheet-panel="operators">
+      <h3>Operatori intervenuti</h3>
+      <div class="operator-ranking">${sortedOperators.map(([name,count])=>`<div><span>👤 ${esc(name)}</span><strong>${count} ${count===1?'lavoro':'lavori'}</strong></div>`).join('')||'<p class="muted">Nessun operatore registrato.</p>'}</div>
+    </section>`;
+
+  const body=$('storeDetailBody');
+  body.querySelector('[data-detail-map]').onclick=()=>openAppleMaps(s.indirizzo,'Eurospin '+s.nome);
+  body.querySelector('[data-detail-edit]')?.addEventListener('click',()=>openStore(s));
+  body.querySelector('[data-open-full-history]')?.addEventListener('click',()=>showHistory(s));
+  body.querySelectorAll('[data-sheet-tab]').forEach(btn=>btn.onclick=()=>{body.querySelectorAll('[data-sheet-tab]').forEach(x=>x.classList.toggle('active',x===btn));body.querySelectorAll('[data-sheet-panel]').forEach(x=>x.classList.toggle('hidden',x.dataset.sheetPanel!==btn.dataset.sheetTab))});
+  body.querySelectorAll('[data-open-extra-id]').forEach(btn=>btn.onclick=()=>{const e=extras.find(x=>x.id===btn.dataset.openExtraId);if(e){$('storeDetailDialog').close();setView('extras');setTimeout(()=>document.querySelector(`[data-extra-card-id="${e.id}"]`)?.scrollIntoView({behavior:'smooth',block:'center'}),100)}});
   body.querySelector('[data-upload-plan]')?.addEventListener('change',e=>uploadStoreArchiveFiles(s,'planimetria',[...e.target.files]).catch(err=>alert(err.message)));
   body.querySelector('[data-upload-photo]')?.addEventListener('change',e=>uploadStoreArchiveFiles(s,'foto',[...e.target.files]).catch(err=>alert(err.message)));
-  const planBox=body.querySelector('[data-plans]');for(const a of plans){const row=document.createElement('div');row.className='archive-file';row.innerHTML=`<button class="secondary" data-open>📄 ${esc(a.nome_file||'Planimetria')}</button>${admin()?'<button class="danger-btn compact-btn" data-delete>Elimina</button>':''}`;row.querySelector('[data-open]').onclick=()=>openArchiveAttachment(a);row.querySelector('[data-delete]')?.addEventListener('click',()=>deleteArchiveAttachment(a,s));planBox.appendChild(row)}
-  const photoBox=body.querySelector('[data-archive-photos]');for(const a of photos){const card=document.createElement('div');card.className='archive-photo-card';card.innerHTML=`<button data-open><span>📷</span><small>${esc(a.nome_file||'Foto')}</small></button>${admin()?'<button class="danger-btn compact-btn" data-delete>Elimina</button>':''}`;card.querySelector('[data-open]').onclick=()=>openArchiveAttachment(a);card.querySelector('[data-delete]')?.addEventListener('click',()=>deleteArchiveAttachment(a,s));photoBox.appendChild(card)}
-  openDialog('storeDetailDialog');
+
+  const photoBox=body.querySelector('[data-all-photos]');
+  if(allPhotos.length){photoBox.innerHTML='';for(const a of allPhotos){const card=document.createElement('button');card.type='button';card.className='sheet-photo-card';const source=a.intervention_id?'Intervento':a.extra_id?'Extra':'Archivio';card.innerHTML=`<span class="sheet-photo-placeholder">📷</span><small>${source}${a.created_at?' · '+new Date(a.created_at).toLocaleDateString('it-IT'):''}</small>`;photoBox.appendChild(card);signedAttachmentUrl(a).then(url=>{card.innerHTML=`<img src="${url}" alt="${esc(a.nome_file||'Foto')}" loading="lazy"><small>${source}${a.created_at?' · '+new Date(a.created_at).toLocaleDateString('it-IT'):''}</small>`;card.onclick=()=>window.open(url,'_blank')}).catch(()=>{card.onclick=()=>openArchiveAttachment(a)})}}
+
+  const docBox=body.querySelector('[data-doc-list]');
+  for(const a of [...plans,...documents]){const row=document.createElement('div');row.className='sheet-document';row.innerHTML=`<button class="secondary" data-open>📄 <span>${esc(attachmentLabel(a))}</span><small>${esc(a.nome_file||'Documento')}</small></button>${admin()&&archiveKind(a)?'<button class="danger-btn compact-btn" data-delete>Elimina</button>':''}`;row.querySelector('[data-open]').onclick=()=>archiveKind(a)?openArchiveAttachment(a):openAttachment(a);row.querySelector('[data-delete]')?.addEventListener('click',()=>deleteArchiveAttachment(a,s));docBox.appendChild(row)}
 }
+
 function openDuplicateSchedule(s){$('duplicateScheduleId').value=s.id;$('duplicateScheduleDate').value=tomorrow();openDialog('duplicateScheduleDialog')}
 
 function openAppleMaps(address,name=''){

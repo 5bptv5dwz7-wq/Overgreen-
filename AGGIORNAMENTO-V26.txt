@@ -1,0 +1,10 @@
+OVERGREEN CLOUD V26 - SCHEDA COMPLETA PUNTO VENDITA
+
+- Nuova scheda completa accessibile toccando il nome del punto vendita.
+- Panoramica con stato, ultimo e prossimo intervento, giorni trascorsi e riepilogo attività.
+- Sezioni separate per interventi, extra, foto, documenti e operatori.
+- Archivio fotografico unificato: interventi ordinari, extra e foto archiviate manualmente.
+- Archivio documenti unificato: richiesta extra, file Eurospin, file Overgreen e planimetrie.
+- Classifica operatori con numero di lavori svolti sul punto vendita.
+- Note permanenti sempre visibili.
+- Nessuna sezione contatti aggiunta.

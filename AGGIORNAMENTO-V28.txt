@@ -1,0 +1,8 @@
+OVERGREEN CLOUD V28
+
+- Nelle programmazioni esistenti l'amministratore può aggiungere altri punti vendita in un secondo momento.
+- I nuovi punti vendita vengono inseriti in fondo alla lista e possono poi essere riordinati con le frecce.
+- I punti vendita già presenti nella stessa programmazione non vengono riproposti, evitando duplicati.
+- Quando un dipendente chiude un intervento, l'esecutore viene impostato automaticamente sul suo profilo.
+- Solo l'amministratore continua a vedere e scegliere manualmente chi ha eseguito l'intervento.
+- Nessuna modifica Supabase richiesta.

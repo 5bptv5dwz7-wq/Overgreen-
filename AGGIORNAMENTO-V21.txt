@@ -1,0 +1,8 @@
+OVERGREEN CLOUD V21
+
+- Il dipendente vede subito “In attesa di convalida” dopo aver inviato un intervento, anche se il successivo aggiornamento dati non riesce.
+- Dashboard dipendente: mostra solo i lavori ordinari di oggi assegnati a lui, nello stesso ordine deciso da Lorenzo, con Maps ed Eseguito.
+- Dashboard dipendente: mostra anche gli extra di oggi assegnati a lui.
+- Gli extra indicano chiaramente “Assegnato a te”; Lorenzo vede i nomi di tutti gli assegnatari.
+- Gestione più sicura delle sessioni JWT scadute/non valide: ritorno pulito al login.
+- Nessun realtime e nessun refresh automatico generale aggiunto.

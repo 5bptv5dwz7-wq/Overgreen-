@@ -6,7 +6,7 @@ const SEED_STORES=[{"name": "ABBIATEGRASSO", "lastDone": "2026-06-17"}, {"name":
 const $=id=>document.getElementById(id);
 let session=null,profile=null,profiles=[],managedUsers=[],stores=[],interventions=[],schedules=[],scheduleMembers=[],scheduleItems=[],extras=[],extraWorkers=[],attachments=[];
 let storeFilter='all',scheduleWorkerFilter='all',scheduleDateFilter='all';
-let loadAllPromise=null;
+let loadAllPromise=null,currentHistoryStoreId=null;
 
 // ---- Coda persistente per caricamenti in background ----
 const UPLOAD_DB='overgreen-upload-queue-v1', UPLOAD_STORE='jobs';
@@ -35,9 +35,15 @@ async function processUploadQueue(){
         const safe=(file.name||job.fileName||'file').replace(/[^a-zA-Z0-9._-]/g,'-');
         const path=`interventi/${job.interventionId}/${Date.now()}-${safe}`;
         await uploadFile(path,file);
-        await addAttachment({tipo:'foto_generica',intervention_id:job.interventionId,storage_path:path,nome_file:file.name||job.fileName,mime_type:file.type||job.mimeType,dimensione_bytes:file.size,caricato_da:profile.id});
+        const added=await addAttachment({tipo:'foto_generica',intervention_id:job.interventionId,storage_path:path,nome_file:file.name||job.fileName,mime_type:file.type||job.mimeType,dimensione_bytes:file.size,caricato_da:profile.id});
+        if(added&&!attachments.some(a=>a.storage_path===added.storage_path))attachments.push(added);
         await deleteUploadJob(job.id);
         toast('✓ Foto sincronizzata');
+        const intervention=interventions.find(i=>i.id===job.interventionId);
+        if(intervention&&$('historyDialog')?.open&&currentHistoryStoreId===intervention.store_id){
+          const st=stores.find(x=>x.id===intervention.store_id);
+          if(st)await showHistory(st,true);
+        }
       }catch(err){
         job.retries=(job.retries||0)+1;job.lastError=err?.message||String(err);await putUploadJob(job);
         if(job.retries>=3)break;
@@ -152,8 +158,8 @@ function renderScheduleFilters(){
   const sel=$('scheduleWorkerFilter');if(!sel)return;const current=scheduleWorkerFilter;sel.innerHTML='<option value="all">Tutte le squadre</option>'+profiles.filter(p=>p.attivo).map(p=>`<option value="${p.id}">${esc(p.nome)}</option>`).join('');sel.value=current;
 }
 function scheduleMatchesDate(s){if(scheduleDateFilter==='all')return true;if(scheduleDateFilter==='today')return s.giorno===today();if(scheduleDateFilter==='tomorrow')return s.giorno===tomorrow();if(scheduleDateFilter==='week'){const now=new Date(today()+'T12:00:00'),end=new Date(now);end.setDate(end.getDate()+7);return new Date(s.giorno+'T12:00:00')>=now&&new Date(s.giorno+'T12:00:00')<=end}return true}
-function storeArchiveType(storeId,kind){return `archivio_pv_${storeId}_${kind}`}
-function storeArchiveFiles(storeId){return attachments.filter(a=>String(a.tipo||'').startsWith(`archivio_pv_${storeId}_`))}
+function storeArchiveFiles(storeId){return attachments.filter(a=>String(a.storage_path||'').startsWith(`punti-vendita/${storeId}/`))}
+function archiveKind(a){const p=String(a.storage_path||'');return p.includes('/planimetria/')?'planimetria':p.includes('/foto/')?'foto':''}
 async function signedAttachmentUrl(a){const {data,error}=await sb.storage.from('documenti').createSignedUrl(a.storage_path,600);if(error)throw error;return data.signedUrl}
 async function openArchiveAttachment(a){try{window.open(await signedAttachmentUrl(a),'_blank')}catch(err){alert(err.message)}}
 async function deleteArchiveAttachment(a,store){if(!admin()||!confirm(`Eliminare definitivamente “${a.nome_file||'questo file'}”?`))return;const r=await sb.storage.from('documenti').remove([a.storage_path]);if(r.error)return alert(r.error.message);const d=await sb.from('attachments').delete().eq('id',a.id);if(d.error)return alert(d.error.message);toast('File eliminato');await loadAll();showStoreDetail(stores.find(x=>x.id===store.id)||store)}
@@ -165,12 +171,12 @@ async function uploadStoreArchiveFiles(store,kind,files){
     const safe=(file.name||label).replace(/[^a-zA-Z0-9._-]/g,'-');
     const path=`punti-vendita/${store.id}/${kind}/${Date.now()}-${crypto.randomUUID()}-${safe}`;
     await uploadFile(path,file);
-    await addAttachment({tipo:storeArchiveType(store.id,kind),storage_path:path,nome_file:file.name||original.name,mime_type:file.type||original.type,dimensione_bytes:file.size,caricato_da:profile.id});
+    await addAttachment({tipo:kind==='foto'?'foto_generica':'pdf_richiesta',storage_path:path,nome_file:file.name||original.name,mime_type:file.type||original.type,dimensione_bytes:file.size,caricato_da:profile.id});
   }
   toast(`${files.length} file caricati`);await loadAll();showStoreDetail(stores.find(x=>x.id===store.id)||store)
 }
 function showStoreDetail(s){
-  $('storeDetailTitle').textContent=s.nome;const rows=interventions.filter(i=>i.store_id===s.id).sort((a,b)=>String(b.data_intervento).localeCompare(String(a.data_intervento))),ex=extras.filter(e=>e.store_id===s.id),n=days(s.ultimo_passaggio),archive=storeArchiveFiles(s.id),plans=archive.filter(a=>String(a.tipo).endsWith('_planimetria')),photos=archive.filter(a=>String(a.tipo).endsWith('_foto'));
+  $('storeDetailTitle').textContent=s.nome;const rows=interventions.filter(i=>i.store_id===s.id).sort((a,b)=>String(b.data_intervento).localeCompare(String(a.data_intervento))),ex=extras.filter(e=>e.store_id===s.id),n=days(s.ultimo_passaggio),archive=storeArchiveFiles(s.id),plans=archive.filter(a=>archiveKind(a)==='planimetria'),photos=archive.filter(a=>archiveKind(a)==='foto');
   $('storeDetailBody').innerHTML=`<div class="store-detail-grid"><div class="store-detail-stat"><strong>${n===null?'—':n}</strong><span>giorni dall'ultimo passaggio</span></div><div class="store-detail-stat"><strong>${rows.length}</strong><span>interventi registrati</span></div><div class="store-detail-stat"><strong>${ex.length}</strong><span>extra collegati</span></div><div class="store-detail-stat"><strong>${fmt(s.ultimo_passaggio)}</strong><span>ultimo passaggio</span></div></div><div class="store-detail-actions"><button data-detail-map>Maps</button><button data-detail-history>Storico</button>${admin()?'<button class="secondary" data-detail-edit>Modifica</button>':''}</div><h3>Indirizzo</h3><p>${esc([s.indirizzo,s.citta].filter(Boolean).join(', ')||'Non inserito')}</p><h3>Note permanenti</h3><div class="detail-note">${esc(s.note||'Nessuna nota')}</div><section class="store-archive"><div class="archive-head"><h3>Archivio punto vendita</h3><span>${archive.length} file</span></div>${admin()?`<div class="archive-upload-grid"><label class="file-label small"><span>＋ Planimetria</span><input data-upload-plan type="file" accept="application/pdf,image/*"></label><label class="file-label small"><span>＋ Foto</span><input data-upload-photo type="file" accept="image/*" multiple></label></div>`:''}<h4>Planimetrie</h4><div class="archive-list" data-plans>${plans.length?'':'<p class="muted">Nessuna planimetria.</p>'}</div><h4>Foto del punto vendita</h4><div class="archive-gallery" data-archive-photos>${photos.length?'':'<p class="muted">Nessuna foto.</p>'}</div></section><h3>Ultimi interventi</h3>${rows.slice(0,3).map(i=>`<p><strong>${fmt(i.data_intervento)}</strong> <span class="badge-state">${esc(historyStatusLabel(i.stato))}</span><br><small>${esc(i.note||'Nessuna nota')}</small></p>`).join('')||'<p class="muted">Nessun intervento.</p>'}`;
   const body=$('storeDetailBody');body.querySelector('[data-detail-map]').onclick=()=>openAppleMaps(s.indirizzo,'Eurospin '+s.nome);body.querySelector('[data-detail-history]').onclick=()=>showHistory(s);body.querySelector('[data-detail-edit]')?.addEventListener('click',()=>openStore(s));
   body.querySelector('[data-upload-plan]')?.addEventListener('change',e=>uploadStoreArchiveFiles(s,'planimetria',[...e.target.files]).catch(err=>alert(err.message)));
@@ -214,12 +220,13 @@ async function compressImage(file){
   }catch{return file}
 }
 async function uploadFile(path,file){const {error}=await sb.storage.from('documenti').upload(path,file,{upsert:false,cacheControl:'3600'});if(error)throw error;return path}
-async function addAttachment(data){const {error}=await sb.from('attachments').insert(data);if(error)throw error}
-async function showHistory(s){
+async function addAttachment(data){const {data:row,error}=await sb.from('attachments').insert(data).select().single();if(error)throw error;return row}
+async function showHistory(s,refreshOnly=false){
+  currentHistoryStoreId=s.id;
   const rows=interventions.filter(i=>i.store_id===s.id).sort((a,b)=>String(b.data_intervento).localeCompare(String(a.data_intervento)));
   $('historyTitle').textContent=s.nome;
   $('historyList').innerHTML=`<div class="history-summary"><div><strong>${rows.length}</strong><span>interventi</span></div><div><strong>${rows.filter(x=>x.stato==='convalidato').length}</strong><span>convalidati</span></div><div><strong>${attachments.filter(a=>rows.some(r=>r.id===a.intervention_id)&&a.tipo==='foto_generica').length}</strong><span>foto</span></div></div><div class="history-subtitle">Cronologia interventi</div>`;
-  if(!rows.length){$('historyList').insertAdjacentHTML('beforeend','<div class="history-empty"><div>🗂️</div><strong>Nessun intervento</strong><span>Gli interventi registrati compariranno qui.</span></div>');openDialog('historyDialog');return}
+  if(!rows.length){$('historyList').insertAdjacentHTML('beforeend','<div class="history-empty"><div>🗂️</div><strong>Nessun intervento</strong><span>Gli interventi registrati compariranno qui.</span></div>');if(!refreshOnly&&!$('historyDialog').open)openDialog('historyDialog');return}
   const timeline=document.createElement('div');timeline.className='history-timeline';$('historyList').appendChild(timeline);
   for(const i of rows){
     const names=await workerNames(i.id),pics=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica');
@@ -234,7 +241,7 @@ async function showHistory(s){
       for(const x of urls.filter(Boolean)){const wrap=document.createElement('button');wrap.type='button';wrap.className='history-photo';wrap.innerHTML=`<img src="${x.url}" alt="${esc(x.a.nome_file||'Foto intervento')}" loading="lazy"><span>Apri</span>`;wrap.onclick=()=>window.open(x.url,'_blank');box.appendChild(wrap)}
     }
   }
-  openDialog('historyDialog')
+  if(!refreshOnly&&!$('historyDialog').open)openDialog('historyDialog')
 }
 
 async function deleteHistoryIntervention(i,store){

@@ -1,0 +1,6 @@
+OVERGREEN CLOUD V17
+
+- Corretto caricamento foto e planimetrie nell’archivio punto vendita senza modifiche al database.
+- I file archivio usano valori tipo_allegato già ammessi e vengono riconosciuti dal percorso di archiviazione.
+- Dopo il caricamento in background, le foto degli interventi vengono aggiunte subito allo storico aperto.
+- Nessun realtime e nessun refresh automatico generale reintrodotto.

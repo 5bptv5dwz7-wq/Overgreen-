@@ -158,11 +158,23 @@ function renderScheduleFilters(){
   const sel=$('scheduleWorkerFilter');if(!sel)return;const current=scheduleWorkerFilter;sel.innerHTML='<option value="all">Tutte le squadre</option>'+profiles.filter(p=>p.attivo).map(p=>`<option value="${p.id}">${esc(p.nome)}</option>`).join('');sel.value=current;
 }
 function scheduleMatchesDate(s){if(scheduleDateFilter==='all')return true;if(scheduleDateFilter==='today')return s.giorno===today();if(scheduleDateFilter==='tomorrow')return s.giorno===tomorrow();if(scheduleDateFilter==='week'){const now=new Date(today()+'T12:00:00'),end=new Date(now);end.setDate(end.getDate()+7);return new Date(s.giorno+'T12:00:00')>=now&&new Date(s.giorno+'T12:00:00')<=end}return true}
-function storeArchiveFiles(storeId){return attachments.filter(a=>String(a.storage_path||'').startsWith(`punti-vendita/${storeId}/`))}
-function archiveKind(a){const p=String(a.storage_path||'');return p.includes('/planimetria/')?'planimetria':p.includes('/foto/')?'foto':''}
+async function storeArchiveFiles(storeId){
+  const base=`punti-vendita/${storeId}`;
+  const out=[];
+  for(const kind of ['planimetria','foto']){
+    const {data,error}=await sb.storage.from('documenti').list(`${base}/${kind}`,{limit:100,sortBy:{column:'created_at',order:'desc'}});
+    if(error){console.warn('Archivio punto vendita non leggibile:',error.message);continue}
+    for(const f of (data||[])){
+      if(!f.name||f.name==='.emptyFolderPlaceholder')continue;
+      out.push({id:`${kind}:${f.name}`,tipo_archivio:kind,storage_path:`${base}/${kind}/${f.name}`,nome_file:f.name,mime_type:f.metadata?.mimetype||'',dimensione_bytes:f.metadata?.size||0,created_at:f.created_at||f.updated_at||''});
+    }
+  }
+  return out;
+}
+function archiveKind(a){return a.tipo_archivio||((String(a.storage_path||'').includes('/planimetria/'))?'planimetria':String(a.storage_path||'').includes('/foto/')?'foto':'')}
 async function signedAttachmentUrl(a){const {data,error}=await sb.storage.from('documenti').createSignedUrl(a.storage_path,600);if(error)throw error;return data.signedUrl}
 async function openArchiveAttachment(a){try{window.open(await signedAttachmentUrl(a),'_blank')}catch(err){alert(err.message)}}
-async function deleteArchiveAttachment(a,store){if(!admin()||!confirm(`Eliminare definitivamente “${a.nome_file||'questo file'}”?`))return;const r=await sb.storage.from('documenti').remove([a.storage_path]);if(r.error)return alert(r.error.message);const d=await sb.from('attachments').delete().eq('id',a.id);if(d.error)return alert(d.error.message);toast('File eliminato');await loadAll();showStoreDetail(stores.find(x=>x.id===store.id)||store)}
+async function deleteArchiveAttachment(a,store){if(!admin()||!confirm(`Eliminare definitivamente “${a.nome_file||'questo file'}”?`))return;const r=await sb.storage.from('documenti').remove([a.storage_path]);if(r.error)return alert(r.error.message);toast('File eliminato');await showStoreDetail(stores.find(x=>x.id===store.id)||store)}
 async function uploadStoreArchiveFiles(store,kind,files){
   if(!admin()||!files.length)return;
   const label=kind==='planimetria'?'planimetria':'foto';
@@ -171,12 +183,11 @@ async function uploadStoreArchiveFiles(store,kind,files){
     const safe=(file.name||label).replace(/[^a-zA-Z0-9._-]/g,'-');
     const path=`punti-vendita/${store.id}/${kind}/${Date.now()}-${crypto.randomUUID()}-${safe}`;
     await uploadFile(path,file);
-    await addAttachment({tipo:kind==='foto'?'foto_generica':'pdf_richiesta',storage_path:path,nome_file:file.name||original.name,mime_type:file.type||original.type,dimensione_bytes:file.size,caricato_da:profile.id});
   }
-  toast(`${files.length} file caricati`);await loadAll();showStoreDetail(stores.find(x=>x.id===store.id)||store)
+  toast(`${files.length} file caricati`);await showStoreDetail(stores.find(x=>x.id===store.id)||store)
 }
-function showStoreDetail(s){
-  $('storeDetailTitle').textContent=s.nome;const rows=interventions.filter(i=>i.store_id===s.id).sort((a,b)=>String(b.data_intervento).localeCompare(String(a.data_intervento))),ex=extras.filter(e=>e.store_id===s.id),n=days(s.ultimo_passaggio),archive=storeArchiveFiles(s.id),plans=archive.filter(a=>archiveKind(a)==='planimetria'),photos=archive.filter(a=>archiveKind(a)==='foto');
+async function showStoreDetail(s){
+  $('storeDetailTitle').textContent=s.nome;const archive=await storeArchiveFiles(s.id);const rows=interventions.filter(i=>i.store_id===s.id).sort((a,b)=>String(b.data_intervento).localeCompare(String(a.data_intervento))),ex=extras.filter(e=>e.store_id===s.id),n=days(s.ultimo_passaggio),plans=archive.filter(a=>archiveKind(a)==='planimetria'),photos=archive.filter(a=>archiveKind(a)==='foto');
   $('storeDetailBody').innerHTML=`<div class="store-detail-grid"><div class="store-detail-stat"><strong>${n===null?'—':n}</strong><span>giorni dall'ultimo passaggio</span></div><div class="store-detail-stat"><strong>${rows.length}</strong><span>interventi registrati</span></div><div class="store-detail-stat"><strong>${ex.length}</strong><span>extra collegati</span></div><div class="store-detail-stat"><strong>${fmt(s.ultimo_passaggio)}</strong><span>ultimo passaggio</span></div></div><div class="store-detail-actions"><button data-detail-map>Maps</button><button data-detail-history>Storico</button>${admin()?'<button class="secondary" data-detail-edit>Modifica</button>':''}</div><h3>Indirizzo</h3><p>${esc([s.indirizzo,s.citta].filter(Boolean).join(', ')||'Non inserito')}</p><h3>Note permanenti</h3><div class="detail-note">${esc(s.note||'Nessuna nota')}</div><section class="store-archive"><div class="archive-head"><h3>Archivio punto vendita</h3><span>${archive.length} file</span></div>${admin()?`<div class="archive-upload-grid"><label class="file-label small"><span>＋ Planimetria</span><input data-upload-plan type="file" accept="application/pdf,image/*"></label><label class="file-label small"><span>＋ Foto</span><input data-upload-photo type="file" accept="image/*" multiple></label></div>`:''}<h4>Planimetrie</h4><div class="archive-list" data-plans>${plans.length?'':'<p class="muted">Nessuna planimetria.</p>'}</div><h4>Foto del punto vendita</h4><div class="archive-gallery" data-archive-photos>${photos.length?'':'<p class="muted">Nessuna foto.</p>'}</div></section><h3>Ultimi interventi</h3>${rows.slice(0,3).map(i=>`<p><strong>${fmt(i.data_intervento)}</strong> <span class="badge-state">${esc(historyStatusLabel(i.stato))}</span><br><small>${esc(i.note||'Nessuna nota')}</small></p>`).join('')||'<p class="muted">Nessun intervento.</p>'}`;
   const body=$('storeDetailBody');body.querySelector('[data-detail-map]').onclick=()=>openAppleMaps(s.indirizzo,'Eurospin '+s.nome);body.querySelector('[data-detail-history]').onclick=()=>showHistory(s);body.querySelector('[data-detail-edit]')?.addEventListener('click',()=>openStore(s));
   body.querySelector('[data-upload-plan]')?.addEventListener('change',e=>uploadStoreArchiveFiles(s,'planimetria',[...e.target.files]).catch(err=>alert(err.message)));

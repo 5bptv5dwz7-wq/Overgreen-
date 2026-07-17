@@ -1,0 +1,7 @@
+OVERGREEN CLOUD V18
+
+- Corretto archivio punto vendita senza usare la tabella attachments.
+- Foto e planimetrie sono lette direttamente dalle cartelle Storage del punto vendita.
+- Risolto il vincolo attachment_proprietario_check.
+- I file già caricati nello Storage durante i tentativi falliti vengono recuperati e mostrati automaticamente.
+- Mantiene la correzione v17 per le foto intervento nello storico.

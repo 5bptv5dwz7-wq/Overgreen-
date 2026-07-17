@@ -1,0 +1,6 @@
+OVERGREEN CLOUD V22
+
+Correzione stato programmazione dipendenti:
+- lo stato In attesa di convalida viene ora ricavato anche dall’intervento inviato;
+- i lavori inviati spariscono subito dai lavori da fare della Dashboard;
+- non dipende più dal permesso di aggiornamento diretto della tabella schedule_items.

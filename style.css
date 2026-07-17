@@ -55,3 +55,18 @@
 .remember-row{display:flex;align-items:center;gap:10px;margin:8px 0 16px;font-weight:700}.remember-row input{width:auto;min-width:20px;height:20px;margin:0}.remember-row span{line-height:1.25}
 
 .dashboard-section-title{margin:8px 0 2px;font-size:1.05rem}.dashboard-future-title{margin-top:24px;padding-top:18px;border-top:1px solid var(--border,#dbe5df)}
+
+/* v24 - revisione convalide con note e foto */
+.pending-review{display:grid;gap:16px}
+.pending-review-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.pending-review-head h3,.pending-review-head p{margin:0}
+.pending-review-section{display:grid;gap:7px}
+.pending-review-section>strong{font-size:.88rem;text-transform:uppercase;letter-spacing:.04em;color:#53645a}
+.pending-review-section p{margin:0}
+.pending-photo-head{display:flex;align-items:center;justify-content:space-between}
+.pending-photo-head span{min-width:30px;text-align:center;border-radius:999px;background:#edf5ef;padding:4px 9px;font-weight:800;color:#075d32}
+.pending-review-photos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.pending-review-photo{position:relative;overflow:hidden;padding:0;border-radius:16px;min-height:128px;background:#edf2ee;border:1px solid #d9e4dc}
+.pending-review-photo img{display:block;width:100%;height:128px;object-fit:cover}
+.pending-review-photo span{position:absolute;right:7px;bottom:7px;background:rgba(0,0,0,.7);color:#fff;border-radius:999px;padding:5px 9px;font-size:.75rem;font-weight:800}
+@media(max-width:520px){.pending-review-photos{grid-template-columns:1fr 1fr}.pending-review-photo,.pending-review-photo img{min-height:112px;height:112px}}

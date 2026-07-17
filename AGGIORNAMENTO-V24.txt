@@ -1,0 +1,7 @@
+OVERGREEN CLOUD v24
+
+- Nella schermata Convalide Lorenzo vede le note del dipendente.
+- Mostrati gli operatori che hanno eseguito il lavoro.
+- Mostrate tutte le foto dell’intervento con anteprima e apertura.
+- Aprendo le Convalide vengono aggiornati solo interventi e allegati.
+- Nessun realtime e nessun refresh automatico generale.

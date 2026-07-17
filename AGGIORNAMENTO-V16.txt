@@ -1,0 +1,7 @@
+OVERGREEN CLOUD V16
+
+- Selezione multipla delle foto dagli interventi su iPhone (rimosso il vincolo che apriva solo la fotocamera).
+- Archivio per ogni punto vendita con planimetrie, foto multiple e note permanenti.
+- Apertura ed eliminazione dei file dell’archivio da parte di Lorenzo.
+- Riordino manuale dell’ordine di esecuzione tramite frecce su/giù nella programmazione.
+- Nessun refresh automatico aggiunto.

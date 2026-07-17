@@ -53,3 +53,5 @@
 .help-icon{background:#e9f2ec;color:var(--green);font-size:20px}.help-content{line-height:1.5}.help-content ul{padding-left:22px;margin-bottom:0}.help-content li{margin:9px 0}
 
 .remember-row{display:flex;align-items:center;gap:10px;margin:8px 0 16px;font-weight:700}.remember-row input{width:auto;min-width:20px;height:20px;margin:0}.remember-row span{line-height:1.25}
+
+.dashboard-section-title{margin:8px 0 2px;font-size:1.05rem}.dashboard-future-title{margin-top:24px;padding-top:18px;border-top:1px solid var(--border,#dbe5df)}

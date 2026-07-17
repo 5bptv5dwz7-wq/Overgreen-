@@ -1,0 +1,6 @@
+OVERGREEN CLOUD V23
+
+- Nella Dashboard del dipendente i lavori sono divisi in due sezioni.
+- "Da eseguire oggi" mostra solamente i lavori ordinari e gli extra assegnati per la giornata corrente.
+- "Lavori dei prossimi giorni" mostra tutti i lavori futuri assegnati al dipendente, compresi gli extra.
+- I lavori futuri sono ordinati per data e per ordine di esecuzione.

@@ -1,0 +1,6 @@
+OVERGREEN CLOUD V33 — CORREZIONE FILTRO PROGRAMMATI
+
+- Corretto il pulsante “Programmati” nella Dashboard.
+- Aprendo la lista punti vendita viene ora eseguito subito il rendering con il filtro “In programma”.
+- La lista mostra esclusivamente i punti vendita presenti in una programmazione attiva.
+- Nessuna modifica richiesta a Supabase.

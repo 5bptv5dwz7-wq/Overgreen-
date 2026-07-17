@@ -1,0 +1,7 @@
+OVERGREEN CLOUD V30 - ESPORTAZIONE REPORT PDF
+
+- Aggiunto PDF sintetico con riepilogo ed elenco lavori.
+- Aggiunto PDF completo con operatori, note, fotografie e documenti indicati.
+- Il PDF rispetta data, tipologia e dipendente selezionati nel report.
+- L’esportazione apre la schermata di stampa del dispositivo: scegliere Salva come PDF o Condividi.
+- Nessuna modifica richiesta a Supabase.

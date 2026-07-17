@@ -1,0 +1,8 @@
+OVERGREEN CLOUD V20
+
+- Aggiunta l'opzione "Ricorda l'accesso su questo dispositivo" nella schermata di login.
+- L'opzione e' attiva per impostazione predefinita.
+- Se attiva, la sessione resta salvata anche dopo la chiusura dell'app/PWA o del browser.
+- Se disattivata, la sessione dura soltanto nella sessione corrente del browser.
+- Il pulsante Esci cancella sempre la sessione salvata.
+- Nessuna password viene salvata in chiaro: viene conservata soltanto la sessione sicura di Supabase.

@@ -1,0 +1,7 @@
+OVERGREEN CLOUD V19
+
+- Lorenzo può eliminare un singolo punto vendita ancora da fare dalla programmazione.
+- La cancellazione richiede una conferma semplice.
+- Se la programmazione rimane completamente vuota, viene rimossa anche la scheda vuota.
+- Aggiunto il pulsante ? sempre visibile nell'intestazione.
+- Il pulsante mostra istruzioni specifiche per Dashboard, Punti vendita, Programmazione, Extra e Impostazioni.

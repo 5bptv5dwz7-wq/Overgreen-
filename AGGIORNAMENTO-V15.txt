@@ -1,0 +1,12 @@
+OVERGREEN CLOUD v15 — VERSIONE EVOLUTA
+
+Novità principali:
+- Dashboard iniziale con lavori di oggi, convalide, completati e punti scaduti.
+- Ricerca globale di punti vendita, extra e dipendenti.
+- Scheda completa del punto vendita con indirizzo, note, storico recente e riepiloghi.
+- Filtri programmazione per dipendente e periodo.
+- Duplicazione rapida di una programmazione su una nuova data.
+- Accesso alla scheda punto vendita toccando il nome nelle liste.
+- Conservate tutte le funzioni della v14, compreso aggiornamento solo manuale/operativo.
+
+Nota: non sono state aggiunte nuove tabelle o colonne al database; la versione usa la struttura Supabase già esistente.

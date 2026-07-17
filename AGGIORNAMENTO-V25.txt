@@ -1,0 +1,6 @@
+OVERGREEN CLOUD V25
+
+- L’amministratore può modificare ed eliminare qualsiasi extra, non solo quelli completati.
+- Chiusura extra con note finali e foto multiple oltre ai file Eurospin e Overgreen.
+- Foto, note e rapportini visibili nella scheda extra e nella schermata Da convalidare.
+- Foto e note restano disponibili anche dopo la convalida.

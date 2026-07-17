@@ -124,7 +124,9 @@ async function loadAll(){
   if(loadAllPromise)return loadAllPromise;
   loadAllPromise=(async()=>{
   const [p,s,i,sch,sm,si,e,ew,a]=await Promise.all([
-    sb.from('profiles').select('*').order('nome'),sb.from('stores').select('*').eq('attivo',true),sb.from('interventions').select('*').order('created_at',{ascending:false}),sb.from('schedules').select('*').order('giorno'),sb.from('schedule_members').select('*'),sb.from('schedule_items').select('*').order('posizione'),sb.from('extras').select('*').order('giorno_intervento'),sb.from('extra_workers').select('*'),sb.from('attachments').select('*').order('created_at',{ascending:false})
+    sb.from('profiles').select('*').order('nome'),sb.from('stores').select('*').eq('attivo',true),sb.from('interventions').select('*').order('created_at',{ascending:false}),sb.from('schedules').select('*').order('giorno'),sb.from('schedule_members').select('*'),sb.from('schedule_items').select('*').order('posizione'),sb.from('extras').select('*').order('giorno_intervento'),sb.from('extra_workers').select('*'),sb.from('attachments').select('*').order('created_at',{ascending:false}),
+    sb.from('extras').select('*').order('giorno_intervento'),
+    sb.from('extra_workers').select('*')
   ]);
   for(const r of [p,s,i,sch,sm,si,e,ew,a])if(r.error)throw r.error;
   profiles=p.data;stores=s.data;interventions=i.data;schedules=sch.data;scheduleMembers=sm.data;scheduleItems=si.data;extras=e.data;extraWorkers=ew.data;attachments=a.data;
@@ -315,12 +317,14 @@ async function workerNames(interventionId){const {data}=await sb.from('intervent
 async function refreshPendingData(){
   if(!admin())return;
   $('pendingList').innerHTML='<p class="muted">Aggiornamento interventi e foto…</p>';
-  const [ir,ar]=await Promise.all([
+  const [ir,ar,er,ewr]=await Promise.all([
     sb.from('interventions').select('*').order('created_at',{ascending:false}),
-    sb.from('attachments').select('*').order('created_at',{ascending:false})
+    sb.from('attachments').select('*').order('created_at',{ascending:false}),
+    sb.from('extras').select('*').order('giorno_intervento'),
+    sb.from('extra_workers').select('*')
   ]);
-  if(ir.error)throw ir.error;if(ar.error)throw ar.error;
-  interventions=ir.data||[];attachments=ar.data||[];
+  if(ir.error)throw ir.error;if(ar.error)throw ar.error;if(er.error)throw er.error;if(ewr.error)throw ewr.error;
+  interventions=ir.data||[];attachments=ar.data||[];extras=er.data||[];extraWorkers=ewr.data||[];
   await renderPending();renderDashboard();renderSchedules();
 }
 async function openPendingDialog(){
@@ -328,9 +332,9 @@ async function openPendingDialog(){
   try{await refreshPendingData()}catch(err){console.error(err);$('pendingList').innerHTML=`<p class="muted">Impossibile aggiornare le convalide: ${esc(err.message||String(err))}</p>`}
 }
 async function renderPending(){
-  const p=interventions.filter(i=>i.stato==='in_attesa');
-  $('pendingBadge').textContent=p.length;$('pendingBadge').classList.toggle('hidden',!p.length);$('pendingList').innerHTML='';
-  if(!p.length){$('pendingList').innerHTML='<p class="muted">Nessun intervento da convalidare.</p>';return}
+  const p=interventions.filter(i=>i.stato==='in_attesa'),pendingExtras=extras.filter(e=>e.stato==='in_attesa');
+  const total=p.length+pendingExtras.length;$('pendingBadge').textContent=total;$('pendingBadge').classList.toggle('hidden',!total);$('pendingList').innerHTML='';
+  if(!total){$('pendingList').innerHTML='<p class="muted">Nessun lavoro da convalidare.</p>';return}
   for(const i of p){
     const s=stores.find(x=>x.id===i.store_id),names=await workerNames(i.id),pics=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica');
     const c=document.createElement('article');c.className='card pending pending-review';
@@ -342,6 +346,12 @@ async function renderPending(){
       for(const x of urls.filter(Boolean)){const b=document.createElement('button');b.type='button';b.className='pending-review-photo';b.innerHTML=`<img src="${x.url}" alt="${esc(x.a.nome_file||'Foto intervento')}" loading="lazy"><span>Apri</span>`;b.onclick=()=>window.open(x.url,'_blank');box.appendChild(b)}
       if(!box.children.length)box.innerHTML='<p class="muted">Foto non disponibile. Premi Aggiorna e riprova.</p>';
     }
+  }
+  for(const e of pendingExtras){
+    const st=stores.find(x=>x.id===e.store_id),names=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean),pics=attachments.filter(a=>a.extra_id===e.id&&a.tipo==='foto_extra'),re=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),ro=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen');
+    const c=document.createElement('article');c.className='card pending pending-review';
+    c.innerHTML=`<div class="pending-review-head"><div><h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3><p class="muted">${fmt(e.giorno_intervento)} · ${esc(e.titolo)}</p></div><span class="badge-state">In attesa</span></div><div class="pending-review-section"><strong>Chi ha eseguito</strong><p>${names.length?names.map(esc).join(' · '):'Operatore non indicato'}</p></div><div class="pending-review-section"><strong>Note finali</strong><div class="history-note ${e.note_lorenzo?'':'muted'}">${esc(e.note_lorenzo||'Nessuna nota inserita')}</div></div><div class="pending-review-section"><div class="pending-photo-head"><strong>Foto allegate</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-extra-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div><div class="actions">${re?'<button class="secondary" data-re>File Eurospin</button>':'<span class="muted">File Eurospin mancante</span>'}${ro?'<button class="secondary" data-ro>File Overgreen</button>':'<span class="muted">File Overgreen mancante</span>'}<button data-ok>Convalida</button></div>`;
+    c.querySelector('[data-re]')?.addEventListener('click',()=>openAttachment(re));c.querySelector('[data-ro]')?.addEventListener('click',()=>openAttachment(ro));c.querySelector('[data-ok]').onclick=()=>approveExtra(e);$('pendingList').appendChild(c);if(pics.length)hydrateExtraPhotos(c,pics);
   }
 }
 async function approveIntervention(i){const {error}=await sb.from('interventions').update({stato:'convalidato',convalidato_da:profile.id,convalidato_il:new Date().toISOString()}).eq('id',i.id);if(error)return alert(error.message);const {error:e2}=await sb.from('stores').update({ultimo_passaggio:i.data_intervento}).eq('id',i.store_id);if(e2)return alert(e2.message);if(i.schedule_item_id)await sb.from('schedule_items').update({stato:'completato'}).eq('id',i.schedule_item_id);toast('Intervento convalidato');await loadAll()}
@@ -399,12 +409,12 @@ function renderSchedules(){
 }
 function renderSchedulePicker(){const q=$('scheduleSearch').value.toLowerCase(),w=$('scheduleStores');const selected=new Set([...w.querySelectorAll('input:checked')].map(x=>x.value));w.innerHTML='';stores.filter(s=>s.nome.toLowerCase().includes(q)).sort((a,b)=>(days(b.ultimo_passaggio)??9999)-(days(a.ultimo_passaggio)??9999)).forEach(s=>{const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${s.id}" ${selected.has(s.id)?'checked':''}><span><strong>${esc(s.nome)}</strong><br><small>${days(s.ultimo_passaggio)??'—'} giorni · ultimo ${fmt(s.ultimo_passaggio)}</small></span>`;w.appendChild(l)})}
 function extraCard(e){
-  const st=stores.find(s=>s.id===e.store_id),pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta'),reportEurospin=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),reportOvergreen=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen');
-  const showReports=admin()&&['in_attesa','completato'].includes(e.stato),c=document.createElement('article');
+  const st=stores.find(s=>s.id===e.store_id),pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta'),reportEurospin=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),reportOvergreen=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen'),pics=attachments.filter(a=>a.extra_id===e.id&&a.tipo==='foto_extra');
+  const showClosure=['in_attesa','completato'].includes(e.stato),c=document.createElement('article');
   const assignedNames=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean);
   const assignmentLabel=admin()?`Assegnato a: ${assignedNames.join(' + ')||'nessuno'}`:'Assegnato a te';
   c.className=`card extra-card ${e.stato}`;
-  c.innerHTML=`<h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3><p><strong>${esc(e.titolo)}</strong></p><p>${esc(e.descrizione||'')}</p><p class="muted">${fmt(e.giorno_intervento)} · ${esc(e.stato.replaceAll('_',' '))}</p><p class="assignment-label"><strong>${esc(assignmentLabel)}</strong></p><div class="actions">${pdf?'<button class="secondary" data-pdf>Apri PDF richiesta</button>':''}${showReports&&reportEurospin?'<button class="secondary" data-report-eurospin>File Eurospin</button>':''}${showReports&&reportOvergreen?'<button class="secondary" data-report-overgreen>File Overgreen</button>':''}${showReports&&!reportEurospin?'<span class="muted">File Eurospin non presente</span>':''}${showReports&&!reportOvergreen?'<span class="muted">File Overgreen non presente</span>':''}${!admin()&&['programmato','ricevuto','da_integrare'].includes(e.stato)?'<button data-close-extra>Chiudi lavoro</button>':''}${admin()&&e.stato==='in_attesa'?'<button data-approve-extra>Convalida</button>':''}${admin()&&e.stato==='completato'?'<button class="secondary" data-edit-extra>Modifica</button><button class="danger-btn" data-delete-extra>Elimina</button>':''}</div>`;
+  c.innerHTML=`<h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3><p><strong>${esc(e.titolo)}</strong></p><p>${esc(e.descrizione||'')}</p><p class="muted">${fmt(e.giorno_intervento)} · ${esc(e.stato.replaceAll('_',' '))}</p><p class="assignment-label"><strong>${esc(assignmentLabel)}</strong></p>${showClosure?`<div class="extra-closure-details"><strong>Note finali</strong><div class="history-note ${e.note_lorenzo?'':'muted'}">${esc(e.note_lorenzo||'Nessuna nota inserita')}</div><div class="pending-photo-head"><strong>Foto del lavoro</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-extra-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div>`:''}<div class="actions">${pdf?'<button class="secondary" data-pdf>Apri PDF richiesta</button>':''}${showClosure&&reportEurospin?'<button class="secondary" data-report-eurospin>File Eurospin</button>':''}${showClosure&&reportOvergreen?'<button class="secondary" data-report-overgreen>File Overgreen</button>':''}${showClosure&&!reportEurospin?'<span class="muted">File Eurospin non presente</span>':''}${showClosure&&!reportOvergreen?'<span class="muted">File Overgreen non presente</span>':''}${!admin()&&['programmato','ricevuto','da_integrare'].includes(e.stato)?'<button data-close-extra>Chiudi lavoro</button>':''}${admin()&&e.stato==='in_attesa'?'<button data-approve-extra>Convalida</button>':''}${admin()?'<button class="secondary" data-edit-extra>Modifica</button><button class="danger-btn" data-delete-extra>Elimina</button>':''}</div>`;
   c.querySelector('[data-pdf]')?.addEventListener('click',()=>openAttachment(pdf));
   c.querySelector('[data-report-eurospin]')?.addEventListener('click',()=>openAttachment(reportEurospin));
   c.querySelector('[data-report-overgreen]')?.addEventListener('click',()=>openAttachment(reportOvergreen));
@@ -412,8 +422,17 @@ function extraCard(e){
   c.querySelector('[data-approve-extra]')?.addEventListener('click',()=>approveExtra(e));
   c.querySelector('[data-edit-extra]')?.addEventListener('click',()=>openExtraEdit(e));
   c.querySelector('[data-delete-extra]')?.addEventListener('click',()=>deleteExtra(e));
+  if(showClosure&&pics.length)hydrateExtraPhotos(c,pics);
   return c;
 }
+
+async function hydrateExtraPhotos(card,pics){
+  const box=card.querySelector('[data-extra-photos]');if(!box)return;box.innerHTML='';
+  const urls=await Promise.all(pics.map(async a=>{try{return {a,url:await signedAttachmentUrl(a)}}catch{return null}}));
+  for(const x of urls.filter(Boolean)){const b=document.createElement('button');b.type='button';b.className='pending-review-photo';b.innerHTML=`<img src="${x.url}" alt="${esc(x.a.nome_file||'Foto extra')}" loading="lazy"><span>Apri</span>`;b.onclick=()=>window.open(x.url,'_blank');box.appendChild(b)}
+  if(!box.children.length)box.innerHTML='<p class="muted">Foto non disponibile. Premi Aggiorna e riprova.</p>';
+}
+
 function renderExtras(){
   const root=$('extrasList');root.innerHTML='';
   const visible=admin()?extras:extras.filter(e=>extraWorkers.some(w=>w.extra_id===e.id&&w.profile_id===profile.id));
@@ -471,7 +490,7 @@ $('extraEditForm').onsubmit=async e=>{
   $('extraEditDialog').close();toast('Extra aggiornato');await loadAll();
 };
 $('duplicateScheduleForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const source=$('duplicateScheduleId').value,newDate=$('duplicateScheduleDate').value,src=schedules.find(x=>x.id===source);if(!src||!newDate)return;const members=scheduleMembers.filter(m=>m.schedule_id===source),items=scheduleItems.filter(i=>i.schedule_id===source&&i.stato!=='completato');if(!items.length)return alert('Non ci sono lavori da duplicare.');const {data,error}=await sb.from('schedules').insert({giorno:newDate,nota_generale:src.nota_generale,creato_da:profile.id}).select().single();if(error)return alert(error.message);let r=await sb.from('schedule_members').insert(members.map(m=>({schedule_id:data.id,profile_id:m.profile_id})));if(r.error)return alert(r.error.message);r=await sb.from('schedule_items').insert(items.map((i,pos)=>({schedule_id:data.id,tipo:i.tipo,store_id:i.store_id,posizione:pos+1,stato:'da_fare'})));if(r.error)return alert(r.error.message);$('duplicateScheduleDialog').close();toast('Programmazione duplicata');await loadAll()};
-$('closeExtraForm').onsubmit=async e=>{e.preventDefault();const id=$('closeExtraId').value,files=[['rapportino_eurospin',$('reportEurospin').files[0]],['rapportino_overgreen',$('reportOvergreen').files[0]]];for(const [tipo,file] of files){if(!file)return alert('Servono entrambi i rapportini.');const path=`extra/${id}/${tipo}-${Date.now()}-${file.name}`;try{await uploadFile(path,file);await addAttachment({tipo,extra_id:id,storage_path:path,nome_file:file.name,mime_type:file.type,dimensione_bytes:file.size,caricato_da:profile.id})}catch(err){return alert(err.message)}}const {error}=await sb.from('extras').update({stato:'in_attesa'}).eq('id',id);if(error)return alert(error.message);$('closeExtraDialog').close();toast('Extra inviato a Lorenzo');await loadAll()};
+$('closeExtraForm').onsubmit=async e=>{e.preventDefault();const btn=e.submitter;btn.disabled=true;const old=btn.textContent;btn.textContent='Invio…';try{const id=$('closeExtraId').value,notes=$('closeExtraNotes').value.trim()||null,photos=[...$('closeExtraPhotos').files],files=[['rapportino_eurospin',$('reportEurospin').files[0]],['rapportino_overgreen',$('reportOvergreen').files[0]]];for(const [tipo,file] of files){if(!file)throw new Error('Servono entrambi i rapportini.');const path=`extra/${id}/${tipo}-${Date.now()}-${file.name}`;await uploadFile(path,file);await addAttachment({tipo,extra_id:id,storage_path:path,nome_file:file.name,mime_type:file.type,dimensione_bytes:file.size,caricato_da:profile.id})}for(const file of photos){const path=`extra/${id}/foto-${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`;await uploadFile(path,file);await addAttachment({tipo:'foto_extra',extra_id:id,storage_path:path,nome_file:file.name,mime_type:file.type,dimensione_bytes:file.size,caricato_da:profile.id})}const {error}=await sb.from('extras').update({stato:'in_attesa',note_lorenzo:notes}).eq('id',id);if(error)throw error;$('closeExtraDialog').close();$('closeExtraForm').reset();toast(`Extra inviato a Lorenzo${photos.length?' · '+photos.length+' foto':''}`);await loadAll()}catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=old}};
 
 
 function isRecoverableJwtError(err){const m=String(err?.message||err||'').toLowerCase();return m.includes('jwt issued at future')||m.includes('jwt expired')||m.includes('invalid refresh token')||m.includes('refresh token not found')}

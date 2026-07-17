@@ -1,0 +1,8 @@
+OVERGREEN CLOUD V31 — PUNTI VENDITA IN PROGRAMMA
+
+- I punti vendita inseriti in una programmazione attiva non risultano più scaduti.
+- Nella lista punti vendita compare il badge “In programma”.
+- Nella scheda completa lo stato è “In programma”.
+- Nelle programmazioni i lavori ancora da eseguire sono indicati come “In programma”.
+- Se un punto vendita viene rimosso da tutte le programmazioni attive, il suo stato torna automaticamente a essere calcolato in base all’ultimo passaggio.
+- Nessuna modifica richiesta a Supabase.

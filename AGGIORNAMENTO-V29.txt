@@ -1,0 +1,10 @@
+OVERGREEN CLOUD V29 — REPORT GIORNALIERO
+
+- Nuova sezione Report, visibile soltanto agli amministratori.
+- Selezione della data e ricostruzione di interventi ordinari ed extra svolti.
+- Riepilogo con lavori, convalide, operatori, fotografie e documenti.
+- Filtri per tipologia di lavoro e dipendente.
+- Visualizzazione di note, operatori, stato, foto e rapportini.
+- Accesso diretto alla scheda completa del punto vendita.
+- Condivisione del riepilogo tramite menu del telefono o copia negli appunti.
+- Nessuna modifica SQL richiesta: usa le tabelle Supabase già presenti.

@@ -11,7 +11,7 @@ const authStorage={
 const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, {auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:authStorage}});
 const SEED_STORES=[{"name": "ABBIATEGRASSO", "lastDone": "2026-06-17"}, {"name": "ACQUI TERME", "lastDone": "2026-06-30"}, {"name": "ALBANO SAN ALESSANDRO", "lastDone": "2026-07-07"}, {"name": "ALESSANDRIA MOCCAGATTA", "lastDone": "2026-07-14"}, {"name": "ALESSANDRIA MOISA", "lastDone": "2026-07-14"}, {"name": "ARENZANO", "lastDone": "2026-06-15"}, {"name": "ASOLA", "lastDone": "2026-07-09"}, {"name": "ASTI", "lastDone": "2026-07-13"}, {"name": "BAGNOLO MELLA", "lastDone": "2026-07-08"}, {"name": "BEINASCO", "lastDone": "2026-07-03"}, {"name": "BELLINZAGO LOMBARDO", "lastDone": "2026-06-11"}, {"name": "BERGAMO", "lastDone": "2026-07-07"}, {"name": "BESANA IN BRIANZA", "lastDone": "2026-07-11"}, {"name": "BIELLA", "lastDone": "2026-06-30"}, {"name": "BOLLADELLO DI CAIRATE", "lastDone": "2026-07-01"}, {"name": "BORGARO TORINESE", "lastDone": "2026-07-01"}, {"name": "BOZZOLO", "lastDone": "2026-07-09"}, {"name": "BRONI", "lastDone": "2026-07-15"}, {"name": "BRUGHIERO", "lastDone": "2026-06-11"}, {"name": "BUSTO ARSIZIO", "lastDone": "2026-06-23"}, {"name": "CAIRO MONTENOTTE", "lastDone": "2026-07-07"}, {"name": "CANELLI", "lastDone": "2026-07-14"}, {"name": "CANTÙ", "lastDone": "2026-07-11"}, {"name": "CAPRIOLO", "lastDone": "2026-07-07"}, {"name": "CARPENEDOLO", "lastDone": "2026-07-09"}, {"name": "CASALE MONFERRATO", "lastDone": "2026-06-11"}, {"name": "CASALMAGGIORE", "lastDone": "2026-07-09"}, {"name": "CASARZA LIGURE", "lastDone": "2026-06-16"}, {"name": "CASTEL MELLA", "lastDone": "2026-07-08"}, {"name": "CASTELLETTO SOPRA TICINO", "lastDone": "2026-06-22"}, {"name": "CASTELMARTE", "lastDone": "2026-07-10"}, {"name": "CASTIGLIONE DELLE STIEVERE", "lastDone": "2026-07-09"}, {"name": "CERIALE", "lastDone": "2026-07-07"}, {"name": "CHIARI", "lastDone": "2026-07-07"}, {"name": "CHIVASSO", "lastDone": "2026-06-30"}, {"name": "COLLEGNO", "lastDone": "2026-07-02"}, {"name": "COMO", "lastDone": "2026-07-11"}, {"name": "CORBETTA", "lastDone": "2026-06-26"}, {"name": "COSTA VOLPINO", "lastDone": "2026-07-10"}, {"name": "COURGNE", "lastDone": "2026-07-01"}, {"name": "CREMONA", "lastDone": "2026-07-07"}, {"name": "CUVEGLIO", "lastDone": "2026-06-22"}, {"name": "DESENZANO DEL GARDA", "lastDone": "2026-07-08"}, {"name": "DOMODOSSOLA", "lastDone": "2026-06-21"}, {"name": "FINO MORNASCO", "lastDone": "2026-07-11"}, {"name": "FOLLO", "lastDone": "2026-06-16"}, {"name": "FOSSANO", "lastDone": "2026-06-03"}, {"name": "GALLARATE", "lastDone": "2026-07-16"}, {"name": "GENOVA PEGLI", "lastDone": "2026-06-15"}, {"name": "GREGGIO", "lastDone": "2026-06-22"}, {"name": "INVERUNO", "lastDone": "2026-07-15"}, {"name": "JERAGO CON ORAGO", "lastDone": "2026-07-16"}, {"name": "LA SPEZIA", "lastDone": "2026-06-16"}, {"name": "LAINATE", "lastDone": "2026-07-13"}, {"name": "LENO", "lastDone": "2026-07-08"}, {"name": "LENTATE SUL SEVESO", "lastDone": "2026-07-11"}, {"name": "LIMBIATE", "lastDone": "2026-06-24"}, {"name": "LOMAZZO", "lastDone": "2026-07-11"}, {"name": "LUINO", "lastDone": "2026-06-22"}, {"name": "MALNATE", "lastDone": "2026-06-30"}, {"name": "MANERBIO", "lastDone": "2026-07-08"}, {"name": "MANTOVA", "lastDone": "2026-07-09"}, {"name": "MANTOVA TRICERONE", "lastDone": "2026-07-10"}, {"name": "MAZZANO", "lastDone": "2026-07-08"}, {"name": "MILANO BAGAROTTI", "lastDone": "2026-07-13"}, {"name": "MILANO BISCEGLIE", "lastDone": "2026-07-13"}, {"name": "MILANO DE ANDRE", "lastDone": "2026-06-17"}, {"name": "MILANO SARCA", "lastDone": "2026-06-10"}, {"name": "MILANO ZANTE", "lastDone": "2026-06-16"}, {"name": "MODIGNANI", "lastDone": "2026-06-10"}, {"name": "MONTALDO DORA", "lastDone": "2026-06-30"}, {"name": "MONTICHIARI", "lastDone": "2026-07-09"}, {"name": "MORTARA", "lastDone": "2026-06-12"}, {"name": "NICHELINO", "lastDone": "2026-06-03"}, {"name": "NOVARA", "lastDone": "2026-06-23"}, {"name": "NOVI LIGURE", "lastDone": "2026-07-14"}, {"name": "OGGIONO", "lastDone": "2026-07-10"}, {"name": "OLEGGIO", "lastDone": "2026-06-22"}, {"name": "OLGIATE OLONA", "lastDone": "2026-07-15"}, {"name": "ORBASSANO", "lastDone": "2026-07-03"}, {"name": "ORZINUOVI", "lastDone": "2026-07-07"}, {"name": "PALAZZOLO SULL’OGLIO", "lastDone": "2026-07-07"}, {"name": "PIEVE EMANUELE", "lastDone": "2026-06-17"}, {"name": "PIOLTELLO", "lastDone": "2026-06-11"}, {"name": "PIOSSASCO", "lastDone": "2026-07-02"}, {"name": "POGGIO RUSCO", "lastDone": "2026-07-10"}, {"name": "PONTEVICO", "lastDone": "2026-07-08"}, {"name": "QUINZANO D’OGLIO", "lastDone": "2026-07-07"}, {"name": "RIVAROLO CANAVESE", "lastDone": "2026-07-01"}, {"name": "RIVOLI", "lastDone": "2026-07-02"}, {"name": "ROBECCHETTO CON INDUNO", "lastDone": "2026-06-23"}, {"name": "ROMENTINO CEDI", "lastDone": "2026-07-04"}, {"name": "ROZZANO", "lastDone": "2026-06-30"}, {"name": "SAINT CHRISTOPHE", "lastDone": "2026-06-30"}, {"name": "SAN GIORGIO SU LEGNANO", "lastDone": "2026-07-15"}, {"name": "SAN GIULIANO MILANESE PARCO", "lastDone": "2026-07-06"}, {"name": "SAN GIULIANO MILANESE PV", "lastDone": "2026-07-06"}, {"name": "SAN MAURIZIO CANAVESE", "lastDone": "2026-07-01"}, {"name": "SANTHIA", "lastDone": "2026-06-22"}, {"name": "SARONNO", "lastDone": "2026-07-06"}, {"name": "SARZANA", "lastDone": "2026-06-16"}, {"name": "SAVIGLIANO", "lastDone": "2026-06-03"}, {"name": "SEGRATE", "lastDone": "2026-06-11"}, {"name": "SERIATE", "lastDone": "2026-07-07"}, {"name": "SETTIMO TORINESE", "lastDone": "2026-06-30"}, {"name": "TIRINO GROSSETO", "lastDone": "2026-07-02"}, {"name": "TORINO CIGNA", "lastDone": "2026-07-02"}, {"name": "TORINO GARRONE", "lastDone": "2026-07-03"}, {"name": "TORINO PIRANO", "lastDone": "2026-07-02"}, {"name": "TORINO VERCELLI", "lastDone": "2026-07-02"}, {"name": "TORTONA", "lastDone": "2026-07-15"}, {"name": "TREZZANO SUL NAVIGLIO", "lastDone": "2026-05-31"}, {"name": "VADO LIGURE", "lastDone": "2026-07-07"}, {"name": "VALENZA", "lastDone": "2026-07-14"}, {"name": "VERCELLI BORMIDA", "lastDone": "2026-06-25"}, {"name": "VERCELLI TRATTATO DI ROMA", "lastDone": "2026-06-25"}, {"name": "VERGIATE", "lastDone": "2026-06-22"}, {"name": "VIGEVANO", "lastDone": "2026-06-12"}, {"name": "VILLA DI TIRANO", "lastDone": "2026-07-10"}, {"name": "VILLA GUARDIA", "lastDone": "2026-07-11"}, {"name": "VILLADOSSOLA", "lastDone": "2026-06-22"}, {"name": "VOGHERA", "lastDone": "2026-07-15"}, {"name": "RHO", "lastDone": "2026-06-10"}];
 const $=id=>document.getElementById(id);
-let session=null,profile=null,profiles=[],managedUsers=[],stores=[],interventions=[],schedules=[],scheduleMembers=[],scheduleItems=[],extras=[],extraWorkers=[],attachments=[];
+let session=null,profile=null,profiles=[],managedUsers=[],stores=[],interventions=[],schedules=[],scheduleMembers=[],scheduleItems=[],extras=[],extraWorkers=[],interventionWorkers=[],attachments=[];
 let storeFilter='all',scheduleWorkerFilter='all',scheduleDateFilter='all';
 let loadAllPromise=null,currentHistoryStoreId=null;
 
@@ -117,21 +117,21 @@ function openDialog(id){$(id)?.showModal()}
 function closeDialog(d){d.closest('dialog')?.close()}
 function status(s){const n=days(s.ultimo_passaggio),lim=s.intervallo_giorni||15;if(n===null||n>lim)return'due';if(n>=lim-3)return'warning';return'ok'}
 let currentView='dashboard';
-function setView(name){currentView=name;document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');$('pageTitle').textContent={dashboard:'Dashboard',stores:'Punti vendita',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',settings:'Impostazioni'}[name];if(name==='dashboard')renderDashboard();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='settings'){ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();}}
+function setView(name){currentView=name;document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');$('pageTitle').textContent={dashboard:'Dashboard',stores:'Punti vendita',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report giornaliero',settings:'Impostazioni'}[name];if(name==='dashboard')renderDashboard();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='reports')renderDailyReport();if(name==='settings'){ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();}}
 async function signIn(email,password){const {error}=await sb.auth.signInWithPassword({email,password});if(error)throw error;}
 async function signOut(){await sb.auth.signOut();location.reload()}
 async function loadAll(){
   if(loadAllPromise)return loadAllPromise;
   loadAllPromise=(async()=>{
-  const [p,s,i,sch,sm,si,e,ew,a]=await Promise.all([
-    sb.from('profiles').select('*').order('nome'),sb.from('stores').select('*').eq('attivo',true),sb.from('interventions').select('*').order('created_at',{ascending:false}),sb.from('schedules').select('*').order('giorno'),sb.from('schedule_members').select('*'),sb.from('schedule_items').select('*').order('posizione'),sb.from('extras').select('*').order('giorno_intervento'),sb.from('extra_workers').select('*'),sb.from('attachments').select('*').order('created_at',{ascending:false})
+  const [p,s,i,sch,sm,si,e,ew,iw,a]=await Promise.all([
+    sb.from('profiles').select('*').order('nome'),sb.from('stores').select('*').eq('attivo',true),sb.from('interventions').select('*').order('created_at',{ascending:false}),sb.from('schedules').select('*').order('giorno'),sb.from('schedule_members').select('*'),sb.from('schedule_items').select('*').order('posizione'),sb.from('extras').select('*').order('giorno_intervento'),sb.from('extra_workers').select('*'),sb.from('intervention_workers').select('*'),sb.from('attachments').select('*').order('created_at',{ascending:false})
   ]);
-  for(const r of [p,s,i,sch,sm,si,e,ew,a])if(r.error)throw r.error;
-  profiles=p.data;stores=s.data;interventions=i.data;schedules=sch.data;scheduleMembers=sm.data;scheduleItems=si.data;extras=e.data;extraWorkers=ew.data;attachments=a.data;
+  for(const r of [p,s,i,sch,sm,si,e,ew,iw,a])if(r.error)throw r.error;
+  profiles=p.data;stores=s.data;interventions=i.data;schedules=sch.data;scheduleMembers=sm.data;scheduleItems=si.data;extras=e.data;extraWorkers=ew.data;interventionWorkers=iw.data;attachments=a.data;
   profile=profiles.find(x=>x.id===session.user.id);if(!profile)throw new Error('Profilo non trovato');
   $('userLabel').textContent=`${profile.nome} · ${admin()?'Amministratore':'Dipendente'}`;$('settingsUser').textContent=`${profile.nome} — ${session.user.email}`;
   document.querySelectorAll('.admin-only').forEach(x=>x.classList.toggle('hidden',!admin()));
-  renderStores();renderWorkers();renderPending();renderScheduleFilters();renderSchedules();renderExtras();renderDashboard();ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();processUploadQueue();
+  renderStores();renderWorkers();renderReportFilters();renderPending();renderScheduleFilters();renderSchedules();renderExtras();renderDashboard();ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();processUploadQueue();
   const lastUpdate=$('syncStatus');if(lastUpdate)lastUpdate.textContent='Ultimo aggiornamento dati: '+new Date().toLocaleTimeString('it-IT');
   })();
   try{return await loadAllPromise}finally{loadAllPromise=null}
@@ -346,6 +346,64 @@ function historyStatusLabel(stato){
   return ({convalidato:'Convalidato',in_attesa:'In attesa',rifiutato:'Rifiutato'})[stato]||stato.replaceAll('_',' ');
 }
 
+
+function reportWorkerNames(kind,id){
+  const rows=kind==='ordinary'?interventionWorkers.filter(w=>w.intervention_id===id):extraWorkers.filter(w=>w.extra_id===id);
+  return rows.map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean);
+}
+function renderReportFilters(){
+  const select=$('reportWorker');if(!select)return;
+  const old=select.value||'all';select.innerHTML='<option value="all">Tutti i dipendenti</option>'+profiles.filter(p=>p.attivo).map(p=>`<option value="${p.id}">${esc(p.nome)}</option>`).join('');
+  select.value=[...select.options].some(o=>o.value===old)?old:'all';
+  if(!$('reportDate').value)$('reportDate').value=today();
+}
+function reportStatusLabel(stato){return ({convalidato:'Convalidato',in_attesa:'In attesa',rifiutato:'Rifiutato',completato:'Completato',programmato:'Programmato'})[stato]||String(stato||'').replaceAll('_',' ')}
+function dailyReportData(){
+  const date=$('reportDate')?.value||today(),type=$('reportType')?.value||'all',worker=$('reportWorker')?.value||'all';
+  let ordinary=interventions.filter(i=>i.data_intervento===date);
+  let extra=extras.filter(e=>e.giorno_intervento===date&&['in_attesa','completato'].includes(e.stato));
+  if(worker!=='all'){
+    ordinary=ordinary.filter(i=>interventionWorkers.some(w=>w.intervention_id===i.id&&w.profile_id===worker));
+    extra=extra.filter(e=>extraWorkers.some(w=>w.extra_id===e.id&&w.profile_id===worker));
+  }
+  if(type==='ordinary')extra=[];if(type==='extra')ordinary=[];
+  return {date,ordinary,extra};
+}
+function buildDailyReportText(data=dailyReportData()){
+  const allWorkers=new Set();data.ordinary.forEach(i=>reportWorkerNames('ordinary',i.id).forEach(n=>allWorkers.add(n)));data.extra.forEach(e=>reportWorkerNames('extra',e.id).forEach(n=>allWorkers.add(n)));
+  const pending=data.ordinary.filter(i=>i.stato==='in_attesa').length+data.extra.filter(e=>e.stato==='in_attesa').length;
+  const validated=data.ordinary.filter(i=>i.stato==='convalidato').length+data.extra.filter(e=>e.stato==='completato').length;
+  const lines=[`REPORT OVERGREEN · ${fmt(data.date)}`,`${data.ordinary.length} interventi ordinari · ${data.extra.length} extra`,`${validated} convalidati/completati · ${pending} in attesa`,`Operatori: ${[...allWorkers].join(', ')||'non indicati'}`];
+  if(data.ordinary.length){lines.push('', 'INTERVENTI ORDINARI');data.ordinary.forEach(i=>{const st=stores.find(s=>s.id===i.store_id);lines.push(`• ${st?.nome||'Punto vendita'} — ${reportWorkerNames('ordinary',i.id).join(', ')||'operatore non indicato'} — ${reportStatusLabel(i.stato)}`)})}
+  if(data.extra.length){lines.push('', 'LAVORI EXTRA');data.extra.forEach(e=>{const st=stores.find(s=>s.id===e.store_id);lines.push(`• ${e.titolo} · ${st?.nome||e.nome_esterno||'Luogo non indicato'} — ${reportWorkerNames('extra',e.id).join(', ')||'operatore non indicato'} — ${reportStatusLabel(e.stato)}`)})}
+  return lines.join('\n');
+}
+async function shareDailyReport(){
+  const text=buildDailyReportText();
+  try{if(navigator.share)await navigator.share({title:'Report giornaliero Overgreen',text});else{await navigator.clipboard.writeText(text);toast('Riepilogo copiato')}}catch(err){if(err?.name!=='AbortError')alert('Condivisione non riuscita: '+err.message)}
+}
+function renderDailyReport(){
+  if(!admin())return setView('dashboard');renderReportFilters();
+  const data=dailyReportData(),all=[...data.ordinary.map(x=>({kind:'ordinary',row:x})),...data.extra.map(x=>({kind:'extra',row:x}))];
+  const workerIds=new Set();data.ordinary.forEach(i=>interventionWorkers.filter(w=>w.intervention_id===i.id).forEach(w=>workerIds.add(w.profile_id)));data.extra.forEach(e=>extraWorkers.filter(w=>w.extra_id===e.id).forEach(w=>workerIds.add(w.profile_id)));
+  const photoCount=attachments.filter(a=>a.tipo==='foto_generica'&&((a.intervention_id&&data.ordinary.some(i=>i.id===a.intervention_id))||(a.extra_id&&data.extra.some(e=>e.id===a.extra_id)))).length;
+  const docCount=attachments.filter(a=>a.tipo!=='foto_generica'&&a.extra_id&&data.extra.some(e=>e.id===a.extra_id)).length;
+  const pending=all.filter(x=>x.row.stato==='in_attesa').length,done=data.ordinary.filter(i=>i.stato==='convalidato').length+data.extra.filter(e=>e.stato==='completato').length;
+  $('reportSummary').innerHTML=`<div class="report-kpi"><strong>${all.length}</strong><span>Lavori totali</span></div><div class="report-kpi"><strong>${data.ordinary.length}</strong><span>Ordinari</span></div><div class="report-kpi"><strong>${data.extra.length}</strong><span>Extra</span></div><div class="report-kpi"><strong>${done}</strong><span>Completati</span></div><div class="report-kpi"><strong>${pending}</strong><span>In attesa</span></div><div class="report-kpi"><strong>${workerIds.size}</strong><span>Operatori</span></div><div class="report-kpi"><strong>${photoCount}</strong><span>Foto</span></div><div class="report-kpi"><strong>${docCount}</strong><span>Documenti</span></div>`;
+  const list=$('reportList');list.innerHTML='';if(!all.length){list.innerHTML='<section class="panel report-empty"><strong>Nessun lavoro trovato</strong><p class="muted">Non risultano attività concluse per questa data con i filtri selezionati.</p></section>';return}
+  for(const item of all){
+    const r=item.row,isOrd=item.kind==='ordinary',st=isOrd?stores.find(s=>s.id===r.store_id):stores.find(s=>s.id===r.store_id),names=reportWorkerNames(item.kind,r.id);
+    const pics=attachments.filter(a=>a.tipo==='foto_generica'&&(isOrd?a.intervention_id===r.id:a.extra_id===r.id));
+    const docs=isOrd?[]:attachments.filter(a=>a.extra_id===r.id&&a.tipo!=='foto_generica');
+    const title=isOrd?(st?.nome||'Punto vendita'):r.titolo,place=isOrd?(st?.indirizzo||st?.citta||''):(st?.nome||r.nome_esterno||r.indirizzo_esterno||'');
+    const c=document.createElement('article');c.className='card daily-report-card';c.innerHTML=`<div class="daily-report-head"><div><span class="report-kind">${isOrd?'INTERVENTO ORDINARIO':'LAVORO EXTRA'}</span><h3>${esc(title)}</h3><p class="muted">${esc(place)}</p></div><span class="badge-state">${esc(reportStatusLabel(r.stato))}</span></div><div class="report-meta"><span>👤 ${esc(names.join(' · ')||'Operatore non indicato')}</span><span>📷 ${pics.length}</span>${docs.length?`<span>📄 ${docs.length}</span>`:''}</div><div class="report-note"><strong>Note</strong><p>${esc((isOrd?r.note:(r.note_lorenzo||r.descrizione))||'Nessuna nota')}</p></div><div class="report-photo-grid"></div><div class="actions report-actions">${st?'<button class="secondary" data-store>Scheda punto vendita</button>':''}${docs.map(a=>`<button class="secondary" data-doc="${a.id}">${esc(attachmentLabel(a))}</button>`).join('')}</div>`;
+    c.querySelector('[data-store]')?.addEventListener('click',()=>openStoreDetail(st));
+    c.querySelectorAll('[data-doc]').forEach(b=>b.onclick=()=>openAttachment(attachments.find(a=>a.id===b.dataset.doc)));
+    const gallery=c.querySelector('.report-photo-grid');for(const a of pics){const b=document.createElement('button');b.type='button';b.className='report-photo';b.innerHTML='<span>📷</span>';gallery.appendChild(b);signedAttachmentUrl(a).then(url=>{b.innerHTML=`<img src="${url}" alt="${esc(a.nome_file||'Foto')}" loading="lazy">`;b.onclick=()=>window.open(url,'_blank')}).catch(()=>b.onclick=()=>openArchiveAttachment(a))}
+    if(!pics.length)gallery.remove();list.appendChild(c);
+  }
+}
+
 function renderStores(){
  const q=$('searchInput').value.trim().toLowerCase(),sort=$('sortSelect').value;
  let list=stores.filter(s=>`${s.nome} ${s.citta||''} ${s.indirizzo||''}`.toLowerCase().includes(q));
@@ -466,6 +524,7 @@ const helpPages={
   dashboard:{title:'Come usare la Dashboard',html:`<p>Questa schermata riassume il lavoro dell’azienda.</p><ul><li>Il dipendente vede separatamente i lavori assegnati per oggi e quelli dei prossimi giorni.</li><li>Tocca i riquadri in alto per vedere lavori di oggi, convalide e punti vendita scaduti.</li><li>Usa <strong>Ricerca globale</strong> per trovare punti vendita, extra o dipendenti.</li><li>Premi <strong>Aggiorna</strong> per scaricare manualmente i dati più recenti.</li></ul>`},
   stores:{title:'Come usare Punti vendita',html:`<p>Qui trovi l’anagrafica di tutti i punti vendita.</p><ul><li>Usa i contatori per filtrare scaduti, in scadenza o fatti oggi.</li><li>Tocca un punto vendita per aprire scheda, storico, note, foto e planimetrie.</li><li>Lorenzo può aggiungere o modificare i punti vendita.</li><li>Il pulsante <strong>Maps</strong> apre la navigazione verso l’indirizzo salvato.</li></ul>`},
   schedule:{title:'Come usare la Programmazione',html:`<p>Qui vengono mostrati soltanto i lavori ancora da eseguire.</p><ul><li>Lorenzo può creare una programmazione scegliendo data, squadra e punti vendita, e aggiungerne altri in seguito con <strong>Aggiungi punti vendita</strong>.</li><li>Le frecce <strong>↑ ↓</strong> cambiano l’ordine di esecuzione del dipendente.</li><li>Il pulsante <strong>Elimina</strong> rimuove un singolo punto vendita programmato, dopo conferma.</li><li><strong>Duplica</strong> copia una programmazione su un’altra data.</li><li>Il dipendente preme <strong>Eseguito</strong> per chiudere il lavoro e allegare le foto.</li></ul>`},
+  reports:{title:'Come usare i Report',html:`<p>Seleziona una data per ricostruire tutta la giornata.</p><ul><li>Il riepilogo mostra interventi ordinari, extra, convalide, operatori, foto e documenti.</li><li>Puoi filtrare per tipologia e dipendente.</li><li>Apri foto, rapportini e schede dei punti vendita direttamente dal report.</li><li>Premi <strong>Condividi riepilogo</strong> per inviarlo su WhatsApp o copiarlo.</li></ul>`},
   extras:{title:'Come usare gli Extra',html:`<p>Gli extra sono separati tra aperti ed eseguiti.</p><ul><li>Lorenzo crea l’extra, assegna la squadra e allega il PDF della richiesta.</li><li>Il dipendente chiude il lavoro caricando i file Eurospin e Overgreen.</li><li>Lorenzo convalida l’extra e può successivamente modificarlo o eliminarlo.</li></ul>`},
   settings:{title:'Come usare le Impostazioni',html:`<p>Da questa schermata puoi gestire l’app e il tuo account.</p><ul><li><strong>Aggiorna dati</strong> scarica manualmente le informazioni più recenti.</li><li>Lorenzo può creare, modificare o disattivare gli utenti.</li><li><strong>Esci</strong> termina l’accesso sul dispositivo.</li></ul>`}
 };
@@ -665,6 +724,9 @@ $('closeExtraForm').onsubmit=async e=>{
 
 function isRecoverableJwtError(err){const m=String(err?.message||err||'').toLowerCase();return m.includes('jwt issued at future')||m.includes('jwt expired')||m.includes('invalid refresh token')||m.includes('refresh token not found')}
 async function resetBrokenSession(){try{await sb.auth.signOut({scope:'local'})}catch{};localStorage.removeItem('sb-'+new URL(cfg.supabaseUrl).hostname.split('.')[0]+'-auth-token');sessionStorage.clear();session=null;$('app').classList.add('hidden');$('loginScreen').classList.remove('hidden');const box=$('loginError');if(box){box.textContent='La sessione era scaduta o non valida. Accedi di nuovo.';box.classList.remove('hidden')}}
+
+$('reportDate')?.addEventListener('change',renderDailyReport);$('reportType')?.addEventListener('change',renderDailyReport);$('reportWorker')?.addEventListener('change',renderDailyReport);$('reportRefresh')?.addEventListener('click',async()=>{await loadAll();renderDailyReport();toast('Report aggiornato')});$('shareDailyReport')?.addEventListener('click',shareDailyReport);
+
 sb.auth.onAuthStateChange(async(_event,s)=>{session=s;if(!s){$('loginScreen').classList.remove('hidden');$('app').classList.add('hidden');return}$('loginScreen').classList.add('hidden');$('app').classList.remove('hidden');try{await loadAll();setView('dashboard')}catch(err){console.error(err);if(isRecoverableJwtError(err))return resetBrokenSession();alert('Errore collegamento: '+err.message)}});
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(console.error));

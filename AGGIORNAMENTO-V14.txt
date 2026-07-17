@@ -1,0 +1,7 @@
+OVERGREEN CLOUD V14
+
+- I lavori completati non compaiono più nella Programmazione.
+- Extra divisi in Extra aperti ed Extra eseguiti.
+- Gli extra eseguiti possono essere modificati ed eliminati da Lorenzo.
+- Il pulsante Maps usa un solo collegamento e non riapre il navigatore al ritorno.
+- Stato della programmazione mostrato separato e più leggibile.

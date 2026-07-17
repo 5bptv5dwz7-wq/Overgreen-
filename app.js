@@ -125,11 +125,8 @@ async function loadAll(){
 
 function openAppleMaps(address,name=''){
   const query=encodeURIComponent(address||name||'');
-  const appUrl=`maps://?q=${query}`;
-  const webUrl=`https://maps.apple.com/?q=${query}`;
-  const started=Date.now();
-  window.location.href=appUrl;
-  setTimeout(()=>{if(Date.now()-started<1800)window.location.href=webUrl},900);
+  // Un solo collegamento: su iPhone apre Maps senza un secondo reindirizzamento al ritorno.
+  window.location.href=`https://maps.apple.com/?q=${query}`;
 }
 function historyStatusLabel(stato){
   return ({convalidato:'Convalidato',in_attesa:'In attesa',rifiutato:'Rifiutato'})[stato]||stato.replaceAll('_',' ');
@@ -201,9 +198,68 @@ function renderPending(){const p=interventions.filter(i=>i.stato==='in_attesa');
 async function approveIntervention(i){const {error}=await sb.from('interventions').update({stato:'convalidato',convalidato_da:profile.id,convalidato_il:new Date().toISOString()}).eq('id',i.id);if(error)return alert(error.message);const {error:e2}=await sb.from('stores').update({ultimo_passaggio:i.data_intervento}).eq('id',i.store_id);if(e2)return alert(e2.message);if(i.schedule_item_id)await sb.from('schedule_items').update({stato:'completato'}).eq('id',i.schedule_item_id);toast('Intervento convalidato');await loadAll()}
 async function rejectIntervention(i){const reason=prompt('Motivo del rifiuto','')||'';const {error}=await sb.from('interventions').update({stato:'rifiutato',motivo_rifiuto:reason,convalidato_da:profile.id,convalidato_il:new Date().toISOString()}).eq('id',i.id);if(error)return alert(error.message);if(i.schedule_item_id)await sb.from('schedule_items').update({stato:'da_fare'}).eq('id',i.schedule_item_id);toast('Intervento rifiutato');await loadAll()}
 function visibleSchedules(){return admin()?schedules:schedules.filter(s=>scheduleMembers.some(m=>m.schedule_id===s.id&&m.profile_id===profile.id))}
-function renderSchedules(){$('scheduleTitle').textContent=admin()?'Programmazioni':'I miei lavori';$('scheduleList').innerHTML='';for(const s of visibleSchedules()){const members=scheduleMembers.filter(m=>m.schedule_id===s.id).map(m=>profiles.find(p=>p.id===m.profile_id)?.nome).filter(Boolean);const items=scheduleItems.filter(i=>i.schedule_id===s.id);const c=document.createElement('article');c.className='card';c.innerHTML=`<h3>${fmt(s.giorno)}</h3><p class="muted">${esc(members.join(' + '))}</p><p>${esc(s.nota_generale||'')}</p>`;for(const item of items){if(item.tipo==='ordinario'){const st=stores.find(x=>x.id===item.store_id);const r=document.createElement('div');r.className=`schedule-item ${item.stato}`;r.innerHTML=`<strong>${esc(st?.nome||'Punto vendita')}</strong><small>${esc(item.stato.replaceAll('_',' '))}</small><div class="actions"><button class="secondary" data-map>Maps</button>${item.stato==='da_fare'?'<button data-done>Eseguito</button>':''}</div>`;r.querySelector('[data-map]').onclick=()=>openAppleMaps(st?.indirizzo,'Eurospin '+(st?.nome||''));r.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,item.id));c.appendChild(r)}}$('scheduleList').appendChild(c)}}
+function renderSchedules(){
+  $('scheduleTitle').textContent=admin()?'Programmazioni':'I miei lavori';
+  $('scheduleList').innerHTML='';
+  for(const s of visibleSchedules()){
+    const items=scheduleItems.filter(i=>i.schedule_id===s.id&&i.stato!=='completato');
+    if(!items.length)continue;
+    const members=scheduleMembers.filter(m=>m.schedule_id===s.id).map(m=>profiles.find(p=>p.id===m.profile_id)?.nome).filter(Boolean);
+    const c=document.createElement('article');c.className='card';
+    c.innerHTML=`<h3>${fmt(s.giorno)}</h3><p class="muted">${esc(members.join(' + '))}</p><p>${esc(s.nota_generale||'')}</p>`;
+    for(const item of items){if(item.tipo==='ordinario'){
+      const st=stores.find(x=>x.id===item.store_id),r=document.createElement('div');
+      r.className=`schedule-item ${item.stato}`;
+      const stato=item.stato==='in_attesa'?'In attesa di convalida':'Da fare';
+      r.innerHTML=`<strong>${esc(st?.nome||'Punto vendita')}</strong><small>${stato}</small><div class="actions"><button class="secondary" data-map>Maps</button>${item.stato==='da_fare'?'<button data-done>Eseguito</button>':''}</div>`;
+      r.querySelector('[data-map]').onclick=()=>openAppleMaps(st?.indirizzo,'Eurospin '+(st?.nome||''));
+      r.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,item.id));c.appendChild(r)
+    }}
+    $('scheduleList').appendChild(c)
+  }
+}
 function renderSchedulePicker(){const q=$('scheduleSearch').value.toLowerCase(),w=$('scheduleStores');const selected=new Set([...w.querySelectorAll('input:checked')].map(x=>x.value));w.innerHTML='';stores.filter(s=>s.nome.toLowerCase().includes(q)).sort((a,b)=>(days(b.ultimo_passaggio)??9999)-(days(a.ultimo_passaggio)??9999)).forEach(s=>{const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${s.id}" ${selected.has(s.id)?'checked':''}><span><strong>${esc(s.nome)}</strong><br><small>${days(s.ultimo_passaggio)??'—'} giorni · ultimo ${fmt(s.ultimo_passaggio)}</small></span>`;w.appendChild(l)})}
-function renderExtras(){$('extrasList').innerHTML='';const visible=admin()?extras:extras.filter(e=>extraWorkers.some(w=>w.extra_id===e.id&&w.profile_id===profile.id));for(const e of visible){const st=stores.find(s=>s.id===e.store_id),pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta'),reportEurospin=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),reportOvergreen=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen');const showReports=admin()&&['in_attesa','completato'].includes(e.stato);const c=document.createElement('article');c.className=`card extra-card ${e.stato}`;c.innerHTML=`<h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3><p><strong>${esc(e.titolo)}</strong></p><p>${esc(e.descrizione||'')}</p><p class="muted">${fmt(e.giorno_intervento)} · ${esc(e.stato.replaceAll('_',' '))}</p><div class="actions">${pdf?'<button class="secondary" data-pdf>Apri PDF richiesta</button>':''}${showReports&&reportEurospin?'<button class="secondary" data-report-eurospin>File Eurospin</button>':''}${showReports&&reportOvergreen?'<button class="secondary" data-report-overgreen>File Overgreen</button>':''}${showReports&&!reportEurospin?'<span class="muted">File Eurospin non presente</span>':''}${showReports&&!reportOvergreen?'<span class="muted">File Overgreen non presente</span>':''}${!admin()&&['programmato','ricevuto','da_integrare'].includes(e.stato)?'<button data-close-extra>Chiudi lavoro</button>':''}${admin()&&e.stato==='in_attesa'?'<button data-approve-extra>Convalida</button>':''}</div>`;c.querySelector('[data-pdf]')?.addEventListener('click',()=>openAttachment(pdf));c.querySelector('[data-report-eurospin]')?.addEventListener('click',()=>openAttachment(reportEurospin));c.querySelector('[data-report-overgreen]')?.addEventListener('click',()=>openAttachment(reportOvergreen));c.querySelector('[data-close-extra]')?.addEventListener('click',()=>{$('closeExtraId').value=e.id;openDialog('closeExtraDialog')});c.querySelector('[data-approve-extra]')?.addEventListener('click',()=>approveExtra(e));$('extrasList').appendChild(c)}}
+function extraCard(e){
+  const st=stores.find(s=>s.id===e.store_id),pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta'),reportEurospin=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),reportOvergreen=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen');
+  const showReports=admin()&&['in_attesa','completato'].includes(e.stato),c=document.createElement('article');
+  c.className=`card extra-card ${e.stato}`;
+  c.innerHTML=`<h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3><p><strong>${esc(e.titolo)}</strong></p><p>${esc(e.descrizione||'')}</p><p class="muted">${fmt(e.giorno_intervento)} · ${esc(e.stato.replaceAll('_',' '))}</p><div class="actions">${pdf?'<button class="secondary" data-pdf>Apri PDF richiesta</button>':''}${showReports&&reportEurospin?'<button class="secondary" data-report-eurospin>File Eurospin</button>':''}${showReports&&reportOvergreen?'<button class="secondary" data-report-overgreen>File Overgreen</button>':''}${showReports&&!reportEurospin?'<span class="muted">File Eurospin non presente</span>':''}${showReports&&!reportOvergreen?'<span class="muted">File Overgreen non presente</span>':''}${!admin()&&['programmato','ricevuto','da_integrare'].includes(e.stato)?'<button data-close-extra>Chiudi lavoro</button>':''}${admin()&&e.stato==='in_attesa'?'<button data-approve-extra>Convalida</button>':''}${admin()&&e.stato==='completato'?'<button class="secondary" data-edit-extra>Modifica</button><button class="danger-btn" data-delete-extra>Elimina</button>':''}</div>`;
+  c.querySelector('[data-pdf]')?.addEventListener('click',()=>openAttachment(pdf));
+  c.querySelector('[data-report-eurospin]')?.addEventListener('click',()=>openAttachment(reportEurospin));
+  c.querySelector('[data-report-overgreen]')?.addEventListener('click',()=>openAttachment(reportOvergreen));
+  c.querySelector('[data-close-extra]')?.addEventListener('click',()=>{$('closeExtraId').value=e.id;openDialog('closeExtraDialog')});
+  c.querySelector('[data-approve-extra]')?.addEventListener('click',()=>approveExtra(e));
+  c.querySelector('[data-edit-extra]')?.addEventListener('click',()=>openExtraEdit(e));
+  c.querySelector('[data-delete-extra]')?.addEventListener('click',()=>deleteExtra(e));
+  return c;
+}
+function renderExtras(){
+  const root=$('extrasList');root.innerHTML='';
+  const visible=admin()?extras:extras.filter(e=>extraWorkers.some(w=>w.extra_id===e.id&&w.profile_id===profile.id));
+  const open=visible.filter(e=>e.stato!=='completato'),done=visible.filter(e=>e.stato==='completato');
+  const addSection=(title,list,empty)=>{const h=document.createElement('h2');h.className='extra-section-title';h.textContent=title;root.appendChild(h);if(!list.length){const p=document.createElement('p');p.className='muted extra-empty';p.textContent=empty;root.appendChild(p)}else list.forEach(e=>root.appendChild(extraCard(e)))};
+  addSection('Extra aperti',open,'Nessun extra aperto.');
+  addSection('Extra eseguiti',done,'Nessun extra eseguito.');
+}
+function openExtraEdit(e){
+  $('extraEditId').value=e.id;$('extraEditTitle').value=e.titolo||'';$('extraEditDescription').value=e.descrizione||'';$('extraEditDate').value=e.giorno_intervento||'';
+  const external=!e.store_id;$('extraEditDestination').value=external?'external':'store';renderExtraEditStoreOptions(e.store_id);$('extraEditExternalName').value=e.nome_esterno||'';$('extraEditExternalAddress').value=e.indirizzo_esterno||'';toggleExtraEditDestination();
+  $('extraEditWorkers').innerHTML=profiles.filter(p=>p.attivo).map(p=>`<label><input type="checkbox" value="${p.id}"><span>${esc(p.nome)}</span></label>`).join('');
+  const ids=new Set(extraWorkers.filter(w=>w.extra_id===e.id).map(w=>w.profile_id));$('extraEditWorkers').querySelectorAll('input').forEach(x=>x.checked=ids.has(x.value));$('extraEditPdf').value='';openDialog('extraEditDialog');
+}
+function renderExtraEditStoreOptions(selected){$('extraEditStore').innerHTML=stores.map(s=>`<option value="${s.id}" ${s.id===selected?'selected':''}>${esc(s.nome)}</option>`).join('')}
+function toggleExtraEditDestination(){const ext=$('extraEditDestination').value==='external';$('extraEditStoreWrap').classList.toggle('hidden',ext);$('extraEditExternalWrap').classList.toggle('hidden',!ext)}
+async function deleteExtra(e){
+  if(!confirm(`Eliminare definitivamente l'extra “${e.titolo}”?
+
+Verranno eliminati anche tutti i file allegati.`))return;
+  const linked=attachments.filter(a=>a.extra_id===e.id),paths=linked.map(a=>a.storage_path).filter(Boolean);
+  if(paths.length){const r=await sb.storage.from('documenti').remove(paths);if(r.error)return alert(r.error.message)}
+  let r=await sb.from('attachments').delete().eq('extra_id',e.id);if(r.error)return alert(r.error.message);
+  r=await sb.from('extra_workers').delete().eq('extra_id',e.id);if(r.error)return alert(r.error.message);
+  r=await sb.from('extras').delete().eq('id',e.id);if(r.error)return alert(r.error.message);
+  toast('Extra eliminato');await loadAll();
+}
 async function openAttachment(a){const {data,error}=await sb.storage.from('documenti').createSignedUrl(a.storage_path,300);if(error)return alert(error.message);window.open(data.signedUrl,'_blank')}
 async function approveExtra(e){const {error}=await sb.from('extras').update({stato:'completato',convalidato_da:profile.id,convalidato_il:new Date().toISOString()}).eq('id',e.id);if(error)return alert(error.message);toast('Extra convalidato');await loadAll()}
 async function seedStores(){if(!admin())return;if(stores.length&&!confirm(`Sono già presenti ${stores.length} punti vendita. Continuare?`))return;const rows=SEED_STORES.filter(x=>!stores.some(s=>s.nome===x.name)).map(x=>({nome:x.name,ultimo_passaggio:x.lastDone,intervallo_giorni:15,attivo:true}));if(!rows.length)return toast('Nessun punto vendita da importare');const {error}=await sb.from('stores').insert(rows);if(error)return alert(error.message);toast(`${rows.length} punti vendita importati`);await loadAll()}
@@ -220,6 +276,18 @@ $('scheduleForm').onsubmit=async e=>{e.preventDefault();const members=[...$('sch
 function renderExtraStoreOptions(){$('extraStore').innerHTML=stores.map(s=>`<option value="${s.id}">${esc(s.nome)}</option>`).join('')}
 $('extraDestination').onchange=()=>{const ext=$('extraDestination').value==='external';$('extraStoreWrap').classList.toggle('hidden',ext);$('extraExternalWrap').classList.toggle('hidden',!ext)};
 $('extraForm').onsubmit=async e=>{e.preventDefault();const workers=[...$('extraWorkers').querySelectorAll('input:checked')].map(x=>x.value),external=$('extraDestination').value==='external',pdf=$('extraPdf').files[0];if(!workers.length||!pdf)return alert('Seleziona dipendenti e PDF.');const payload={store_id:external?null:$('extraStore').value,nome_esterno:external?$('extraExternalName').value.trim():null,indirizzo_esterno:external?$('extraExternalAddress').value.trim():null,titolo:$('extraTitle').value.trim(),descrizione:$('extraDescription').value.trim()||null,giorno_intervento:$('extraDate').value,note_lorenzo:null,stato:'programmato',creato_da:profile.id};const {data,error}=await sb.from('extras').insert(payload).select().single();if(error)return alert(error.message);let r=await sb.from('extra_workers').insert(workers.map(profile_id=>({extra_id:data.id,profile_id})));if(r.error)return alert(r.error.message);const path=`extra/${data.id}/richiesta-${Date.now()}.pdf`;try{await uploadFile(path,pdf);await addAttachment({tipo:'pdf_richiesta',extra_id:data.id,storage_path:path,nome_file:pdf.name,mime_type:pdf.type,dimensione_bytes:pdf.size,caricato_da:profile.id})}catch(err){return alert('Extra creato, ma PDF non caricato: '+err.message)}$('extraDialog').close();toast('Extra creato');await loadAll()};
+$('extraEditDestination').onchange=toggleExtraEditDestination;
+$('extraEditForm').onsubmit=async e=>{
+  e.preventDefault();if(!admin())return;
+  const id=$('extraEditId').value,workers=[...$('extraEditWorkers').querySelectorAll('input:checked')].map(x=>x.value),external=$('extraEditDestination').value==='external';
+  if(!workers.length)return alert('Seleziona almeno un dipendente.');
+  const payload={store_id:external?null:$('extraEditStore').value,nome_esterno:external?$('extraEditExternalName').value.trim():null,indirizzo_esterno:external?$('extraEditExternalAddress').value.trim():null,titolo:$('extraEditTitle').value.trim(),descrizione:$('extraEditDescription').value.trim()||null,giorno_intervento:$('extraEditDate').value};
+  let r=await sb.from('extras').update(payload).eq('id',id);if(r.error)return alert(r.error.message);
+  r=await sb.from('extra_workers').delete().eq('extra_id',id);if(r.error)return alert(r.error.message);
+  r=await sb.from('extra_workers').insert(workers.map(profile_id=>({extra_id:id,profile_id})));if(r.error)return alert(r.error.message);
+  const pdf=$('extraEditPdf').files[0];if(pdf){const old=attachments.find(a=>a.extra_id===id&&a.tipo==='pdf_richiesta');if(old){await sb.storage.from('documenti').remove([old.storage_path]);await sb.from('attachments').delete().eq('id',old.id)}const path=`extra/${id}/richiesta-${Date.now()}.pdf`;try{await uploadFile(path,pdf);await addAttachment({tipo:'pdf_richiesta',extra_id:id,storage_path:path,nome_file:pdf.name,mime_type:pdf.type,dimensione_bytes:pdf.size,caricato_da:profile.id})}catch(err){return alert('Dati salvati, ma nuovo PDF non caricato: '+err.message)}}
+  $('extraEditDialog').close();toast('Extra aggiornato');await loadAll();
+};
 $('closeExtraForm').onsubmit=async e=>{e.preventDefault();const id=$('closeExtraId').value,files=[['rapportino_eurospin',$('reportEurospin').files[0]],['rapportino_overgreen',$('reportOvergreen').files[0]]];for(const [tipo,file] of files){if(!file)return alert('Servono entrambi i rapportini.');const path=`extra/${id}/${tipo}-${Date.now()}-${file.name}`;try{await uploadFile(path,file);await addAttachment({tipo,extra_id:id,storage_path:path,nome_file:file.name,mime_type:file.type,dimensione_bytes:file.size,caricato_da:profile.id})}catch(err){return alert(err.message)}}const {error}=await sb.from('extras').update({stato:'in_attesa'}).eq('id',id);if(error)return alert(error.message);$('closeExtraDialog').close();toast('Extra inviato a Lorenzo');await loadAll()};
 
 sb.auth.onAuthStateChange(async(_event,s)=>{session=s;if(!s){$('loginScreen').classList.remove('hidden');$('app').classList.add('hidden');return}$('loginScreen').classList.add('hidden');$('app').classList.remove('hidden');try{await loadAll();setView('stores')}catch(err){alert('Errore collegamento: '+err.message)}});

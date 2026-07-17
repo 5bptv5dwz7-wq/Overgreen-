@@ -39,3 +39,8 @@
 /* v11 - impostazioni e gestione utenti */
 #cloudAccountSettings{margin-top:18px}.settings-card{background:#fff;border:1px solid var(--line);border-radius:24px;padding:22px;margin-bottom:18px;box-shadow:0 8px 26px rgba(7,91,49,.06)}.settings-section-head h3{font-size:1.35rem;margin:0 0 6px}.settings-section-head p{margin:0 0 18px;color:var(--muted);line-height:1.4}.settings-form{display:grid;gap:11px}.settings-form input,.settings-form select{width:100%}.cloud-account-settings h4{font-size:1.2rem;margin:18px 0 8px}.employee-list{margin:6px 0 18px}.employee-main small{line-height:1.35}.employee-actions button{min-height:40px}.settings-card .error{display:block}.settings-card button{font-weight:750}
 @media(max-width:560px){#cloudAccountSettings{margin-top:14px}.settings-card{padding:18px;border-radius:20px}.employee-actions{display:grid;grid-template-columns:1fr 1fr;width:100%}.employee-actions button{width:100%}}
+
+.extra-section-title{margin:24px 4px 10px;font-size:1.25rem;color:var(--ink,#173d2b)}
+.extra-section-title:first-child{margin-top:8px}
+.extra-empty{margin:0 4px 18px;padding:12px 0}
+.schedule-item small{display:block;margin-top:4px;text-transform:capitalize}

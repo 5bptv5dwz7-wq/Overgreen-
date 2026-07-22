@@ -80,11 +80,34 @@ function ensureCloudSettingsUi(){
   <form id="selfPasswordForm" class="settings-form"><input id="selfNewPassword" type="password" minlength="8" placeholder="Nuova password" required><button type="submit">Cambia la mia password</button></form>
   <div id="adminUsersArea" class="admin-only"><hr><h4>👥 Dipendenti</h4><div id="cloudEmployeeList" class="employee-list"></div>
   <form id="cloudAddEmployeeForm" class="settings-form"><input id="cloudEmployeeName" placeholder="Nome" required><input id="cloudEmployeeEmail" type="email" placeholder="Email di accesso" required><input id="cloudEmployeePassword" type="password" minlength="8" placeholder="Password iniziale" required><button type="submit">Crea dipendente</button></form></div>`;
+  const usage=document.createElement('section');usage.id='supabaseUsageCard';usage.className='settings-card admin-only';usage.innerHTML=`<div class="settings-section-head"><div><h3>📊 Utilizzo Supabase</h3><p>Spazio occupato dai file e dimensione del database del progetto.</p></div></div><div class="usage-grid"><div class="usage-metric"><span>Storage</span><strong id="usageStorage">—</strong><small id="usageStorageDetail" class="muted">Calcolo in corso…</small></div><div class="usage-metric"><span>Database</span><strong id="usageDatabase">—</strong><small id="usageDatabaseDetail" class="muted">Calcolo in corso…</small></div></div><p id="usageError" class="error hidden"></p><button id="refreshUsageBtn" type="button" class="secondary">Aggiorna utilizzo</button>`;wrap.appendChild(usage);
   const sync=document.createElement('section');sync.className='settings-card';sync.innerHTML=`<h3>☁️ Sincronizzazione</h3><p id="backgroundSyncStatus">Controllo…</p><button id="retryUploadsBtn" type="button" class="secondary">Riprova caricamenti</button>`;wrap.appendChild(sync);
   const badge=document.createElement('button');badge.id='syncFloatingBadge';badge.type='button';badge.className='sync-floating hidden';badge.onclick=()=>{setView?.('settings');};document.body.appendChild(badge);
   $('selfPasswordForm').onsubmit=async e=>{e.preventDefault();const pw=$('selfNewPassword').value;const {error}=await sb.auth.updateUser({password:pw});if(error)return alert(error.message);e.target.reset();toast('Password aggiornata')};
   $('cloudAddEmployeeForm').onsubmit=async e=>{e.preventDefault();const payload={action:'create',nome:$('cloudEmployeeName').value.trim(),email:$('cloudEmployeeEmail').value.trim(),password:$('cloudEmployeePassword').value};const {data,error}=await sb.functions.invoke('manage-user',{body:payload});if(error||data?.error)return alert(data?.error||error.message);e.target.reset();toast('Dipendente creato');await loadAll()};
-  $('retryUploadsBtn').onclick=retryUploads;renderCloudEmployeeList();updateSyncUi();
+  $('retryUploadsBtn').onclick=retryUploads;$('refreshUsageBtn').onclick=loadSupabaseUsage;renderCloudEmployeeList();updateSyncUi();if(admin())loadSupabaseUsage();
+}
+function formatBytes(value){
+  const n=Number(value)||0;if(n<1024)return `${n} B`;const units=['KB','MB','GB','TB'];let v=n/1024,u=0;while(v>=1024&&u<units.length-1){v/=1024;u++}return `${v>=100?v.toFixed(0):v>=10?v.toFixed(1):v.toFixed(2)} ${units[u]}`
+}
+async function loadSupabaseUsage(){
+  if(!admin()||!$('usageStorage'))return;
+  const localStorageBytes=attachments.reduce((sum,a)=>sum+(Number(a.dimensione_bytes)||0),0);
+  $('usageStorage').textContent=formatBytes(localStorageBytes);$('usageStorageDetail').textContent=`${attachments.length} allegati registrati`;
+  $('usageDatabase').textContent='…';$('usageDatabaseDetail').textContent='Lettura dal server…';$('usageError').classList.add('hidden');
+  const btn=$('refreshUsageBtn');if(btn)btn.disabled=true;
+  try{
+    const {data,error}=await sb.functions.invoke('manage-user',{body:{action:'usage'}});
+    if(error||data?.error)throw new Error(data?.error||error.message);
+    const storageBytes=Number(data.storage_bytes);
+    if(Number.isFinite(storageBytes)){ $('usageStorage').textContent=formatBytes(storageBytes);$('usageStorageDetail').textContent=`${Number(data.storage_objects)||attachments.length} file nello Storage`; }
+    const databaseBytes=Number(data.database_bytes);
+    if(Number.isFinite(databaseBytes)){ $('usageDatabase').textContent=formatBytes(databaseBytes);$('usageDatabaseDetail').textContent='Dimensione totale del database'; }
+    else throw new Error('Dimensione database non disponibile');
+  }catch(err){
+    $('usageDatabase').textContent='Non disponibile';$('usageDatabaseDetail').textContent='Installa la funzione SQL inclusa nella cartella supabase/migrations';
+    $('usageError').textContent=err.message;$('usageError').classList.remove('hidden');
+  }finally{if(btn)btn.disabled=false}
 }
 async function renderCloudEmployeeList(){
   const box=$('cloudEmployeeList');if(!box)return;
@@ -118,7 +141,7 @@ function closeDialog(d){d.closest('dialog')?.close()}
 function isStoreProgrammed(storeId){return scheduleItems.some(item=>item.store_id===storeId&&effectiveScheduleState(item)!=='completato'&&schedules.some(s=>s.id===item.schedule_id))}
 function status(s){if(isStoreProgrammed(s.id))return'scheduled';const n=days(s.ultimo_passaggio),lim=s.intervallo_giorni||15;if(n===null||n>lim)return'due';if(n>=lim-3)return'warning';return'ok'}
 let currentView='dashboard';
-function setView(name){currentView=name;document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');$('pageTitle').textContent={dashboard:'Dashboard',stores:'Punti vendita',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report giornaliero',settings:'Impostazioni'}[name];if(name==='dashboard')renderDashboard();if(name==='stores')renderStores();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='reports')renderDailyReport();if(name==='settings'){ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();}}
+function setView(name){currentView=name;document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');$('pageTitle').textContent={dashboard:'Dashboard',stores:'Punti vendita',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report giornaliero',settings:'Impostazioni'}[name];if(name==='dashboard')renderDashboard();if(name==='stores')renderStores();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='reports')renderDailyReport();if(name==='settings'){ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin())loadSupabaseUsage();}}
 async function signIn(email,password){const {error}=await sb.auth.signInWithPassword({email,password});if(error)throw error;}
 async function signOut(){await sb.auth.signOut();location.reload()}
 async function loadAll(){

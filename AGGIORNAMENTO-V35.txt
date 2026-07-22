@@ -1,0 +1,12 @@
+OVERGREEN CLOUD V35 - MONITOR UTILIZZO SUPABASE
+
+- Aggiunto in Impostazioni un riquadro riservato all'amministratore.
+- Visualizza spazio Storage, numero file e dimensione totale database.
+- Lo Storage mostra subito una stima dagli allegati e poi il dato reale dal server.
+- Aggiunta azione `usage` alla Edge Function manage-user.
+- Aggiunta migration SQL: supabase/migrations/20260722_project_usage.sql.
+
+INSTALLAZIONE
+1. Eseguire la migration nel SQL Editor di Supabase.
+2. Ridistribuire la Edge Function manage-user.
+3. Pubblicare i file web aggiornati.

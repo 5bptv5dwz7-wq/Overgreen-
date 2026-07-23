@@ -1,0 +1,10 @@
+OVERGREEN CLOUD V36 — CORREZIONE UTILIZZO SUPABASE
+
+1. La funzione SQL ora somma la dimensione di tutti i database del cluster, in linea con la query indicata dalla documentazione Supabase.
+2. La Edge Function manage-user reale è stata aggiornata aggiungendo soltanto l'azione usage, senza sostituire o alterare le altre azioni.
+3. Lo Storage continua a essere calcolato dai metadati reali dei file. La dashboard Supabase può mostrare un valore arrotondato in MB.
+
+INSTALLAZIONE
+- Eseguire supabase/migrations/20260722_project_usage.sql nel SQL Editor.
+- Pubblicare supabase/functions/manage-user/index.ts come Edge Function manage-user.
+- Pubblicare i file web della v36.

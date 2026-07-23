@@ -89,3 +89,6 @@
 
 /* v35 - monitor utilizzo Supabase */
 .usage-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}.usage-metric{background:#f4f8f5;border:1px solid var(--line);border-radius:18px;padding:16px}.usage-metric span,.usage-metric small{display:block}.usage-metric span{font-size:.82rem;font-weight:850;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}.usage-metric strong{display:block;font-size:1.65rem;margin:6px 0 4px}.usage-metric small{line-height:1.35}@media(max-width:520px){.usage-grid{grid-template-columns:1fr}}
+
+.dash-card.urgent{border-color:#9f1d1d;border-left:7px solid #9f1d1d;background:#fff0f0}
+.dash-card.urgent strong{color:#9f1d1d}

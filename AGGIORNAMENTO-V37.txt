@@ -1,0 +1,14 @@
+OVERGREEN CLOUD V37 — PUNTI VENDITA URGENTI
+
+Modifiche:
+- aggiunto alla Dashboard il contatore "Punti vendita urgenti";
+- un punto vendita è urgente quando sono trascorsi più di 10 giorni oltre l'intervallo impostato;
+- toccando il contatore si apre l'elenco filtrato dei punti vendita urgenti;
+- il contatore è evidenziato in rosso;
+- aggiornato il nome della cache del Service Worker.
+
+Esempi:
+- intervallo 15 giorni: urgente dal 26° giorno;
+- intervallo 30 giorni: urgente dal 41° giorno.
+
+I punti vendita senza una data di ultimo passaggio non vengono inclusi nel contatore urgente, perché non è possibile calcolare da quanti giorni abbiano superato la scadenza.

@@ -97,3 +97,8 @@
 .dashboard-next-card{cursor:pointer}
 .dashboard-next-card .actions{margin-top:10px}
 .dashboard-next-card [data-open-list]{width:100%}
+
+/* v39 - extra programmati anche nella lista Lavori da fare */
+.schedule-extra-heading{margin:22px 2px 8px;font-size:1.05rem;color:var(--green)}
+.schedule-extra-card{border-left:6px solid #3978c8;background:#f7faff}
+.schedule-extra-card h3::before{content:'EXTRA';display:inline-flex;margin-right:8px;padding:3px 7px;border-radius:999px;background:#3978c8;color:#fff;font-size:.68rem;letter-spacing:.04em;vertical-align:2px}

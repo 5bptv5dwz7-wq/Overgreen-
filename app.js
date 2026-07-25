@@ -209,9 +209,24 @@ function renderDashboard(){
     return;
   }
   const title=next.closest('.panel')?.querySelector('h2');if(title)title.textContent='Prossimi lavori';
-  const rows=visible.filter(s=>s.giorno>=todayStr).sort((a,b)=>a.giorno.localeCompare(b.giorno)).slice(0,5);
-  if(!rows.length)next.innerHTML='<p class="muted">Nessun lavoro programmato.</p>';
-  for(const sch of rows){const count=scheduleItems.filter(i=>i.schedule_id===sch.id&&effectiveScheduleState(i)==='da_fare').length;if(!count)continue;const c=document.createElement('article');c.className='card dashboard-next-card';c.innerHTML=`<strong>${fmt(sch.giorno)}</strong><small>${count} lavori da fare</small><div class="actions"><button data-open-list>Apri lista</button></div>`;const open=()=>openScheduleDate(sch.giorno);c.querySelector('[data-open-list]').onclick=e=>{e.stopPropagation();open()};c.onclick=open;next.appendChild(c)}
+  const ordinaryByDate=new Map();
+  for(const sch of visible.filter(s=>s.giorno>=todayStr)){
+    const count=scheduleItems.filter(i=>i.schedule_id===sch.id&&effectiveScheduleState(i)==='da_fare').length;
+    if(count)ordinaryByDate.set(sch.giorno,(ordinaryByDate.get(sch.giorno)||0)+count);
+  }
+  const extraByDate=new Map();
+  for(const e of extras.filter(e=>e.giorno_intervento>=todayStr&&['programmato','ricevuto','da_integrare'].includes(e.stato))){
+    extraByDate.set(e.giorno_intervento,(extraByDate.get(e.giorno_intervento)||0)+1);
+  }
+  const dates=[...new Set([...ordinaryByDate.keys(),...extraByDate.keys()])].sort().slice(0,5);
+  if(!dates.length)next.innerHTML='<p class="muted">Nessun lavoro programmato.</p>';
+  for(const date of dates){
+    const ordinaryCount=ordinaryByDate.get(date)||0,extraCount=extraByDate.get(date)||0,total=ordinaryCount+extraCount;
+    const detail=[ordinaryCount?`${ordinaryCount} ordinari`:'',extraCount?`${extraCount} extra`:''].filter(Boolean).join(' · ');
+    const c=document.createElement('article');c.className='card dashboard-next-card';
+    c.innerHTML=`<strong>${fmt(date)}</strong><small>${total} lavori da fare${detail?' · '+detail:''}</small><div class="actions"><button data-open-list>Apri lista</button></div>`;
+    const open=()=>openScheduleDate(date);c.querySelector('[data-open-list]').onclick=e=>{e.stopPropagation();open()};c.onclick=open;next.appendChild(c)
+  }
 }
 function openScheduleDate(date){
   scheduleExactDate=date;
@@ -626,8 +641,16 @@ function renderAddSchedulePicker(){
   for(const st of available){const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${st.id}" ${selected.has(st.id)?'checked':''}><span><strong>${esc(st.nome)}</strong><br><small>${days(st.ultimo_passaggio)??'—'} giorni · ultimo ${fmt(st.ultimo_passaggio)}</small></span>`;box.appendChild(l)}
   if(!available.length)box.innerHTML='<p class="muted">Nessun altro punto vendita disponibile.</p>';
 }
+function extraMatchesScheduleDate(e){
+  if(scheduleExactDate)return e.giorno_intervento===scheduleExactDate;
+  if(scheduleDateFilter==='all')return true;
+  if(scheduleDateFilter==='today')return e.giorno_intervento===today();
+  if(scheduleDateFilter==='tomorrow')return e.giorno_intervento===tomorrow();
+  if(scheduleDateFilter==='week'){const now=new Date(today()+'T12:00:00'),end=new Date(now);end.setDate(end.getDate()+7);const d=new Date(e.giorno_intervento+'T12:00:00');return d>=now&&d<=end}
+  return true;
+}
 function renderSchedules(){
-  $('scheduleTitle').textContent=admin()?'Programmazioni':'I miei lavori';
+  $('scheduleTitle').textContent=admin()?'Programmazioni e lavori extra':'I miei lavori';
   $('scheduleList').innerHTML='';
   let list=visibleSchedules().filter(scheduleMatchesDate);
   if(scheduleWorkerFilter!=='all')list=list.filter(s=>scheduleMembers.some(m=>m.schedule_id===s.id&&m.profile_id===scheduleWorkerFilter));
@@ -650,6 +673,19 @@ function renderSchedules(){
     }}
     $('scheduleList').appendChild(c)
   }
+
+  const assignedIds=assignedExtraIds();
+  let visibleExtraJobs=(admin()?extras:extras.filter(e=>assignedIds.has(e.id)))
+    .filter(e=>['programmato','ricevuto','da_integrare','in_attesa'].includes(e.stato))
+    .filter(extraMatchesScheduleDate);
+  if(scheduleWorkerFilter!=='all')visibleExtraJobs=visibleExtraJobs.filter(e=>extraWorkers.some(w=>w.extra_id===e.id&&w.profile_id===scheduleWorkerFilter));
+  visibleExtraJobs.sort((a,b)=>String(a.giorno_intervento).localeCompare(String(b.giorno_intervento))||String(a.titolo||'').localeCompare(String(b.titolo||'')));
+  if(visibleExtraJobs.length){
+    const heading=document.createElement('h2');heading.className='extra-section-title schedule-extra-heading';heading.textContent='Lavori extra programmati';$('scheduleList').appendChild(heading);
+    for(const e of visibleExtraJobs){
+      const c=extraCard(e);c.classList.add('schedule-extra-card');$('scheduleList').appendChild(c)
+    }
+  }
   if(!$('scheduleList').children.length)$('scheduleList').innerHTML='<p class="muted">Nessun lavoro da mostrare con questi filtri.</p>';
 }
 function renderSchedulePicker(){const q=$('scheduleSearch').value.toLowerCase(),w=$('scheduleStores');const selected=new Set([...w.querySelectorAll('input:checked')].map(x=>x.value));w.innerHTML='';stores.filter(s=>s.nome.toLowerCase().includes(q)).sort((a,b)=>(days(b.ultimo_passaggio)??9999)-(days(a.ultimo_passaggio)??9999)).forEach(s=>{const l=document.createElement('label'),programmed=isStoreProgrammed(s.id);l.innerHTML=`<input type="checkbox" value="${s.id}" ${selected.has(s.id)?'checked':''}><span><strong>${esc(s.nome)}</strong>${programmed?' <em class="picker-programmed">In programma</em>':''}<br><small>${days(s.ultimo_passaggio)??'—'} giorni · ultimo ${fmt(s.ultimo_passaggio)}</small></span>`;w.appendChild(l)})}
@@ -659,6 +695,7 @@ function extraCard(e){
   const assignedNames=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean);
   const assignmentLabel=admin()?`Assegnato a: ${assignedNames.join(' + ')||'nessuno'}`:'Assegnato a te';
   c.className=`card extra-card ${e.stato}`;
+  c.dataset.extraCardId=e.id;
   c.innerHTML=`<h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3><p><strong>${esc(e.titolo)}</strong></p><p>${esc(e.descrizione||'')}</p><p class="muted">${fmt(e.giorno_intervento)} · ${esc(e.stato.replaceAll('_',' '))}</p><p class="assignment-label"><strong>${esc(assignmentLabel)}</strong></p>${showClosure?`<div class="extra-closure-details"><strong>Note finali</strong><div class="history-note ${e.note_lorenzo?'':'muted'}">${esc(e.note_lorenzo||'Nessuna nota inserita')}</div><div class="pending-photo-head"><strong>Foto del lavoro</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-extra-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div>`:''}<div class="actions">${pdf?'<button class="secondary" data-pdf>Apri PDF richiesta</button>':''}${showClosure&&reportEurospin?'<button class="secondary" data-report-eurospin>File Eurospin</button>':''}${showClosure&&reportOvergreen?'<button class="secondary" data-report-overgreen>File Overgreen</button>':''}${showClosure&&!reportEurospin?'<span class="muted">File Eurospin non presente</span>':''}${showClosure&&!reportOvergreen?'<span class="muted">File Overgreen non presente</span>':''}${!admin()&&['programmato','ricevuto','da_integrare'].includes(e.stato)?'<button data-close-extra>Chiudi lavoro</button>':''}${admin()&&e.stato==='in_attesa'?'<button data-approve-extra>Convalida</button>':''}${admin()?'<button class="secondary" data-edit-extra>Modifica</button><button class="danger-btn" data-delete-extra>Elimina</button>':''}</div>`;
   c.querySelector('[data-pdf]')?.addEventListener('click',()=>openAttachment(pdf));
   c.querySelector('[data-report-eurospin]')?.addEventListener('click',()=>openAttachment(reportEurospin));

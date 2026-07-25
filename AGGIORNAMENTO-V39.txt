@@ -1,0 +1,7 @@
+OVERGREEN CLOUD V39
+
+- Gli extra programmati compaiono ora nella sezione Programmazione / Lavori da fare.
+- Gli extra rispettano i filtri per data e dipendente.
+- Sono distinti con badge EXTRA e mantengono tutti i pulsanti disponibili (PDF, chiusura, modifica, eliminazione, convalida).
+- Nella Dashboard amministratore, Prossimi lavori conteggia insieme interventi ordinari ed extra.
+- Aprendo una data dalla Dashboard si vedono anche gli extra di quel giorno.

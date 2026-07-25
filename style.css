@@ -102,3 +102,4 @@
 .schedule-extra-heading{margin:22px 2px 8px;font-size:1.05rem;color:var(--green)}
 .schedule-extra-card{border-left:6px solid #3978c8;background:#f7faff}
 .schedule-extra-card h3::before{content:'EXTRA';display:inline-flex;margin-right:8px;padding:3px 7px;border-radius:999px;background:#3978c8;color:#fff;font-size:.68rem;letter-spacing:.04em;vertical-align:2px}
+.closure-photo-manager{display:grid;gap:10px}.closure-photo-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid var(--border,#d9e2dc);border-radius:12px}.closure-photo-preview{display:flex;align-items:center;gap:10px;min-width:0}.closure-photo-preview img{width:72px;height:58px;object-fit:cover;border-radius:9px}.closure-photo-preview small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}

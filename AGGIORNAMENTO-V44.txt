@@ -1,0 +1,7 @@
+VERSIONE 44 – MODIFICA CHIUSURA EXTRA
+
+Negli extra completati Lorenzo può ora:
+- modificare le note finali;
+- eliminare singole foto e aggiungerne di nuove;
+- sostituire il file richiesta, il file Overgreen e il file Eurospin;
+- rigenerare la chiusura usando sempre i dati e gli allegati aggiornati.

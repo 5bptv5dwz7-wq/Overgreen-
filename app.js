@@ -733,11 +733,12 @@ function extraCard(e){
   const assignmentLabel=admin()?`Assegnato a: ${assignedNames.join(' + ')||'nessuno'}`:'Assegnato a te';
   c.className=`card extra-card ${e.stato}`;
   c.dataset.extraCardId=e.id;
-  c.innerHTML=`<h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3><p><strong>${esc(e.titolo)}</strong></p><p>${esc(e.descrizione||'')}</p><p class="muted">${fmt(e.giorno_intervento)} · ${esc(e.stato.replaceAll('_',' '))}</p><p class="assignment-label"><strong>${esc(assignmentLabel)}</strong></p>${showClosure?`<div class="extra-closure-details"><strong>Note finali</strong><div class="history-note ${e.note_lorenzo?'':'muted'}">${esc(e.note_lorenzo||'Nessuna nota inserita')}</div><div class="pending-photo-head"><strong>Foto del lavoro</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-extra-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div>`:''}<div class="actions">${pdf?'<button class="secondary" data-pdf>Apri PDF richiesta</button>':''}${showClosure&&reportEurospin?'<button class="secondary" data-report-eurospin>File Eurospin</button>':''}${showClosure&&reportOvergreen?'<button class="secondary" data-report-overgreen>File Overgreen</button>':''}${showClosure&&!reportEurospin?'<span class="muted">File Eurospin non presente</span>':''}${showClosure&&!reportOvergreen?'<span class="muted">File Overgreen non presente</span>':''}${e.stato==='completato'?'<button data-generate-closure>Genera chiusura</button>':''}${['programmato','ricevuto','da_integrare'].includes(e.stato)?'<button data-close-extra>Chiudi lavoro</button>':''}${admin()&&e.stato==='in_attesa'?'<button data-approve-extra>Convalida</button>':''}${admin()?'<button class="secondary" data-edit-extra>Modifica</button><button class="danger-btn" data-delete-extra>Elimina</button>':''}</div>`;
+  c.innerHTML=`<h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3><p><strong>${esc(e.titolo)}</strong></p><p>${esc(e.descrizione||'')}</p><p class="muted">${fmt(e.giorno_intervento)} · ${esc(e.stato.replaceAll('_',' '))}</p><p class="assignment-label"><strong>${esc(assignmentLabel)}</strong></p>${showClosure?`<div class="extra-closure-details"><strong>Note finali</strong><div class="history-note ${e.note_lorenzo?'':'muted'}">${esc(e.note_lorenzo||'Nessuna nota inserita')}</div><div class="pending-photo-head"><strong>Foto del lavoro</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-extra-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div>`:''}<div class="actions">${pdf?'<button class="secondary" data-pdf>Apri PDF richiesta</button>':''}${showClosure&&reportEurospin?'<button class="secondary" data-report-eurospin>File Eurospin</button>':''}${showClosure&&reportOvergreen?'<button class="secondary" data-report-overgreen>File Overgreen</button>':''}${showClosure&&!reportEurospin?'<span class="muted">File Eurospin non presente</span>':''}${showClosure&&!reportOvergreen?'<span class="muted">File Overgreen non presente</span>':''}${e.stato==='completato'?'<button data-generate-closure>Genera chiusura</button>':''}${admin()&&e.stato==='completato'?'<button class="secondary" data-edit-closure>Modifica chiusura</button>':''}${['programmato','ricevuto','da_integrare'].includes(e.stato)?'<button data-close-extra>Chiudi lavoro</button>':''}${admin()&&e.stato==='in_attesa'?'<button data-approve-extra>Convalida</button>':''}${admin()?'<button class="secondary" data-edit-extra>Modifica</button><button class="danger-btn" data-delete-extra>Elimina</button>':''}</div>`;
   c.querySelector('[data-pdf]')?.addEventListener('click',()=>openAttachment(pdf));
   c.querySelector('[data-report-eurospin]')?.addEventListener('click',()=>openAttachment(reportEurospin));
   c.querySelector('[data-report-overgreen]')?.addEventListener('click',()=>openAttachment(reportOvergreen));
   c.querySelector('[data-generate-closure]')?.addEventListener('click',ev=>generateExtraClosurePdf(e,ev.currentTarget));
+  c.querySelector('[data-edit-closure]')?.addEventListener('click',()=>openExtraClosureEdit(e));
   c.querySelector('[data-close-extra]')?.addEventListener('click',()=>{$('closeExtraId').value=e.id;openDialog('closeExtraDialog')});
   c.querySelector('[data-approve-extra]')?.addEventListener('click',()=>approveExtra(e));
   c.querySelector('[data-edit-extra]')?.addEventListener('click',()=>openExtraEdit(e));
@@ -751,6 +752,41 @@ async function hydrateExtraPhotos(card,pics){
   const urls=await Promise.all(pics.map(async a=>{try{return {a,url:await signedAttachmentUrl(a)}}catch{return null}}));
   for(const x of urls.filter(Boolean)){const b=document.createElement('button');b.type='button';b.className='pending-review-photo';b.innerHTML=`<img src="${x.url}" alt="${esc(x.a.nome_file||'Foto extra')}" loading="lazy"><span>Apri</span>`;b.onclick=()=>window.open(x.url,'_blank');box.appendChild(b)}
   if(!box.children.length)box.innerHTML='<p class="muted">Foto non disponibile. Premi Aggiorna e riprova.</p>';
+}
+
+async function renderExtraClosurePhotoManager(extraId){
+  const box=$('editExtraClosurePhotoList');if(!box)return;box.innerHTML='<p class="muted">Caricamento foto…</p>';
+  const pics=attachments.filter(a=>a.extra_id===extraId&&a.tipo==='foto_generica');
+  if(!pics.length){box.innerHTML='<p class="muted">Nessuna foto allegata.</p>';return}
+  box.innerHTML='';
+  for(const a of pics){
+    const row=document.createElement('div');row.className='closure-photo-row';
+    row.innerHTML=`<div class="closure-photo-preview"><span>📷</span><small>${esc(a.nome_file||'Foto')}</small></div><button type="button" class="danger-btn compact-btn">Elimina</button>`;
+    try{const url=await signedAttachmentUrl(a);row.querySelector('.closure-photo-preview').innerHTML=`<img src="${url}" alt="${esc(a.nome_file||'Foto')}" loading="lazy"><small>${esc(a.nome_file||'Foto')}</small>`}catch{}
+    row.querySelector('button').onclick=async()=>{
+      if(!confirm('Eliminare questa foto dalla chiusura?'))return;
+      const b=row.querySelector('button'),old=b.textContent;b.disabled=true;b.textContent='Elimino…';
+      try{if(a.storage_path){const r=await sb.storage.from('documenti').remove([a.storage_path]);if(r.error)throw r.error}const r=await sb.from('attachments').delete().eq('id',a.id);if(r.error)throw r.error;attachments=attachments.filter(x=>x.id!==a.id);row.remove();if(!box.children.length)box.innerHTML='<p class="muted">Nessuna foto allegata.</p>';toast('Foto eliminata')}catch(err){alert(err.message);b.disabled=false;b.textContent=old}
+    };
+    box.appendChild(row);
+  }
+}
+function openExtraClosureEdit(e){
+  if(!admin()||e.stato!=='completato')return;
+  $('editExtraClosureId').value=e.id;$('editExtraClosureNotes').value=e.note_lorenzo||'';
+  $('editExtraClosurePhotos').value='';$('editClosureRequest').value='';$('editClosureOvergreen').value='';$('editClosureEurospin').value='';
+  renderExtraClosurePhotoManager(e.id);openDialog('editExtraClosureDialog');
+}
+async function replaceExtraAttachment(extraId,tipo,file){
+  if(!file)return;
+  const safe=(file.name||'documento').replace(/[^a-zA-Z0-9._-]/g,'-'),path=`extra/${extraId}/${tipo}-${Date.now()}-${safe}`;
+  await uploadFile(path,file);
+  try{
+    const added=await addAttachment({tipo,extra_id:extraId,storage_path:path,nome_file:file.name,mime_type:file.type,dimensione_bytes:file.size,caricato_da:profile.id});
+    if(!added)throw new Error('Registrazione del nuovo file non riuscita.');
+    const previous=attachments.filter(a=>a.extra_id===extraId&&a.tipo===tipo);
+    for(const old of previous){if(old.storage_path)await sb.storage.from('documenti').remove([old.storage_path]);const r=await sb.from('attachments').delete().eq('id',old.id);if(r.error)throw r.error}
+  }catch(err){await sb.storage.from('documenti').remove([path]);throw err}
 }
 
 function renderExtras(){
@@ -811,6 +847,23 @@ $('extraEditForm').onsubmit=async e=>{
   $('extraEditDialog').close();toast('Extra aggiornato');await loadAll();
 };
 $('duplicateScheduleForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const source=$('duplicateScheduleId').value,newDate=$('duplicateScheduleDate').value,src=schedules.find(x=>x.id===source);if(!src||!newDate)return;const members=scheduleMembers.filter(m=>m.schedule_id===source),items=scheduleItems.filter(i=>i.schedule_id===source&&i.stato!=='completato');if(!items.length)return alert('Non ci sono lavori da duplicare.');const {data,error}=await sb.from('schedules').insert({giorno:newDate,nota_generale:src.nota_generale,creato_da:profile.id}).select().single();if(error)return alert(error.message);let r=await sb.from('schedule_members').insert(members.map(m=>({schedule_id:data.id,profile_id:m.profile_id})));if(r.error)return alert(r.error.message);r=await sb.from('schedule_items').insert(items.map((i,pos)=>({schedule_id:data.id,tipo:i.tipo,store_id:i.store_id,posizione:pos+1,stato:'da_fare'})));if(r.error)return alert(r.error.message);$('duplicateScheduleDialog').close();toast('Programmazione duplicata');await loadAll()};
+$('editExtraClosureForm').onsubmit=async e=>{
+  e.preventDefault();if(!admin())return;
+  const btn=e.submitter||$('editExtraClosureForm').querySelector('[type=submit]'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Salvataggio…';
+  try{
+    const id=$('editExtraClosureId').value,notes=$('editExtraClosureNotes').value.trim()||null;
+    let r=await sb.from('extras').update({note_lorenzo:notes}).eq('id',id);if(r.error)throw r.error;
+    const docs=[['pdf_richiesta',$('editClosureRequest').files[0]],['rapportino_overgreen',$('editClosureOvergreen').files[0]],['rapportino_eurospin',$('editClosureEurospin').files[0]]];
+    for(const [tipo,file] of docs)if(file){btn.textContent=`Sostituisco ${attachmentLabel({tipo})}…`;await replaceExtraAttachment(id,tipo,file)}
+    const photos=[...$('editExtraClosurePhotos').files];
+    for(let n=0;n<photos.length;n++){
+      btn.textContent=`Carico foto ${n+1}/${photos.length}…`;const compressed=await compressImage(photos[n]),safe=(compressed.name||photos[n].name||`foto-${n+1}.jpg`).replace(/[^a-zA-Z0-9._-]/g,'-'),path=`extra/${id}/foto-${Date.now()}-${Math.random().toString(36).slice(2)}-${safe}`;
+      await uploadFile(path,compressed);const added=await addAttachment({tipo:'foto_generica',extra_id:id,storage_path:path,nome_file:compressed.name||photos[n].name,mime_type:compressed.type||'image/jpeg',dimensione_bytes:compressed.size,caricato_da:profile.id});if(!added){await sb.storage.from('documenti').remove([path]);throw new Error('Registrazione della foto non riuscita.')}
+    }
+    $('editExtraClosureDialog').close();$('editExtraClosureForm').reset();toast('Chiusura aggiornata');await loadAll();
+  }catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=oldText}
+};
+
 $('closeExtraForm').onsubmit=async e=>{
   e.preventDefault();
   const btn=e.submitter,oldText=btn.textContent;

@@ -1,0 +1,9 @@
+VERSIONE 43 – FILE RICHIESTA NELLA CHIUSURA EXTRA
+
+Il PDF di chiusura degli extra contiene ora:
+1. report riepilogativo Overgreen;
+2. file della richiesta;
+3. file Overgreen;
+4. file Eurospin.
+
+La generazione viene bloccata se manca uno dei tre documenti richiesti.

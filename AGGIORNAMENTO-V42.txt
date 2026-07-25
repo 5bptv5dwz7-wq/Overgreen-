@@ -1,0 +1,5 @@
+V42 - Generazione chiusura extra
+
+- Pulsante Genera chiusura sugli extra completati.
+- PDF di 3 pagine: report riepilogativo, file Overgreen, file Eurospin.
+- Il report include luogo, data, operatori, note e fino a 4 foto.

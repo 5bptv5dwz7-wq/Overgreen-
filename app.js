@@ -134,6 +134,7 @@ const tomorrow=()=>{const d=new Date();d.setDate(d.getDate()+1);return `${d.getF
 const fmt=d=>d?new Intl.DateTimeFormat('it-IT').format(new Date(d+'T12:00:00')):'Mai eseguito';
 const days=d=>{if(!d)return null;const a=new Date(d+'T00:00:00'),b=new Date();b.setHours(0,0,0,0);return Math.max(0,Math.floor((b-a)/86400000));};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+function attachmentLabel(a){return ({pdf_richiesta:'Richiesta extra',rapportino_eurospin:'File Eurospin',rapportino_overgreen:'File Overgreen'}[a?.tipo]||a?.nome_file||'Documento')}
 const admin=()=>profile?.ruolo==='admin';
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
 function openDialog(id){$(id)?.showModal()}

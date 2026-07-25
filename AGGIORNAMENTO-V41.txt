@@ -1,0 +1,5 @@
+OVERGREEN CLOUD V41 — CORREZIONE REPORT EXTRA
+
+- Corretto il Report giornaliero: gli extra con documenti allegati ora compaiono regolarmente nella lista.
+- Corretto il PDF completo degli extra, che prima si bloccava durante la lettura dei nomi degli allegati.
+- Il PDF sintetico resta invariato.

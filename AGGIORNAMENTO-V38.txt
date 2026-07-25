@@ -1,0 +1,6 @@
+OVERGREEN CLOUD V38
+
+- Nella Dashboard, ogni riga di “Prossimi lavori” è ora apribile.
+- Il pulsante “Apri lista” porta direttamente alla programmazione del giorno scelto.
+- La lista mostra tutti i normali pulsanti operativi: dettaglio punto vendita, Maps, Eseguito, spostamento ordine, aggiunta punti vendita, duplicazione ed eliminazione (in base al ruolo).
+- Se si cambia il filtro data manualmente, il filtro sul giorno scelto dalla Dashboard viene azzerato.

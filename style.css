@@ -92,3 +92,8 @@
 
 .dash-card.urgent{border-color:#9f1d1d;border-left:7px solid #9f1d1d;background:#fff0f0}
 .dash-card.urgent strong{color:#9f1d1d}
+
+/* v38: accesso rapido alla lista dei prossimi lavori */
+.dashboard-next-card{cursor:pointer}
+.dashboard-next-card .actions{margin-top:10px}
+.dashboard-next-card [data-open-list]{width:100%}

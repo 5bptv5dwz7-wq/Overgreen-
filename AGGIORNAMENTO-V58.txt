@@ -1,0 +1,16 @@
+OVERGREEN CLOUD — AGGIORNAMENTO V58
+
+CONTROLLO COMPLETO PROGRAMMAZIONE
+
+- Corretto il pulsante Elimina per i lavori che apparivano "In programma" ma avevano uno stato interno non più coerente.
+- Lo stato effettivo viene ora ricostruito partendo dagli interventi realmente presenti nello storico.
+- Se un intervento viene eliminato dallo storico, la programmazione viene automaticamente ripristinata su "Da fare" anche nel database.
+- Il pulsante Elimina verifica che il record sia stato davvero cancellato e mostra un errore chiaro in caso di permessi Supabase insufficienti.
+- Gli extra collegati a un lavoro eliminato vengono scollegati senza essere cancellati.
+- Le programmazioni rimaste vuote vengono ripulite automaticamente insieme ai relativi membri.
+- Gli extra collegati a elementi di programmazione non più esistenti vengono riparati automaticamente.
+- La duplicazione usa lo stato effettivo del lavoro e non copia quelli realmente completati.
+- Aggiornamento immediato di Programmazione, Dashboard e Punti vendita dopo l'eliminazione.
+- Aggiornata la cache dell'app alla V58.
+
+Non sono richieste nuove migrazioni SQL.

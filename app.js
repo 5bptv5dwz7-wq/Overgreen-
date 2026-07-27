@@ -161,6 +161,7 @@ async function loadAll(){
   for(const r of [p,s,i,sch,sm,si,e,ew,iw,a])if(r.error)throw r.error;
   profiles=p.data;stores=s.data;interventions=i.data;schedules=sch.data;scheduleMembers=sm.data;scheduleItems=si.data;extras=e.data;extraWorkers=ew.data;interventionWorkers=iw.data;attachments=a.data;
   profile=profiles.find(x=>x.id===session.user.id);if(!profile)throw new Error('Profilo non trovato');
+  await reconcileProgrammingConsistency();
   $('userLabel').textContent=`${profile.nome} · ${admin()?'Amministratore':'Dipendente'}`;$('settingsUser').textContent=`${profile.nome} — ${session.user.email}`;
   document.querySelectorAll('.admin-only').forEach(x=>x.classList.toggle('hidden',!admin()));
   renderStores();renderWorkers();renderReportFilters();renderPending();renderScheduleFilters();renderSchedules();renderExtras();renderDashboard();ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();processUploadQueue();
@@ -188,12 +189,35 @@ async function linkOrdinaryExtras(scheduleId,scheduleDate,memberIds,items){
 
 function effectiveScheduleState(item){
   if(!item)return 'da_fare';
-  const related=interventions.find(i=>i.schedule_item_id===item.id);
-  if(related?.stato==='in_attesa')return 'in_attesa';
-  if(related?.stato==='convalidato')return 'completato';
-  // Evita che una programmazione resti completata dopo l'eliminazione dello storico.
-  if(item.stato==='completato'&&!related)return 'da_fare';
+  const related=interventions.filter(i=>i.schedule_item_id===item.id);
+  if(related.some(i=>i.stato==='convalidato'))return 'completato';
+  if(related.some(i=>i.stato==='in_attesa'))return 'in_attesa';
+  // Lo storico è la fonte reale: senza intervento il lavoro deve essere nuovamente eseguibile.
+  if(['completato','in_attesa'].includes(item.stato)&&!related.length)return 'da_fare';
   return item.stato||'da_fare';
+}
+
+async function reconcileProgrammingConsistency(){
+  if(!admin())return;
+  const validItemIds=new Set(scheduleItems.map(x=>x.id));
+  const fixes=scheduleItems.filter(item=>['completato','in_attesa'].includes(item.stato)&&!interventions.some(i=>i.schedule_item_id===item.id));
+  for(const item of fixes){
+    const {error}=await sb.from('schedule_items').update({stato:'da_fare'}).eq('id',item.id);
+    if(error)console.warn('Ripristino programmazione non riuscito:',item.id,error.message);else item.stato='da_fare';
+  }
+  const orphanExtras=extras.filter(e=>e.schedule_item_id&&!validItemIds.has(e.schedule_item_id)&&e.stato!=='completato');
+  for(const e of orphanExtras){
+    const {error}=await sb.from('extras').update({schedule_item_id:null}).eq('id',e.id);
+    if(error)console.warn('Scollegamento extra orfano non riuscito:',e.id,error.message);else e.schedule_item_id=null;
+  }
+  const emptySchedules=schedules.filter(s=>!scheduleItems.some(i=>i.schedule_id===s.id));
+  for(const sch of emptySchedules){
+    let r=await sb.from('schedule_members').delete().eq('schedule_id',sch.id);
+    if(r.error){console.warn('Pulizia membri programmazione vuota non riuscita:',r.error.message);continue}
+    r=await sb.from('schedules').delete().eq('id',sch.id);
+    if(r.error)console.warn('Pulizia programmazione vuota non riuscita:',r.error.message);
+    else{schedules=schedules.filter(x=>x.id!==sch.id);scheduleMembers=scheduleMembers.filter(x=>x.schedule_id!==sch.id)}
+  }
 }
 function renderDashboard(){
   if(!$('dashToday'))return;
@@ -675,15 +699,32 @@ const helpPages={
 };
 function openHelp(){const h=helpPages[currentView]||helpPages.dashboard;$('helpTitle').textContent=h.title;$('helpBody').innerHTML=h.html;openDialog('helpDialog')}
 async function deleteScheduleItem(item,store){
-  if(!admin()||item.stato!=='da_fare')return;
+  if(!admin())return;
+  if(effectiveScheduleState(item)!=='da_fare')return alert('Questo intervento non può essere eliminato perché risulta già chiuso o in attesa.');
   if(!confirm(`Rimuovere “${store?.nome||'questo punto vendita'}” dalla programmazione?`))return;
-  const {error}=await sb.from('schedule_items').delete().eq('id',item.id);if(error)return alert(error.message);
-  const remaining=scheduleItems.filter(x=>x.schedule_id===item.schedule_id&&x.id!==item.id);
+  const linked=extras.filter(e=>e.schedule_item_id===item.id&&e.stato!=='completato');
+  for(const e of linked){
+    const r=await sb.from('extras').update({schedule_item_id:null}).eq('id',e.id);
+    if(r.error)return alert('Impossibile scollegare un extra associato: '+r.error.message);
+    e.schedule_item_id=null;
+  }
+  const {data:deleted,error}=await sb.from('schedule_items').delete().eq('id',item.id).select('id');
+  if(error)return alert('Eliminazione non riuscita: '+error.message);
+  if(!deleted?.length){
+    await loadAll();
+    return alert('Il record non è stato eliminato. Controlla i permessi Supabase della tabella schedule_items.');
+  }
+  scheduleItems=scheduleItems.filter(x=>x.id!==item.id);
+  const remaining=scheduleItems.filter(x=>x.schedule_id===item.schedule_id);
   if(!remaining.length){
     let r=await sb.from('schedule_members').delete().eq('schedule_id',item.schedule_id);if(r.error)return alert(r.error.message);
     r=await sb.from('schedules').delete().eq('id',item.schedule_id);if(r.error)return alert(r.error.message);
+    scheduleMembers=scheduleMembers.filter(x=>x.schedule_id!==item.schedule_id);
+    schedules=schedules.filter(x=>x.id!==item.schedule_id);
   }
-  toast('Punto vendita rimosso dalla programmazione');await loadAll();
+  toast(linked.length?'Punto vendita rimosso · extra scollegati':'Punto vendita rimosso dalla programmazione');
+  renderSchedules();renderDashboard();renderStores();
+  await loadAll();
 }
 
 async function moveScheduleItem(item,direction){
@@ -936,7 +977,7 @@ $('extraEditForm').onsubmit=async e=>{
   const pdf=$('extraEditPdf').files[0];if(pdf){const old=attachments.find(a=>a.extra_id===id&&a.tipo==='pdf_richiesta');if(old){await sb.storage.from('documenti').remove([old.storage_path]);await sb.from('attachments').delete().eq('id',old.id)}const path=`extra/${id}/richiesta-${Date.now()}.pdf`;try{await uploadFile(path,pdf);await addAttachment({tipo:'pdf_richiesta',extra_id:id,storage_path:path,nome_file:pdf.name,mime_type:pdf.type,dimensione_bytes:pdf.size,caricato_da:profile.id})}catch(err){return alert('Dati salvati, ma nuovo PDF non caricato: '+err.message)}}
   $('extraEditDialog').close();toast('Extra aggiornato');await loadAll();
 };
-$('duplicateScheduleForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const source=$('duplicateScheduleId').value,newDate=$('duplicateScheduleDate').value,src=schedules.find(x=>x.id===source);if(!src||!newDate)return;const members=scheduleMembers.filter(m=>m.schedule_id===source),items=scheduleItems.filter(i=>i.schedule_id===source&&i.stato!=='completato');if(!items.length)return alert('Non ci sono lavori da duplicare.');const {data,error}=await sb.from('schedules').insert({giorno:newDate,nota_generale:src.nota_generale,creato_da:profile.id}).select().single();if(error)return alert(error.message);let r=await sb.from('schedule_members').insert(members.map(m=>({schedule_id:data.id,profile_id:m.profile_id})));if(r.error)return alert(r.error.message);r=await sb.from('schedule_items').insert(items.map((i,pos)=>({schedule_id:data.id,tipo:i.tipo,store_id:i.store_id,posizione:pos+1,stato:'da_fare'})));if(r.error)return alert(r.error.message);$('duplicateScheduleDialog').close();toast('Programmazione duplicata');await loadAll()};
+$('duplicateScheduleForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const source=$('duplicateScheduleId').value,newDate=$('duplicateScheduleDate').value,src=schedules.find(x=>x.id===source);if(!src||!newDate)return;const members=scheduleMembers.filter(m=>m.schedule_id===source),items=scheduleItems.filter(i=>i.schedule_id===source&&effectiveScheduleState(i)!=='completato');if(!items.length)return alert('Non ci sono lavori da duplicare.');const {data,error}=await sb.from('schedules').insert({giorno:newDate,nota_generale:src.nota_generale,creato_da:profile.id}).select().single();if(error)return alert(error.message);let r=await sb.from('schedule_members').insert(members.map(m=>({schedule_id:data.id,profile_id:m.profile_id})));if(r.error)return alert(r.error.message);r=await sb.from('schedule_items').insert(items.map((i,pos)=>({schedule_id:data.id,tipo:i.tipo,store_id:i.store_id,posizione:pos+1,stato:'da_fare'})));if(r.error)return alert(r.error.message);$('duplicateScheduleDialog').close();toast('Programmazione duplicata');await loadAll()};
 $('editExtraClosureForm').onsubmit=async e=>{
   e.preventDefault();if(!admin())return;
   const btn=e.submitter||$('editExtraClosureForm').querySelector('[type=submit]'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Salvataggio…';

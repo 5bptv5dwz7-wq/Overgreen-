@@ -1,0 +1,6 @@
+OVERGREEN CLOUD V55 - FIX ERRORE elapsedDays
+
+Corretto l'errore JavaScript "Can't find variable: elapsedDays" che bloccava il caricamento dei dati.
+La Dashboard operativa V54 resta invariata.
+Nessuna migrazione SQL necessaria.
+Dopo l'aggiornamento chiudere e riaprire l'app per aggiornare la cache.

@@ -222,7 +222,7 @@ function renderDashboard(){
   let strip=$('dashboardOperationalStrip');
   if(!strip){strip=document.createElement('section');strip.id='dashboardOperationalStrip';strip.className='dashboard-operational-strip';$('dashboardView').insertBefore(strip,$('dashboardView').firstChild)}
   const openExtras=extras.filter(e=>isExtraVisible(e)&&activeExtraStates.includes(e.stato));
-  const urgentExtras=openExtras.filter(e=>e.urgente===true||e.priorita==='urgente'||elapsedDays(e)>=7);
+  const urgentExtras=openExtras.filter(e=>e.urgente===true||e.priorita==='urgente'||elapsedDaysFrom(extraRequestDate(e))>=7);
   const activeWorkers=new Set();
   scheduleMembers.forEach(m=>{const s=schedules.find(x=>x.id===m.schedule_id);if(s?.giorno===todayStr)activeWorkers.add(m.profile_id)});
   extraWorkers.forEach(w=>{const e=extras.find(x=>x.id===w.extra_id);if(e?.giorno_intervento===todayStr)activeWorkers.add(w.profile_id)});
@@ -268,7 +268,7 @@ function renderDashboard(){
           c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span><strong>${esc(st?.nome||'Punto vendita')}</strong><small>${done?'Completato':'Da eseguire'}</small>${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>`<div class="embedded-extra ${extraDone(e)?'is-done':'is-open'}"><span>${extraDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b><small>${extraDone(e)?'Completato':'Da fare insieme al passaggio'}</small></div></div>`).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${!done&&date===todayStr?'<button data-done>Eseguito</button>':'<button class="secondary" data-open-program>Programma</button>'}</div>`;
           c.querySelector('[data-map]').onclick=()=>openAppleMaps(st?.indirizzo,'Eurospin '+(st?.nome||''));c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,row.item.id));c.querySelector('[data-open-program]')?.addEventListener('click',()=>openScheduleDate(date));list.appendChild(c)
         }else{
-          const e=job.extra,st=stores.find(s=>s.id===e.store_id),done=extraDone(e),urgent=e.urgente===true||e.priorita==='urgente'||elapsedDays(e)>=7,c=document.createElement('article');
+          const e=job.extra,st=stores.find(s=>s.id===e.store_id),done=extraDone(e),urgent=e.urgente===true||e.priorita==='urgente'||elapsedDaysFrom(extraRequestDate(e))>=7,c=document.createElement('article');
           c.className=`dashboard-line-job standalone-extra ${done?'is-done':urgent?'is-urgent':'is-open'}`;
           c.innerHTML=`<div class="job-main"><span class="job-kind">EXTRA</span><strong>${esc(st?.nome||e.nome_esterno||'Extra')}</strong><small>${esc(e.titolo)} · ${done?'Completato':urgent?'Urgente':'Da eseguire'}</small></div><div class="actions"><button data-open-extra>Apri extra</button></div>`;c.querySelector('[data-open-extra]').onclick=()=>setView('extras');list.appendChild(c)
         }

@@ -1,0 +1,12 @@
+OVERGREEN CLOUD V54
+
+Dashboard operativa sperimentale con:
+1. barra riassuntiva in alto;
+2. calendario lineare dei prossimi 7 giorni;
+3. raggruppamento dei lavori per persona/squadra per Lorenzo;
+4. colori di stato (ordinario, extra, urgente, completato, da assegnare);
+5. avanzamento percentuale giornaliero;
+7. extra collegati visualizzati dentro il relativo passaggio ordinario.
+
+La vista dipendenti continua a mostrare soltanto i lavori assegnati al profilo collegato.
+Nessuna migrazione SQL richiesta.

@@ -127,3 +127,18 @@
 .dashboard-line-job .actions{flex-shrink:0;margin-top:0}
 .dashboard-day-empty{margin:8px 2px}
 @media(max-width:640px){.dashboard-line-job{flex-direction:column}.dashboard-line-job .actions{width:100%}.dashboard-line-job .actions button{flex:1}}
+
+/* V54 - dashboard operativa: KPI, gruppi, colori, avanzamento, extra integrati */
+.dashboard-operational-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.dashboard-operational-strip>div{background:#fff;border:1px solid var(--line);border-radius:16px;padding:13px 14px;box-shadow:0 3px 12px rgba(20,60,38,.05)}
+.dashboard-operational-strip span{display:block;color:var(--muted);font-size:.76rem;font-weight:800;text-transform:uppercase;letter-spacing:.035em}
+.dashboard-operational-strip strong{display:block;font-size:1.65rem;margin-top:4px;color:var(--green)}
+.dashboard-operational-strip .alert{background:#fff0f0;border-color:#e8b5b5}.dashboard-operational-strip .alert strong{color:#9f1d1d}
+.dashboard-day-summary{display:flex;align-items:center;gap:7px}.day-type-count{font-size:.73rem;font-weight:800;background:#e9f1ff;color:#245c9f;border-radius:999px;padding:6px 8px;white-space:nowrap}.day-type-count.extra{background:#fff0d8;color:#895300}
+.dashboard-day-progress{height:7px;background:#edf1ee}.dashboard-day-progress>div{height:100%;background:#2b8b57;transition:width .25s ease}
+.dashboard-day-progress-label{display:flex;align-items:center;gap:8px;padding:8px 14px 2px;font-size:.78rem;color:var(--muted)}.dashboard-day-progress-label strong{color:#217246}
+.dashboard-worker-group{margin:8px 0 14px}.dashboard-worker-group>h3{display:flex;align-items:center;justify-content:space-between;margin:0;padding:9px 11px;border-radius:11px;background:#f0f5f2;font-size:.88rem;color:#254c38}.dashboard-worker-group>h3 span{display:grid;place-items:center;min-width:25px;height:25px;border-radius:50%;background:#fff;font-size:.75rem}
+.dashboard-line-job{border-left:5px solid #3978c8;padding-left:10px}.dashboard-line-job.standalone-extra{border-left-color:#d88714}.dashboard-line-job.is-done{border-left-color:#2b8b57;background:#f4fbf6}.dashboard-line-job.is-urgent{border-left-color:#b42318;background:#fff5f4}.dashboard-line-job.is-done .job-main>strong{text-decoration:line-through;opacity:.75}
+.job-main{display:flex;flex-direction:column;gap:3px;min-width:0}.job-kind{width:max-content;border-radius:999px;background:#e7f0ff;color:#245c9f;font-size:.63rem;font-weight:900;letter-spacing:.05em;padding:3px 7px}.standalone-extra .job-kind{background:#fff0d8;color:#895300}.is-done .job-kind{background:#dff3e6;color:#217246}.is-urgent .job-kind{background:#ffe1de;color:#9f1d1d}
+.embedded-extras{margin-top:9px;padding:10px;border:1px solid #efcf7a;border-radius:12px;background:#fff9e9;display:grid;gap:7px}.embedded-extras>strong{font-size:.76rem;color:#695000;text-transform:uppercase}.embedded-extra{display:flex;align-items:center;gap:8px}.embedded-extra>span{display:grid;place-items:center;min-width:25px;height:25px;border-radius:50%;background:#d88714;color:white;font-weight:900}.embedded-extra.is-done>span{background:#2b8b57}.embedded-extra div{display:flex;flex-direction:column}.embedded-extra small{font-size:.74rem;color:#75684a}
+@media(max-width:720px){.dashboard-operational-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-day-summary .day-type-count{display:none}}

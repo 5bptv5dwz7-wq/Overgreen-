@@ -198,63 +198,84 @@ function renderDashboard(){
   const todayStr=today();
   const visible=visibleSchedules();
   const myExtraIds=assignedExtraIds();
-  const todaysItems=scheduleItems.filter(i=>effectiveScheduleState(i)==='da_fare'&&visible.some(s=>s.id===i.schedule_id&&s.giorno===todayStr));
-  const todaysExtras=(admin()?extras:extras.filter(e=>myExtraIds.has(e.id))).filter(e=>e.giorno_intervento===todayStr&&['programmato','ricevuto','da_integrare'].includes(e.stato));
+  const activeExtraStates=['programmato','ricevuto','da_integrare','in_attesa'];
+  const completedExtraStates=['completato'];
+  const isExtraVisible=e=>admin()||myExtraIds.has(e.id);
+  const isScheduleVisible=s=>admin()||visible.some(v=>v.id===s.id);
+  const scheduleForItem=i=>schedules.find(s=>s.id===i.schedule_id);
+  const itemVisible=i=>{const s=scheduleForItem(i);return !!s&&isScheduleVisible(s)};
+  const itemDate=i=>scheduleForItem(i)?.giorno||'';
+  const itemDone=i=>['completato','convalidato'].includes(effectiveScheduleState(i));
+  const extraDone=e=>completedExtraStates.includes(e.stato);
+  const todaysItems=scheduleItems.filter(i=>itemVisible(i)&&itemDate(i)===todayStr&&!itemDone(i));
+  const todaysExtras=extras.filter(e=>isExtraVisible(e)&&e.giorno_intervento===todayStr&&activeExtraStates.includes(e.stato));
+  const todaysDoneItems=scheduleItems.filter(i=>itemVisible(i)&&itemDate(i)===todayStr&&itemDone(i));
+  const todaysDoneExtras=extras.filter(e=>isExtraVisible(e)&&e.giorno_intervento===todayStr&&extraDone(e));
   $('dashToday').textContent=todaysItems.length+todaysExtras.length;
   $('dashPending').textContent=admin()?interventions.filter(i=>i.stato==='in_attesa').length+extras.filter(e=>e.stato==='in_attesa').length:interventions.filter(i=>i.stato==='in_attesa'&&i.inserito_da===profile.id).length+extras.filter(e=>e.stato==='in_attesa'&&myExtraIds.has(e.id)).length;
-  $('dashDone').textContent=interventions.filter(i=>i.stato==='convalidato'&&i.data_intervento===todayStr&&(admin()||i.inserito_da===profile.id)).length+extras.filter(e=>e.stato==='completato'&&e.giorno_intervento===todayStr&&(admin()||myExtraIds.has(e.id))).length;
+  $('dashDone').textContent=todaysDoneItems.length+todaysDoneExtras.length;
   $('dashDue').textContent=stores.filter(s=>status(s)==='due').length;
   $('dashScheduled').textContent=stores.filter(s=>status(s)==='scheduled').length;
   $('dashUrgent').textContent=stores.filter(isUrgentStore).length;
   $('dashOpenExtras').textContent=openExtraJobs().length;
+
+  let strip=$('dashboardOperationalStrip');
+  if(!strip){strip=document.createElement('section');strip.id='dashboardOperationalStrip';strip.className='dashboard-operational-strip';$('dashboardView').insertBefore(strip,$('dashboardView').firstChild)}
+  const openExtras=extras.filter(e=>isExtraVisible(e)&&activeExtraStates.includes(e.stato));
+  const urgentExtras=openExtras.filter(e=>e.urgente===true||e.priorita==='urgente'||elapsedDays(e)>=7);
+  const activeWorkers=new Set();
+  scheduleMembers.forEach(m=>{const s=schedules.find(x=>x.id===m.schedule_id);if(s?.giorno===todayStr)activeWorkers.add(m.profile_id)});
+  extraWorkers.forEach(w=>{const e=extras.find(x=>x.id===w.extra_id);if(e?.giorno_intervento===todayStr)activeWorkers.add(w.profile_id)});
+  const totalActiveProfiles=profiles.filter(p=>p.attivo&&p.ruolo!=='admin').length;
+  strip.innerHTML=`<div><span>Oggi da fare</span><strong>${todaysItems.length+todaysExtras.length}</strong></div><div><span>Extra aperti</span><strong>${openExtras.length}</strong></div><div class="${urgentExtras.length?'alert':''}"><span>Extra urgenti</span><strong>${urgentExtras.length}</strong></div><div><span>Operai attivi</span><strong>${activeWorkers.size}${admin()?' / '+totalActiveProfiles:''}</strong></div>`;
+
   const next=$('dashboardNext');next.innerHTML='';
-  if(!admin()){
-    const title=next.closest('.panel')?.querySelector('h2');if(title)title.textContent='I tuoi prossimi 7 giorni';
-    const startDate=new Date(todayStr+'T12:00:00');
-    for(let offset=0;offset<7;offset++){
-      const d=new Date(startDate);d.setDate(d.getDate()+offset);const date=d.toISOString().slice(0,10);
-      const ordinary=scheduleItems.filter(i=>effectiveScheduleState(i)==='da_fare').map(i=>({item:i,schedule:visible.find(s=>s.id===i.schedule_id)})).filter(x=>x.schedule?.giorno===date).sort((a,b)=>(a.item.posizione||0)-(b.item.posizione||0));
-      const dayExtras=extras.filter(e=>myExtraIds.has(e.id)&&e.giorno_intervento===date&&['programmato','ricevuto','da_integrare'].includes(e.stato)).sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||'')));
-      const total=ordinary.length+dayExtras.length;
-      const details=document.createElement('details');details.className='dashboard-day';details.open=offset===0&&total>0;
-      const dayName=new Intl.DateTimeFormat('it-IT',{weekday:'long'}).format(d);
-      details.innerHTML=`<summary><span><strong>${offset===0?'Oggi · ':''}${esc(dayName.charAt(0).toUpperCase()+dayName.slice(1))}</strong><small>${fmt(date)}</small></span><span class="dashboard-day-count">${total}</span></summary><div class="dashboard-day-jobs"></div>`;
-      const box=details.querySelector('.dashboard-day-jobs');
-      for(const row of ordinary){
-        const st=stores.find(x=>x.id===row.item.store_id),linked=linkedExtrasForScheduleItem(row.item.id),c=document.createElement('article');c.className='dashboard-line-job';
-        c.innerHTML=`<div><strong>${esc(st?.nome||'Punto vendita')}</strong><small>Passaggio ordinario</small>${linked.length?`<div class="linked-extra-reminder"><strong>⚠ Extra da fare insieme</strong>${linked.map(e=>`<span>${esc(e.titolo)}</span>`).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${date===todayStr?'<button data-done>Eseguito</button>':'<button class="secondary" data-open-program>Programma</button>'}</div>`;
-        c.querySelector('[data-map]').onclick=()=>openAppleMaps(st?.indirizzo,'Eurospin '+(st?.nome||''));c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,row.item.id));c.querySelector('[data-open-program]')?.addEventListener('click',()=>openScheduleDate(date));box.appendChild(c)
-      }
-      for(const e of dayExtras){
-        const st=stores.find(s=>s.id===e.store_id),c=document.createElement('article');c.className='dashboard-line-job extra-card';
-        c.innerHTML=`<div><strong>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</strong><small>${esc(e.titolo)}</small></div><div class="actions"><button data-open-extra>Apri extra</button></div>`;c.querySelector('[data-open-extra]').onclick=()=>setView('extras');box.appendChild(c)
-      }
-      if(!total)box.innerHTML='<p class="muted dashboard-day-empty">Nessun lavoro assegnato.</p>';
-      next.appendChild(details)
-    }
-    return;
-  }
-  const title=next.closest('.panel')?.querySelector('h2');if(title)title.textContent='Programma dei prossimi 7 giorni';
+  const title=next.closest('.panel')?.querySelector('h2');if(title)title.textContent=admin()?'Programma operativo · prossimi 7 giorni':'I tuoi prossimi 7 giorni';
   const startDate=new Date(todayStr+'T12:00:00');
   for(let offset=0;offset<7;offset++){
     const d=new Date(startDate);d.setDate(d.getDate()+offset);const date=d.toISOString().slice(0,10);
-    const ordinary=scheduleItems.filter(i=>effectiveScheduleState(i)==='da_fare').map(i=>({item:i,schedule:visible.find(s=>s.id===i.schedule_id)})).filter(x=>x.schedule?.giorno===date).sort((a,b)=>(a.item.posizione||0)-(b.item.posizione||0));
-    const dayExtras=extras.filter(e=>e.giorno_intervento===date&&['programmato','ricevuto','da_integrare'].includes(e.stato)).sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||'')));
-    const total=ordinary.length+dayExtras.length;
-    const details=document.createElement('details');details.className='dashboard-day';details.open=offset===0&&total>0;
+    const ordinary=scheduleItems.filter(i=>itemVisible(i)&&itemDate(i)===date).map(i=>({item:i,schedule:scheduleForItem(i)})).sort((a,b)=>(a.item.posizione||0)-(b.item.posizione||0));
+    const linkedIds=new Set(ordinary.flatMap(x=>linkedExtrasForScheduleItem(x.item.id).map(e=>e.id)));
+    const dayExtras=extras.filter(e=>isExtraVisible(e)&&e.giorno_intervento===date&&!linkedIds.has(e.id)&&(activeExtraStates.includes(e.stato)||extraDone(e))).sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||'')));
+    const allJobsCount=ordinary.length+dayExtras.length;
+    const completedCount=ordinary.filter(x=>itemDone(x.item)).length+dayExtras.filter(extraDone).length;
+    const percent=allJobsCount?Math.round(completedCount/allJobsCount*100):0;
+    const details=document.createElement('details');details.className='dashboard-day';details.open=offset===0;
     const dayName=new Intl.DateTimeFormat('it-IT',{weekday:'long'}).format(d);
-    details.innerHTML=`<summary><span><strong>${offset===0?'Oggi · ':''}${esc(dayName.charAt(0).toUpperCase()+dayName.slice(1))}</strong><small>${fmt(date)}</small></span><span class="dashboard-day-count">${total}</span></summary><div class="dashboard-day-jobs"></div>`;
+    details.innerHTML=`<summary><span class="dashboard-day-title"><strong>${offset===0?'Oggi · ':''}${esc(dayName.charAt(0).toUpperCase()+dayName.slice(1))}</strong><small>${fmt(date)}</small></span><span class="dashboard-day-summary"><span class="day-type-count"><b>${ordinary.length}</b> ordinari</span><span class="day-type-count extra"><b>${dayExtras.length}</b> extra</span><span class="dashboard-day-count">${allJobsCount}</span></span></summary><div class="dashboard-day-progress"><div style="width:${percent}%"></div></div><div class="dashboard-day-progress-label"><strong>${percent}%</strong><span>${completedCount} completati su ${allJobsCount}</span></div><div class="dashboard-day-jobs"></div>`;
     const box=details.querySelector('.dashboard-day-jobs');
+    const groups=new Map();
+    const addToGroup=(key,label,job)=>{if(!groups.has(key))groups.set(key,{label,jobs:[]});groups.get(key).jobs.push(job)};
     for(const row of ordinary){
-      const st=stores.find(x=>x.id===row.item.store_id),linked=linkedExtrasForScheduleItem(row.item.id),members=scheduleMembers.filter(m=>m.schedule_id===row.schedule.id).map(m=>profiles.find(p=>p.id===m.profile_id)?.nome).filter(Boolean),c=document.createElement('article');c.className='dashboard-line-job';
-      c.innerHTML=`<div><strong>${esc(st?.nome||'Punto vendita')}</strong><small>Passaggio ordinario${members.length?' · '+esc(members.join(', ')):''}</small>${linked.length?`<div class="linked-extra-reminder"><strong>⚠ Extra da fare insieme</strong>${linked.map(e=>`<span>${esc(e.titolo)}</span>`).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button><button class="secondary" data-open-program>Programma</button></div>`;
-      c.querySelector('[data-map]').onclick=()=>openAppleMaps(st?.indirizzo,'Eurospin '+(st?.nome||''));c.querySelector('[data-open-program]').onclick=()=>openScheduleDate(date);box.appendChild(c)
+      const members=scheduleMembers.filter(m=>m.schedule_id===row.schedule.id).map(m=>profiles.find(p=>p.id===m.profile_id)).filter(Boolean);
+      const label=members.length?members.map(p=>p.nome).join(' + '):'Da assegnare';
+      addToGroup(members.length?'team-'+members.map(p=>p.id).sort().join('-'):'unassigned','👤 '+label,{kind:'ordinary',row});
     }
     for(const e of dayExtras){
-      const st=stores.find(s=>s.id===e.store_id),members=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean),c=document.createElement('article');c.className='dashboard-line-job extra-card';
-      c.innerHTML=`<div><strong>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</strong><small>${esc(e.titolo)}${members.length?' · '+esc(members.join(', ')):' · Da assegnare'}</small></div><div class="actions"><button data-open-extra>Apri extra</button></div>`;c.querySelector('[data-open-extra]').onclick=()=>setView('extras');box.appendChild(c)
+      const members=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)).filter(Boolean);
+      const label=members.length?members.map(p=>p.nome).join(' + '):'Da assegnare';
+      addToGroup(members.length?'team-'+members.map(p=>p.id).sort().join('-'):'unassigned','👤 '+label,{kind:'extra',extra:e});
     }
-    if(!total)box.innerHTML='<p class="muted dashboard-day-empty">Nessun lavoro programmato.</p>';
+    const sortedGroups=[...groups.entries()].sort((a,b)=>a[0]==='unassigned'?1:b[0]==='unassigned'?-1:a[1].label.localeCompare(b[1].label));
+    for(const [,group] of sortedGroups){
+      const section=document.createElement('section');section.className='dashboard-worker-group';
+      section.innerHTML=`<h3>${esc(group.label)} <span>${group.jobs.length}</span></h3><div></div>`;
+      const list=section.querySelector('div');
+      for(const job of group.jobs){
+        if(job.kind==='ordinary'){
+          const row=job.row,st=stores.find(x=>x.id===row.item.store_id),linked=linkedExtrasForScheduleItem(row.item.id),done=itemDone(row.item),c=document.createElement('article');
+          c.className=`dashboard-line-job ordinary ${done?'is-done':'is-open'}`;
+          c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span><strong>${esc(st?.nome||'Punto vendita')}</strong><small>${done?'Completato':'Da eseguire'}</small>${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>`<div class="embedded-extra ${extraDone(e)?'is-done':'is-open'}"><span>${extraDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b><small>${extraDone(e)?'Completato':'Da fare insieme al passaggio'}</small></div></div>`).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${!done&&date===todayStr?'<button data-done>Eseguito</button>':'<button class="secondary" data-open-program>Programma</button>'}</div>`;
+          c.querySelector('[data-map]').onclick=()=>openAppleMaps(st?.indirizzo,'Eurospin '+(st?.nome||''));c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,row.item.id));c.querySelector('[data-open-program]')?.addEventListener('click',()=>openScheduleDate(date));list.appendChild(c)
+        }else{
+          const e=job.extra,st=stores.find(s=>s.id===e.store_id),done=extraDone(e),urgent=e.urgente===true||e.priorita==='urgente'||elapsedDays(e)>=7,c=document.createElement('article');
+          c.className=`dashboard-line-job standalone-extra ${done?'is-done':urgent?'is-urgent':'is-open'}`;
+          c.innerHTML=`<div class="job-main"><span class="job-kind">EXTRA</span><strong>${esc(st?.nome||e.nome_esterno||'Extra')}</strong><small>${esc(e.titolo)} · ${done?'Completato':urgent?'Urgente':'Da eseguire'}</small></div><div class="actions"><button data-open-extra>Apri extra</button></div>`;c.querySelector('[data-open-extra]').onclick=()=>setView('extras');list.appendChild(c)
+        }
+      }
+      box.appendChild(section)
+    }
+    if(!allJobsCount)box.innerHTML='<p class="muted dashboard-day-empty">Nessun lavoro programmato.</p>';
     next.appendChild(details)
   }
 }

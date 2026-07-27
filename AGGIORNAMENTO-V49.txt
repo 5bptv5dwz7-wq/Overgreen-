@@ -1,0 +1,12 @@
+OVERGREEN CLOUD V49
+
+- Dashboard: nuovo contatore "Extra aperti".
+- Nuovo extra: opzione "Da fare insieme al passaggio ordinario".
+- Quando viene programmato il punto vendita, l'extra viene automaticamente:
+  - collegato alla voce dell'ordinario;
+  - impostato sulla stessa data;
+  - assegnato alla stessa squadra.
+- Promemoria ben visibile nella programmazione, nella Dashboard del dipendente e nella schermata "Eseguito".
+- La spunta è modificabile anche successivamente dalla modifica dell'extra.
+
+Prima dell'uso eseguire una volta MIGRAZIONE-V49.sql nel SQL Editor di Supabase.

@@ -1,0 +1,8 @@
+OVERGREEN CLOUD V45
+
+Correzione foto interventi ordinari:
+- aggiunto pulsante dedicato 'Scatta foto' con fotocamera posteriore;
+- dopo ogni scatto si può premere nuovamente e aggiungere altre foto;
+- le foto vengono accumulate invece di sostituire lo scatto precedente;
+- anteprima delle foto selezionate con possibilità di rimuoverle singolarmente o tutte;
+- resta disponibile la selezione multipla dalla libreria.

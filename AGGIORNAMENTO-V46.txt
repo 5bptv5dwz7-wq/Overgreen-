@@ -1,0 +1,8 @@
+OVERGREEN CLOUD V46
+
+Modifica foto interventi ordinari dallo Storico:
+- visualizzazione delle foto già allegate nella finestra Modifica;
+- eliminazione delle singole foto;
+- aggiunta di nuovi scatti dalla fotocamera;
+- aggiunta multipla dalla libreria;
+- anteprima e rimozione delle nuove foto prima del salvataggio.

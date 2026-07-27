@@ -1,0 +1,10 @@
+OVERGREEN CLOUD V56
+
+- Rimossa dalla Dashboard la fascia con le quattro caselle operative (oggi da fare, extra aperti, extra urgenti, operai attivi).
+- Sostituito il pulsante Programma con Eseguito direttamente nella Dashboard.
+- Il pulsante Eseguito apre la normale procedura di chiusura dell’intervento, compresa la sequenza degli extra collegati.
+- I lavori completati mostrano il pulsante Completato disabilitato.
+- Card dei lavori rese più compatte per visualizzare più interventi sullo schermo.
+- Aggiornata la cache applicativa alla versione V56.
+
+Nessuna migrazione SQL necessaria.

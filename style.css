@@ -142,3 +142,20 @@
 .job-main{display:flex;flex-direction:column;gap:3px;min-width:0}.job-kind{width:max-content;border-radius:999px;background:#e7f0ff;color:#245c9f;font-size:.63rem;font-weight:900;letter-spacing:.05em;padding:3px 7px}.standalone-extra .job-kind{background:#fff0d8;color:#895300}.is-done .job-kind{background:#dff3e6;color:#217246}.is-urgent .job-kind{background:#ffe1de;color:#9f1d1d}
 .embedded-extras{margin-top:9px;padding:10px;border:1px solid #efcf7a;border-radius:12px;background:#fff9e9;display:grid;gap:7px}.embedded-extras>strong{font-size:.76rem;color:#695000;text-transform:uppercase}.embedded-extra{display:flex;align-items:center;gap:8px}.embedded-extra>span{display:grid;place-items:center;min-width:25px;height:25px;border-radius:50%;background:#d88714;color:white;font-weight:900}.embedded-extra.is-done>span{background:#2b8b57}.embedded-extra div{display:flex;flex-direction:column}.embedded-extra small{font-size:.74rem;color:#75684a}
 @media(max-width:720px){.dashboard-operational-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-day-summary .day-type-count{display:none}}
+
+/* V56 · dashboard compatta */
+.dashboard-operational-strip{display:none!important}
+.dashboard-day-jobs{padding:5px 10px 8px}
+.dashboard-worker-group{margin:6px 0 10px}
+.dashboard-worker-group>h3{padding:8px 10px}
+.dashboard-line-job{padding:9px 2px 9px 9px;gap:8px;align-items:center}
+.dashboard-line-job .job-main{gap:1px!important}
+.dashboard-line-job .job-main>strong{font-size:1rem;line-height:1.15}
+.dashboard-line-job .job-main>small{font-size:.82rem}
+.dashboard-line-job .job-kind{font-size:.68rem;padding:3px 7px}
+.dashboard-line-job .actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:min(310px,48%)}
+.dashboard-line-job .actions button{min-height:40px;padding:8px 12px;margin:0}
+.dashboard-line-job .actions button[disabled]{opacity:.68;cursor:default}
+.embedded-extras{margin-top:6px;padding:7px 9px;gap:5px}
+.embedded-extra>span{min-width:22px;height:22px}
+@media(max-width:640px){.dashboard-line-job{flex-direction:row;align-items:center}.dashboard-line-job .job-main{flex:1}.dashboard-line-job .actions{width:47%;grid-template-columns:1fr 1fr}.dashboard-line-job .actions button{font-size:.86rem;padding:7px 5px}.embedded-extras{grid-column:1/-1}}

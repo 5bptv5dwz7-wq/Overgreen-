@@ -219,15 +219,8 @@ function renderDashboard(){
   $('dashUrgent').textContent=stores.filter(isUrgentStore).length;
   $('dashOpenExtras').textContent=openExtraJobs().length;
 
-  let strip=$('dashboardOperationalStrip');
-  if(!strip){strip=document.createElement('section');strip.id='dashboardOperationalStrip';strip.className='dashboard-operational-strip';$('dashboardView').insertBefore(strip,$('dashboardView').firstChild)}
-  const openExtras=extras.filter(e=>isExtraVisible(e)&&activeExtraStates.includes(e.stato));
-  const urgentExtras=openExtras.filter(e=>e.urgente===true||e.priorita==='urgente'||elapsedDaysFrom(extraRequestDate(e))>=7);
-  const activeWorkers=new Set();
-  scheduleMembers.forEach(m=>{const s=schedules.find(x=>x.id===m.schedule_id);if(s?.giorno===todayStr)activeWorkers.add(m.profile_id)});
-  extraWorkers.forEach(w=>{const e=extras.find(x=>x.id===w.extra_id);if(e?.giorno_intervento===todayStr)activeWorkers.add(w.profile_id)});
-  const totalActiveProfiles=profiles.filter(p=>p.attivo&&p.ruolo!=='admin').length;
-  strip.innerHTML=`<div><span>Oggi da fare</span><strong>${todaysItems.length+todaysExtras.length}</strong></div><div><span>Extra aperti</span><strong>${openExtras.length}</strong></div><div class="${urgentExtras.length?'alert':''}"><span>Extra urgenti</span><strong>${urgentExtras.length}</strong></div><div><span>Operai attivi</span><strong>${activeWorkers.size}${admin()?' / '+totalActiveProfiles:''}</strong></div>`;
+  const oldStrip=$('dashboardOperationalStrip');
+  if(oldStrip)oldStrip.remove();
 
   const next=$('dashboardNext');next.innerHTML='';
   const title=next.closest('.panel')?.querySelector('h2');if(title)title.textContent=admin()?'Programma operativo · prossimi 7 giorni':'I tuoi prossimi 7 giorni';
@@ -265,8 +258,8 @@ function renderDashboard(){
         if(job.kind==='ordinary'){
           const row=job.row,st=stores.find(x=>x.id===row.item.store_id),linked=linkedExtrasForScheduleItem(row.item.id),done=itemDone(row.item),c=document.createElement('article');
           c.className=`dashboard-line-job ordinary ${done?'is-done':'is-open'}`;
-          c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span><strong>${esc(st?.nome||'Punto vendita')}</strong><small>${done?'Completato':'Da eseguire'}</small>${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>`<div class="embedded-extra ${extraDone(e)?'is-done':'is-open'}"><span>${extraDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b><small>${extraDone(e)?'Completato':'Da fare insieme al passaggio'}</small></div></div>`).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${!done&&date===todayStr?'<button data-done>Eseguito</button>':'<button class="secondary" data-open-program>Programma</button>'}</div>`;
-          c.querySelector('[data-map]').onclick=()=>openAppleMaps(st?.indirizzo,'Eurospin '+(st?.nome||''));c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,row.item.id));c.querySelector('[data-open-program]')?.addEventListener('click',()=>openScheduleDate(date));list.appendChild(c)
+          c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span><strong>${esc(st?.nome||'Punto vendita')}</strong><small>${done?'Completato':'Da eseguire'}</small>${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>`<div class="embedded-extra ${extraDone(e)?'is-done':'is-open'}"><span>${extraDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b><small>${extraDone(e)?'Completato':'Da fare insieme al passaggio'}</small></div></div>`).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${!done?'<button data-done>✓ Eseguito</button>':'<button class="secondary" disabled>✓ Completato</button>'}</div>`;
+          c.querySelector('[data-map]').onclick=()=>openAppleMaps(st?.indirizzo,'Eurospin '+(st?.nome||''));c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,row.item.id));list.appendChild(c)
         }else{
           const e=job.extra,st=stores.find(s=>s.id===e.store_id),done=extraDone(e),urgent=e.urgente===true||e.priorita==='urgente'||elapsedDaysFrom(extraRequestDate(e))>=7,c=document.createElement('article');
           c.className=`dashboard-line-job standalone-extra ${done?'is-done':urgent?'is-urgent':'is-open'}`;

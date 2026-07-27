@@ -1,0 +1,7 @@
+OVERGREEN CLOUD V51
+
+- Dashboard dipendenti organizzata nei prossimi 7 giorni.
+- Ogni giorno si apre singolarmente e mostra tutti i lavori assegnati.
+- Gli extra sono visibili a tutti nella sezione Extra, anche se non assegnati o assegnati ad altri.
+- La chiusura di un extra resta disponibile solo all’amministratore o ai dipendenti assegnati.
+- Nessuna nuova migrazione SQL richiesta.

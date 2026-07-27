@@ -1,0 +1,6 @@
+OVERGREEN CLOUD V50
+
+- Quando un intervento ordinario ha uno o più extra collegati, dopo l’invio dell’ordinario si apre automaticamente la chiusura di ciascun extra.
+- Per ogni extra vengono richiesti tutti gli allegati previsti dalla chiusura singola: rapportino Eurospin, rapportino Overgreen, note finali e foto del lavoro.
+- Se ci sono più extra collegati, vengono richiesti uno alla volta.
+- Nessuna nuova modifica SQL necessaria rispetto alla V49.

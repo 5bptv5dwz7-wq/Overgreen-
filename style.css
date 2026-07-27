@@ -111,3 +111,19 @@
 /* V47 · data richiesta e attesa extra */
 .extra-date-summary{display:grid;grid-template-columns:1fr auto;gap:6px 10px;align-items:center;margin:10px 0;padding:10px 12px;border-radius:12px;background:#f3f7f4;border:1px solid #dce8e0}.extra-date-summary p{margin:0}.extra-date-summary p:last-child{grid-column:1/-1}.elapsed-days{font-weight:800;color:#9a5b00;background:#fff3d6;border-radius:999px;padding:5px 9px;white-space:nowrap;font-size:.83rem}
 .dash-card.extra-open{border-left:7px solid #7a5bc7}.linked-extra-reminder{margin:10px 0;padding:11px 12px;border-radius:14px;background:#fff4d8;border:1px solid #efcf7a;color:#5f4700;display:flex;flex-direction:column;gap:4px}.linked-extra-reminder span{font-size:.9rem}.linked-ordinary-label{display:inline-flex;padding:7px 10px;border-radius:999px;background:#fff4d8;color:#5f4700;font-weight:800;font-size:.82rem}.check-option{display:flex!important;align-items:flex-start;gap:10px;padding:12px;border:1px solid #dce7df;border-radius:15px;background:#f7faf8}.check-option input{width:auto;margin-top:3px}.check-option span{display:flex;flex-direction:column;gap:3px}.check-option small{color:var(--muted)}
+
+/* V51 - Dashboard lineare a 7 giorni */
+.dashboard-day{border:1px solid var(--line,#d9e5dd);border-radius:14px;background:#fff;overflow:hidden;margin-bottom:10px}
+.dashboard-day summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 15px;cursor:pointer;list-style:none}
+.dashboard-day summary::-webkit-details-marker{display:none}
+.dashboard-day summary span:first-child{display:flex;flex-direction:column;gap:2px}
+.dashboard-day summary small{color:var(--muted,#66756d)}
+.dashboard-day-count{min-width:34px;height:34px;border-radius:999px;background:#edf5f0;display:grid;place-items:center;font-weight:800}
+.dashboard-day[open] summary{border-bottom:1px solid var(--line,#d9e5dd);background:#f8fbf9}
+.dashboard-day-jobs{padding:8px 12px}
+.dashboard-line-job{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 2px;border-bottom:1px solid #edf1ee}
+.dashboard-line-job:last-child{border-bottom:0}
+.dashboard-line-job>div:first-child{display:flex;flex-direction:column;gap:3px;min-width:0}
+.dashboard-line-job .actions{flex-shrink:0;margin-top:0}
+.dashboard-day-empty{margin:8px 2px}
+@media(max-width:640px){.dashboard-line-job{flex-direction:column}.dashboard-line-job .actions{width:100%}.dashboard-line-job .actions button{flex:1}}

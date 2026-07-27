@@ -159,3 +159,16 @@
 .embedded-extras{margin-top:6px;padding:7px 9px;gap:5px}
 .embedded-extra>span{min-width:22px;height:22px}
 @media(max-width:640px){.dashboard-line-job{flex-direction:row;align-items:center}.dashboard-line-job .job-main{flex:1}.dashboard-line-job .actions{width:47%;grid-template-columns:1fr 1fr}.dashboard-line-job .actions button{font-size:.86rem;padding:7px 5px}.embedded-extras{grid-column:1/-1}}
+
+
+/* V57 · pulsanti sotto e sincronizzazione storico/dashboard */
+.dashboard-line-job{display:flex!important;flex-direction:column!important;align-items:stretch!important}
+.dashboard-line-job .job-main{width:100%}
+.dashboard-line-job .actions{width:100%!important;display:grid!important;grid-template-columns:1fr 1fr!important;margin-top:8px!important}
+.dashboard-line-job.standalone-extra .actions{grid-template-columns:1fr!important}
+@media(max-width:640px){
+  .dashboard-line-job{flex-direction:column!important;align-items:stretch!important}
+  .dashboard-line-job .actions{width:100%!important;grid-template-columns:1fr 1fr!important}
+  .dashboard-line-job.standalone-extra .actions{grid-template-columns:1fr!important}
+  .dashboard-line-job .actions button{font-size:.9rem!important;padding:9px 8px!important}
+}

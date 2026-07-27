@@ -1,0 +1,6 @@
+OVERGREEN CLOUD V57
+
+- Eliminando un intervento dallo storico, il relativo punto vendita programmato viene riaperto in Dashboard.
+- La Dashboard non considera più completato un elemento se non esiste il relativo intervento nello storico.
+- Pulsanti Maps ed Eseguito/Completato spostati sotto le informazioni del passaggio per evitare sovrapposizioni.
+- Nessuna migrazione SQL richiesta.

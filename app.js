@@ -188,9 +188,11 @@ async function linkOrdinaryExtras(scheduleId,scheduleDate,memberIds,items){
 
 function effectiveScheduleState(item){
   if(!item)return 'da_fare';
-  if(item.stato==='completato')return 'completato';
-  const related=interventions.find(i=>i.schedule_item_id===item.id&&i.stato==='in_attesa');
-  if(related)return 'in_attesa';
+  const related=interventions.find(i=>i.schedule_item_id===item.id);
+  if(related?.stato==='in_attesa')return 'in_attesa';
+  if(related?.stato==='convalidato')return 'completato';
+  // Evita che una programmazione resti completata dopo l'eliminazione dello storico.
+  if(item.stato==='completato'&&!related)return 'da_fare';
   return item.stato||'da_fare';
 }
 function renderDashboard(){
@@ -592,7 +594,13 @@ async function deleteHistoryIntervention(i,store){
   if(!confirm(`Eliminare definitivamente questo intervento?\n\n${label}\n\nVerranno eliminate anche le foto collegate.`))return;
   const {data,error}=await sb.functions.invoke('manage-user',{body:{action:'delete_intervention',intervention_id:i.id}});
   if(error||data?.error)return alert(data?.error||error.message);
-  toast('Intervento eliminato');$('historyDialog').close();await loadAll();const refreshed=stores.find(x=>x.id===store.id);if(refreshed)showHistory(refreshed)
+  // Se l'intervento proveniva dalla programmazione, riapre il relativo punto vendita.
+  if(i.schedule_item_id){
+    const reset=await sb.from('schedule_items').update({stato:'da_fare'}).eq('id',i.schedule_item_id);
+    if(reset.error)console.warn('Programmazione non riaperta automaticamente:',reset.error.message);
+    const local=scheduleItems.find(x=>x.id===i.schedule_item_id);if(local)local.stato='da_fare';
+  }
+  toast('Intervento eliminato e lavoro riaperto');$('historyDialog').close();await loadAll();const refreshed=stores.find(x=>x.id===store.id);if(refreshed)showHistory(refreshed)
 }
 function renderHistoryEditNewPhotos(){
   const box=$('historyEditNewPreview'),label=$('historyEditPhotoLabel'),clear=$('clearHistoryEditPhotos');if(!box)return;

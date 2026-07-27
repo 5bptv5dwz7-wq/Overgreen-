@@ -1,0 +1,13 @@
+OVERGREEN CLOUD V48
+
+EXTRA NON ANCORA PROGRAMMATI
+- Un nuovo extra può essere creato senza data di esecuzione.
+- Può essere creato anche senza indicare chi eseguirà il lavoro.
+- La data della richiesta resta obbligatoria e continuano a essere mostrati i giorni trascorsi.
+- Negli extra non assegnati compare “Da assegnare”.
+- Data e squadra possono essere inserite successivamente da Modifica.
+- Prima della chiusura devono essere presenti sia la data di esecuzione sia almeno un assegnatario.
+
+DATABASE
+- Non serve una nuova migrazione rispetto alla V47.
+- Se non è già stata eseguita, resta necessaria MIGRAZIONE-V47.sql.

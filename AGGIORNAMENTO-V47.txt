@@ -1,0 +1,10 @@
+OVERGREEN CLOUD V47
+
+- Un extra nuovo può essere creato senza data di esecuzione.
+- È obbligatoria la data della richiesta, precompilata con oggi.
+- La data di esecuzione può essere aggiunta o modificata successivamente.
+- Ogni extra aperto mostra i giorni trascorsi dalla richiesta.
+- Gli extra senza data sono indicati come 'Da programmare'.
+- Non è possibile chiudere un extra finché non viene inserita la data di esecuzione.
+
+IMPORTANTE: eseguire MIGRAZIONE-V47.sql nel SQL Editor di Supabase prima di usare questa versione.

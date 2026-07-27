@@ -1,0 +1,16 @@
+OVERGREEN CLOUD V52
+
+CORREZIONE VISIBILITÀ EXTRA
+
+Il codice della V51 mostrava già tutti gli extra nella sezione Extra, ma le regole RLS di Supabase restituivano al dipendente soltanto gli extra assegnati a lui.
+
+Per correggere il problema:
+1. Aprire Supabase.
+2. Entrare in SQL Editor.
+3. Copiare ed eseguire MIGRAZIONE-V52-VISIBILITA-EXTRA.sql.
+4. Chiudere e riaprire l'app oppure premere Aggiorna.
+
+La migrazione amplia soltanto la lettura:
+- tutti vedono tutti gli extra;
+- tutti vedono assegnazioni e allegati degli extra;
+- la modifica e la chiusura restano limitate dai controlli già presenti.

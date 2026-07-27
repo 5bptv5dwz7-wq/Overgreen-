@@ -1,0 +1,4 @@
+V53
+- Anche la Dashboard amministratore mostra i prossimi 7 giorni.
+- Ogni giorno si apre singolarmente.
+- Lorenzo vede tutti i lavori ordinari ed extra, con i nomi degli assegnatari.

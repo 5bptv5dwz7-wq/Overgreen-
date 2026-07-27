@@ -234,24 +234,28 @@ function renderDashboard(){
     }
     return;
   }
-  const title=next.closest('.panel')?.querySelector('h2');if(title)title.textContent='Prossimi lavori';
-  const ordinaryByDate=new Map();
-  for(const sch of visible.filter(s=>s.giorno>=todayStr)){
-    const count=scheduleItems.filter(i=>i.schedule_id===sch.id&&effectiveScheduleState(i)==='da_fare').length;
-    if(count)ordinaryByDate.set(sch.giorno,(ordinaryByDate.get(sch.giorno)||0)+count);
-  }
-  const extraByDate=new Map();
-  for(const e of extras.filter(e=>e.giorno_intervento>=todayStr&&['programmato','ricevuto','da_integrare'].includes(e.stato))){
-    extraByDate.set(e.giorno_intervento,(extraByDate.get(e.giorno_intervento)||0)+1);
-  }
-  const dates=[...new Set([...ordinaryByDate.keys(),...extraByDate.keys()])].sort().slice(0,5);
-  if(!dates.length)next.innerHTML='<p class="muted">Nessun lavoro programmato.</p>';
-  for(const date of dates){
-    const ordinaryCount=ordinaryByDate.get(date)||0,extraCount=extraByDate.get(date)||0,total=ordinaryCount+extraCount;
-    const detail=[ordinaryCount?`${ordinaryCount} ordinari`:'',extraCount?`${extraCount} extra`:''].filter(Boolean).join(' · ');
-    const c=document.createElement('article');c.className='card dashboard-next-card';
-    c.innerHTML=`<strong>${fmt(date)}</strong><small>${total} lavori da fare${detail?' · '+detail:''}</small><div class="actions"><button data-open-list>Apri lista</button></div>`;
-    const open=()=>openScheduleDate(date);c.querySelector('[data-open-list]').onclick=e=>{e.stopPropagation();open()};c.onclick=open;next.appendChild(c)
+  const title=next.closest('.panel')?.querySelector('h2');if(title)title.textContent='Programma dei prossimi 7 giorni';
+  const startDate=new Date(todayStr+'T12:00:00');
+  for(let offset=0;offset<7;offset++){
+    const d=new Date(startDate);d.setDate(d.getDate()+offset);const date=d.toISOString().slice(0,10);
+    const ordinary=scheduleItems.filter(i=>effectiveScheduleState(i)==='da_fare').map(i=>({item:i,schedule:visible.find(s=>s.id===i.schedule_id)})).filter(x=>x.schedule?.giorno===date).sort((a,b)=>(a.item.posizione||0)-(b.item.posizione||0));
+    const dayExtras=extras.filter(e=>e.giorno_intervento===date&&['programmato','ricevuto','da_integrare'].includes(e.stato)).sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||'')));
+    const total=ordinary.length+dayExtras.length;
+    const details=document.createElement('details');details.className='dashboard-day';details.open=offset===0&&total>0;
+    const dayName=new Intl.DateTimeFormat('it-IT',{weekday:'long'}).format(d);
+    details.innerHTML=`<summary><span><strong>${offset===0?'Oggi · ':''}${esc(dayName.charAt(0).toUpperCase()+dayName.slice(1))}</strong><small>${fmt(date)}</small></span><span class="dashboard-day-count">${total}</span></summary><div class="dashboard-day-jobs"></div>`;
+    const box=details.querySelector('.dashboard-day-jobs');
+    for(const row of ordinary){
+      const st=stores.find(x=>x.id===row.item.store_id),linked=linkedExtrasForScheduleItem(row.item.id),members=scheduleMembers.filter(m=>m.schedule_id===row.schedule.id).map(m=>profiles.find(p=>p.id===m.profile_id)?.nome).filter(Boolean),c=document.createElement('article');c.className='dashboard-line-job';
+      c.innerHTML=`<div><strong>${esc(st?.nome||'Punto vendita')}</strong><small>Passaggio ordinario${members.length?' · '+esc(members.join(', ')):''}</small>${linked.length?`<div class="linked-extra-reminder"><strong>⚠ Extra da fare insieme</strong>${linked.map(e=>`<span>${esc(e.titolo)}</span>`).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button><button class="secondary" data-open-program>Programma</button></div>`;
+      c.querySelector('[data-map]').onclick=()=>openAppleMaps(st?.indirizzo,'Eurospin '+(st?.nome||''));c.querySelector('[data-open-program]').onclick=()=>openScheduleDate(date);box.appendChild(c)
+    }
+    for(const e of dayExtras){
+      const st=stores.find(s=>s.id===e.store_id),members=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean),c=document.createElement('article');c.className='dashboard-line-job extra-card';
+      c.innerHTML=`<div><strong>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</strong><small>${esc(e.titolo)}${members.length?' · '+esc(members.join(', ')):' · Da assegnare'}</small></div><div class="actions"><button data-open-extra>Apri extra</button></div>`;c.querySelector('[data-open-extra]').onclick=()=>setView('extras');box.appendChild(c)
+    }
+    if(!total)box.innerHTML='<p class="muted dashboard-day-empty">Nessun lavoro programmato.</p>';
+    next.appendChild(details)
   }
 }
 function openScheduleDate(date){

@@ -1,0 +1,11 @@
+OVERGREEN CLOUD V60
+
+MODIFICA PRINCIPALE
+- Nella chiusura di un lavoro extra è ora possibile scattare più fotografie una dopo l'altra.
+- Dopo ogni scatto il selettore della fotocamera si azzera: basta premere nuovamente "Scatta foto" per aggiungerne un'altra.
+- Le fotografie vengono accumulate prima dell'invio e non sostituiscono quelle già scattate.
+- Aggiunta anteprima con conteggio e possibilità di eliminare una singola foto o rimuoverle tutte.
+- Rimane disponibile la selezione multipla dalla libreria fotografica.
+
+DATABASE
+- Nessuna migrazione SQL necessaria.

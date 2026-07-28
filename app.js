@@ -16,6 +16,8 @@ let combinedExtraClosureQueue=[];
 let storeFilter='all',scheduleWorkerFilter='all',scheduleDateFilter='all',scheduleExactDate=null;
 let loadAllPromise=null,currentHistoryStoreId=null;
 let historyEditPhotoFiles=[];
+let donePhotoFiles=[];
+let closeExtraPhotoFiles=[];
 
 // ---- Coda persistente per caricamenti in background ----
 const UPLOAD_DB='overgreen-upload-queue-v1', UPLOAD_STORE='jobs';
@@ -965,7 +967,7 @@ $('addScheduleItemsForm').onsubmit=async e=>{e.preventDefault();if(!admin())retu
 $('scheduleForm').onsubmit=async e=>{e.preventDefault();const members=[...$('scheduleWorkers').querySelectorAll('input:checked')].map(x=>x.value),selected=[...$('scheduleStores').querySelectorAll('input:checked')].map(x=>x.value);if(!members.length||!selected.length)return alert('Seleziona squadra e punti vendita.');const {data,error}=await sb.from('schedules').insert({giorno:$('scheduleDate').value,nota_generale:$('scheduleNote').value.trim()||null,creato_da:profile.id}).select().single();if(error)return alert(error.message);let r=await sb.from('schedule_members').insert(members.map(profile_id=>({schedule_id:data.id,profile_id})));if(r.error)return alert(r.error.message);r=await sb.from('schedule_items').insert(selected.map((store_id,i)=>({schedule_id:data.id,tipo:'ordinario',store_id,posizione:i+1,stato:'da_fare'}))).select();if(r.error)return alert(r.error.message);let linkedCount=0;try{linkedCount=(await linkOrdinaryExtras(data.id,$('scheduleDate').value,members,r.data||[])).length}catch(err){return alert('Programmazione creata, ma associazione extra non riuscita: '+err.message)}toast(linkedCount?`Programmazione salvata · ${linkedCount} extra associati`:'Programmazione salvata');$('scheduleForm').reset();$('scheduleDate').value=tomorrow();renderSchedulePicker();await loadAll()};
 function renderExtraStoreOptions(){$('extraStore').innerHTML=stores.map(s=>`<option value="${s.id}">${esc(s.nome)}</option>`).join('')}
 $('extraDestination').onchange=()=>{const ext=$('extraDestination').value==='external';$('extraStoreWrap').classList.toggle('hidden',ext);$('extraExternalWrap').classList.toggle('hidden',!ext)};
-$('extraForm').onsubmit=async e=>{e.preventDefault();const workers=[...$('extraWorkers').querySelectorAll('input:checked')].map(x=>x.value),external=$('extraDestination').value==='external',pdf=$('extraPdf').files[0];if(!pdf)return alert('Allega il PDF della richiesta.');const payload={store_id:external?null:$('extraStore').value,nome_esterno:external?$('extraExternalName').value.trim():null,indirizzo_esterno:external?$('extraExternalAddress').value.trim():null,titolo:$('extraTitle').value.trim(),descrizione:$('extraDescription').value.trim()||null,data_richiesta:$('extraRequestDate').value,giorno_intervento:$('extraDate').value||null,note_lorenzo:null,stato:'programmato',con_ordinario:$('extraWithOrdinary').checked,creato_da:profile.id};const {data,error}=await sb.from('extras').insert(payload).select().single();if(error)return alert(error.message);if(workers.length){const r=await sb.from('extra_workers').insert(workers.map(profile_id=>({extra_id:data.id,profile_id})));if(r.error)return alert(r.error.message)}const path=`extra/${data.id}/richiesta-${Date.now()}.pdf`;try{await uploadFile(path,pdf);await addAttachment({tipo:'pdf_richiesta',extra_id:data.id,storage_path:path,nome_file:pdf.name,mime_type:pdf.type,dimensione_bytes:pdf.size,caricato_da:profile.id})}catch(err){return alert('Extra creato, ma PDF non caricato: '+err.message)}$('extraDialog').close();toast(workers.length?'Extra creato':'Extra creato · da programmare e assegnare');await loadAll()};
+$('extraForm').onsubmit=async e=>{e.preventDefault();const workers=[...$('extraWorkers').querySelectorAll('input:checked')].map(x=>x.value),external=$('extraDestination').value==='external',pdf=$('extraPdf').files[0];if(!pdf)return alert('Allega il PDF della richiesta.');const payload={store_id:external?null:$('extraStore').value,nome_esterno:external?$('extraExternalName').value.trim():null,indirizzo_esterno:external?$('extraExternalAddress').value.trim():null,titolo:$('extraTitle').value.trim(),descrizione:$('extraDescription').value.trim()||null,data_richiesta:$('extraRequestDate').value,giorno_intervento:$('extraDate').value||null,note_lorenzo:null,stato:'programmato',con_ordinario:$('extraWithOrdinary').checked,creato_da:profile.id};const {data,error}=await sb.from('extras').insert(payload).select().single();if(error){const msg=String(error.message||error);if(msg.includes("con_ordinario")&&msg.includes("schema cache"))return alert("Database non aggiornato: esegui MIGRAZIONE-V59.sql su Supabase, poi riprova.");return alert(msg)}if(workers.length){const r=await sb.from('extra_workers').insert(workers.map(profile_id=>({extra_id:data.id,profile_id})));if(r.error)return alert(r.error.message)}const path=`extra/${data.id}/richiesta-${Date.now()}.pdf`;try{await uploadFile(path,pdf);await addAttachment({tipo:'pdf_richiesta',extra_id:data.id,storage_path:path,nome_file:pdf.name,mime_type:pdf.type,dimensione_bytes:pdf.size,caricato_da:profile.id})}catch(err){return alert('Extra creato, ma PDF non caricato: '+err.message)}$('extraDialog').close();toast(workers.length?'Extra creato':'Extra creato · da programmare e assegnare');await loadAll()};
 $('extraEditDestination').onchange=toggleExtraEditDestination;
 $('extraEditForm').onsubmit=async e=>{
   e.preventDefault();if(!admin())return;
@@ -998,6 +1000,7 @@ $('editExtraClosureForm').onsubmit=async e=>{
 function openExtraClosureDialog(extra,fromOrdinary=false){
   if(!extra)return;
   $('closeExtraForm').reset();
+  closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
   $('closeExtraId').value=extra.id;
   const st=stores.find(s=>s.id===extra.store_id);
   const title=$('closeExtraTitle');
@@ -1016,6 +1019,34 @@ function openNextCombinedExtraClosure(){
   openExtraClosureDialog(refreshed,true);
 }
 
+
+function addCloseExtraPhotos(fileList){
+  const incoming=[...fileList].filter(f=>f.type.startsWith('image/'));
+  for(const file of incoming){
+    const duplicate=closeExtraPhotoFiles.some(x=>x.name===file.name&&x.size===file.size&&x.lastModified===file.lastModified);
+    if(!duplicate)closeExtraPhotoFiles.push(file);
+  }
+  renderCloseExtraPhotoSelection();
+}
+function renderCloseExtraPhotoSelection(){
+  const label=$('closeExtraPhotoLabel'),preview=$('closeExtraPhotoPreview'),clear=$('clearCloseExtraPhotos');
+  if(label)label.textContent=closeExtraPhotoFiles.length?`${closeExtraPhotoFiles.length} foto pronte per l'invio`:'Nessuna foto';
+  if(clear)clear.classList.toggle('hidden',!closeExtraPhotoFiles.length);
+  if(!preview)return;
+  preview.innerHTML='';
+  closeExtraPhotoFiles.forEach((file,index)=>{
+    const card=document.createElement('div');card.className='ordinary-photo-thumb';
+    const url=URL.createObjectURL(file);
+    card.innerHTML=`<img src="${url}" alt="Foto ${index+1}"><button type="button" aria-label="Rimuovi foto">×</button>`;
+    card.querySelector('img').onload=()=>URL.revokeObjectURL(url);
+    card.querySelector('button').onclick=()=>{closeExtraPhotoFiles.splice(index,1);renderCloseExtraPhotoSelection()};
+    preview.appendChild(card);
+  });
+}
+$('closeExtraPhotos').onchange=e=>{addCloseExtraPhotos(e.target.files);e.target.value=''};
+$('closeExtraCameraPhoto').onchange=e=>{addCloseExtraPhotos(e.target.files);e.target.value=''};
+$('clearCloseExtraPhotos').onclick=()=>{closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection()};
+
 $('closeExtraForm').onsubmit=async e=>{
   e.preventDefault();
   const btn=e.submitter,oldText=btn.textContent;
@@ -1023,7 +1054,7 @@ $('closeExtraForm').onsubmit=async e=>{
   const uploadedPaths=[];
   try{
     const id=$('closeExtraId').value,notes=$('closeExtraNotes').value.trim()||null;
-    const photos=[...$('closeExtraPhotos').files];
+    const photos=[...closeExtraPhotoFiles];
     const reports=[['rapportino_eurospin',$('reportEurospin').files[0]],['rapportino_overgreen',$('reportOvergreen').files[0]]];
     if(reports.some(([,file])=>!file))throw new Error('Servono entrambi i rapportini.');
 
@@ -1056,7 +1087,7 @@ $('closeExtraForm').onsubmit=async e=>{
     btn.textContent='Invio a Lorenzo…';
     const {error}=await sb.from('extras').update({stato:'in_attesa',note_lorenzo:notes}).eq('id',id);
     if(error)throw error;
-    $('closeExtraDialog').close();$('closeExtraForm').reset();
+    $('closeExtraDialog').close();$('closeExtraForm').reset();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
     toast(`Extra inviato a Lorenzo${photos.length?' · '+photos.length+' foto':''}`);
     await loadAll();
     if(combinedExtraClosureQueue.length)setTimeout(()=>openNextCombinedExtraClosure(),250);

@@ -172,3 +172,9 @@
   .dashboard-line-job.standalone-extra .actions{grid-template-columns:1fr!important}
   .dashboard-line-job .actions button{font-size:.9rem!important;padding:9px 8px!important}
 }
+
+/* V62 - descrizioni e note nella Dashboard */
+.dashboard-job-notes{margin-top:7px;padding:7px 9px;border-left:3px solid #8eaa9a;background:#f3f7f4;border-radius:0 8px 8px 0;white-space:pre-wrap}
+.dashboard-job-notes>strong{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:#50675a;margin-bottom:3px}
+.dashboard-job-notes p{margin:2px 0;font-size:.84rem;line-height:1.32;color:#294136}
+.embedded-extra-description{margin:3px 0 0;font-size:.78rem;line-height:1.28;color:#5f563d;white-space:pre-wrap}

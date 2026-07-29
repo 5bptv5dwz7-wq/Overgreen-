@@ -1,0 +1,9 @@
+OVERGREEN CLOUD — AGGIORNAMENTO V62
+
+- Dashboard: visualizzazione delle note della programmazione per i passaggi ordinari.
+- Dashboard: visualizzazione delle note permanenti del punto vendita, quando presenti.
+- Dashboard: visualizzazione della descrizione degli extra indipendenti.
+- Dashboard: visualizzazione della descrizione anche negli extra collegati a un passaggio ordinario.
+- Per gli extra completati vengono mostrate anche le eventuali note finali.
+- Migliorata la leggibilità di descrizioni e note su smartphone.
+- Nessuna migrazione SQL necessaria.

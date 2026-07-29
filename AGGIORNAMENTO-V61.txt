@@ -1,0 +1,7 @@
+OVERGREEN CLOUD V61
+
+- Corretto il problema che permetteva a un dipendente di chiudere più volte lo stesso passaggio ordinario programmato.
+- Un passaggio inviato da un dipendente viene ora mostrato come “In attesa di convalida” con pulsante disabilitato.
+- Prima di aprire la chiusura e prima del salvataggio, l’app verifica direttamente su Supabase che non esista già un intervento in attesa o convalidato per la stessa programmazione.
+- Il doppio tocco o una Dashboard non ancora aggiornata non possono più generare una seconda chiusura.
+- Nessuna migrazione SQL necessaria.

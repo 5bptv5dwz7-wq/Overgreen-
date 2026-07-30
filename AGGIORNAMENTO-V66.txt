@@ -1,0 +1,9 @@
+OVERGREEN CLOUD V66
+
+MODIFICHE
+- Nella sezione Report è ora possibile scegliere: singolo giorno, intervallo di date o mensilità intera.
+- Per l’intervallo sono disponibili i campi Dal e Al.
+- Per la mensilità è disponibile un selettore mese/anno.
+- Riepilogo, filtri, condivisione, PDF sintetico e PDF completo rispettano il periodo selezionato.
+- Nei risultati e nei PDF viene mostrata la data di ogni singolo lavoro.
+- Nessuna migrazione SQL richiesta.

@@ -151,7 +151,7 @@ function isStoreProgrammed(storeId){return scheduleItems.some(item=>item.store_i
 function isUrgentStore(s){const n=days(s.ultimo_passaggio),lim=Number(s.intervallo_giorni)||15;return n!==null&&n>lim+10}
 function status(s){if(isStoreProgrammed(s.id))return'scheduled';const n=days(s.ultimo_passaggio),lim=s.intervallo_giorni||15;if(n===null||n>lim)return'due';if(n>=lim-3)return'warning';return'ok'}
 let currentView='dashboard';
-function setView(name){currentView=name;document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');$('pageTitle').textContent={dashboard:'Dashboard',stores:'Punti vendita',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report giornaliero',settings:'Impostazioni'}[name];if(name==='dashboard')renderDashboard();if(name==='stores')renderStores();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='reports')renderDailyReport();if(name==='settings'){ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin())loadSupabaseUsage();}}
+function setView(name){currentView=name;document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');$('pageTitle').textContent={dashboard:'Dashboard',stores:'Punti vendita',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report attività',settings:'Impostazioni'}[name];if(name==='dashboard')renderDashboard();if(name==='stores')renderStores();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='reports')renderDailyReport();if(name==='settings'){ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin())loadSupabaseUsage();}}
 async function signIn(email,password){const {error}=await sb.auth.signInWithPassword({email,password});if(error)throw error;}
 async function signOut(){await sb.auth.signOut();location.reload()}
 async function loadAll(){
@@ -478,29 +478,60 @@ function reportWorkerNames(kind,id){
   const rows=kind==='ordinary'?interventionWorkers.filter(w=>w.intervention_id===id):extraWorkers.filter(w=>w.extra_id===id);
   return rows.map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean);
 }
+function reportMode(){return document.querySelector('[data-report-mode].active')?.dataset.reportMode||'day'}
+function setReportMode(mode,rerender=true){
+  document.querySelectorAll('[data-report-mode]').forEach(b=>b.classList.toggle('active',b.dataset.reportMode===mode));
+  $('reportDayField')?.classList.toggle('hidden',mode!=='day');
+  $('reportStartField')?.classList.toggle('hidden',mode!=='range');
+  $('reportEndField')?.classList.toggle('hidden',mode!=='range');
+  $('reportMonthField')?.classList.toggle('hidden',mode!=='month');
+  if(rerender)renderDailyReport();
+}
 function renderReportFilters(){
   const select=$('reportWorker');if(!select)return;
   const old=select.value||'all';select.innerHTML='<option value="all">Tutti i dipendenti</option>'+profiles.filter(p=>p.attivo).map(p=>`<option value="${p.id}">${esc(p.nome)}</option>`).join('');
   select.value=[...select.options].some(o=>o.value===old)?old:'all';
-  if(!$('reportDate').value)$('reportDate').value=today();
+  const d=today();
+  if(!$('reportDate').value)$('reportDate').value=d;
+  if(!$('reportStartDate').value)$('reportStartDate').value=d;
+  if(!$('reportEndDate').value)$('reportEndDate').value=d;
+  if(!$('reportMonth').value)$('reportMonth').value=d.slice(0,7);
+  setReportMode(reportMode(),false);
 }
+function reportPeriod(){
+  const mode=reportMode();
+  if(mode==='range'){
+    let start=$('reportStartDate')?.value||today(),end=$('reportEndDate')?.value||start;
+    if(start>end)[start,end]=[end,start];
+    return {mode,start,end,label:`dal ${fmt(start)} al ${fmt(end)}`,short:`${fmt(start)}–${fmt(end)}`};
+  }
+  if(mode==='month'){
+    const month=$('reportMonth')?.value||today().slice(0,7),[y,m]=month.split('-').map(Number),endDay=new Date(y,m,0).getDate(),start=`${month}-01`,end=`${month}-${String(endDay).padStart(2,'0')}`;
+    const label=new Intl.DateTimeFormat('it-IT',{month:'long',year:'numeric'}).format(new Date(y,m-1,1));
+    return {mode,start,end,label,short:label};
+  }
+  const date=$('reportDate')?.value||today();return {mode,start:date,end:date,label:fmt(date),short:fmt(date)};
+}
+function dateInReportPeriod(value,period){return !!value&&value>=period.start&&value<=period.end}
+
 function reportStatusLabel(stato){return ({convalidato:'Convalidato',in_attesa:'In attesa',rifiutato:'Rifiutato',completato:'Completato',programmato:'Programmato'})[stato]||String(stato||'').replaceAll('_',' ')}
 function dailyReportData(){
-  const date=$('reportDate')?.value||today(),type=$('reportType')?.value||'all',worker=$('reportWorker')?.value||'all';
-  let ordinary=interventions.filter(i=>i.data_intervento===date);
-  let extra=extras.filter(e=>e.giorno_intervento===date&&['in_attesa','completato'].includes(e.stato));
+  const period=reportPeriod(),type=$('reportType')?.value||'all',worker=$('reportWorker')?.value||'all';
+  let ordinary=interventions.filter(i=>dateInReportPeriod(i.data_intervento,period));
+  let extra=extras.filter(e=>dateInReportPeriod(e.giorno_intervento,period)&&['in_attesa','completato'].includes(e.stato));
   if(worker!=='all'){
     ordinary=ordinary.filter(i=>interventionWorkers.some(w=>w.intervention_id===i.id&&w.profile_id===worker));
     extra=extra.filter(e=>extraWorkers.some(w=>w.extra_id===e.id&&w.profile_id===worker));
   }
   if(type==='ordinary')extra=[];if(type==='extra')ordinary=[];
-  return {date,ordinary,extra};
+  ordinary.sort((a,b)=>(a.data_intervento||'').localeCompare(b.data_intervento||''));extra.sort((a,b)=>(a.giorno_intervento||'').localeCompare(b.giorno_intervento||''));
+  return {date:period.start,period,ordinary,extra};
 }
 function buildDailyReportText(data=dailyReportData()){
   const allWorkers=new Set();data.ordinary.forEach(i=>reportWorkerNames('ordinary',i.id).forEach(n=>allWorkers.add(n)));data.extra.forEach(e=>reportWorkerNames('extra',e.id).forEach(n=>allWorkers.add(n)));
   const pending=data.ordinary.filter(i=>i.stato==='in_attesa').length+data.extra.filter(e=>e.stato==='in_attesa').length;
   const validated=data.ordinary.filter(i=>i.stato==='convalidato').length+data.extra.filter(e=>e.stato==='completato').length;
-  const lines=[`REPORT OVERGREEN · ${fmt(data.date)}`,`${data.ordinary.length} interventi ordinari · ${data.extra.length} extra`,`${validated} convalidati/completati · ${pending} in attesa`,`Operatori: ${[...allWorkers].join(', ')||'non indicati'}`];
+  const lines=[`REPORT OVERGREEN · ${data.period?.label||fmt(data.date)}`,`${data.ordinary.length} interventi ordinari · ${data.extra.length} extra`,`${validated} convalidati/completati · ${pending} in attesa`,`Operatori: ${[...allWorkers].join(', ')||'non indicati'}`];
   if(data.ordinary.length){lines.push('', 'INTERVENTI ORDINARI');data.ordinary.forEach(i=>{const st=stores.find(s=>s.id===i.store_id);lines.push(`• ${st?.nome||'Punto vendita'} — ${reportWorkerNames('ordinary',i.id).join(', ')||'operatore non indicato'} — ${reportStatusLabel(i.stato)}`)})}
   if(data.extra.length){lines.push('', 'LAVORI EXTRA');data.extra.forEach(e=>{const st=stores.find(s=>s.id===e.store_id);lines.push(`• ${e.titolo} · ${st?.nome||e.nome_esterno||'Luogo non indicato'} — ${reportWorkerNames('extra',e.id).join(', ')||'operatore non indicato'} — ${reportStatusLabel(e.stato)}`)})}
   return lines.join('\n');
@@ -525,18 +556,18 @@ async function exportDailyReportPdf(mode='compact'){
     for(const [heading,items] of groups){if(!items.length)continue;body+=`<h2 class="section-title">${esc(heading)}</h2>`;
       for(const item of items){const r=item.row,isOrd=item.kind==='ordinary',st=stores.find(s=>s.id===r.store_id),names=reportWorkerNames(item.kind,r.id),pics=attachments.filter(a=>a.tipo==='foto_generica'&&(isOrd?a.intervention_id===r.id:a.extra_id===r.id)),docs=isOrd?[]:attachments.filter(a=>a.extra_id===r.id&&a.tipo!=='foto_generica'),title=isOrd?(st?.nome||'Punto vendita'):r.titolo,place=isOrd?(st?.indirizzo||st?.citta||''):(st?.nome||r.nome_esterno||r.indirizzo_esterno||''),notes=(isOrd?r.note:(r.note_lorenzo||r.descrizione))||'Nessuna nota';
         let photoHtml='';if(mode==='full'&&pics.length){const urls=await Promise.all(pics.map(async a=>{try{return await signedAttachmentUrl(a)}catch{return ''}}));photoHtml=`<div class="photos">${urls.filter(Boolean).map((u,n)=>`<img src="${esc(u)}" alt="Foto ${n+1}">`).join('')}</div>`}
-        body+=`<article class="job"><div class="job-head"><div><div class="kind">${isOrd?'INTERVENTO ORDINARIO':'LAVORO EXTRA'}</div><h3>${esc(title)}</h3><div class="place">${esc(place)}</div></div><div class="status">${esc(reportStatusLabel(r.stato))}</div></div><div class="meta"><strong>Operatori:</strong> ${esc(names.join(', ')||'Non indicati')} · <strong>Foto:</strong> ${pics.length}${docs.length?` · <strong>Documenti:</strong> ${docs.length}`:''}</div>${mode==='full'?`<div class="notes"><strong>Note:</strong><br>${esc(notes)}</div>${photoHtml}${docs.length?`<div class="docs"><strong>Documenti allegati:</strong> ${docs.map(attachmentLabel).map(esc).join(' · ')}</div>`:''}`:''}</article>`;
+        body+=`<article class="job"><div class="job-head"><div><div class="kind">${isOrd?'INTERVENTO ORDINARIO':'LAVORO EXTRA'}</div><h3>${esc(title)}</h3><div class="place">${esc(place)}</div></div><div class="status">${esc(reportStatusLabel(r.stato))}</div></div><div class="meta"><strong>Data:</strong> ${esc(fmt(isOrd?r.data_intervento:r.giorno_intervento))} · <strong>Operatori:</strong> ${esc(names.join(', ')||'Non indicati')} · <strong>Foto:</strong> ${pics.length}${docs.length?` · <strong>Documenti:</strong> ${docs.length}`:''}</div>${mode==='full'?`<div class="notes"><strong>Note:</strong><br>${esc(notes)}</div>${photoHtml}${docs.length?`<div class="docs"><strong>Documenti allegati:</strong> ${docs.map(attachmentLabel).map(esc).join(' · ')}</div>`:''}`:''}</article>`;
       }
     }
-    if(!body)body='<div class="empty">Nessun lavoro trovato per la data e i filtri selezionati.</div>';
-    const html=`<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Report Overgreen ${esc(data.date)}</title><style>${printableReportStyles()}</style></head><body><header class="header"><div><div class="brand">OVERGREEN</div><div class="subtitle">Report giornaliero ${mode==='full'?'completo':'sintetico'}</div></div><div><div class="date">${esc(fmt(data.date))}</div><div class="filters">${esc(typeLabel)} · ${esc(workerLabel)}</div></div></header><section class="summary"><div class="kpi"><strong>${counts.total}</strong><span>Lavori</span></div><div class="kpi"><strong>${counts.ordinary}</strong><span>Ordinari</span></div><div class="kpi"><strong>${counts.extra}</strong><span>Extra</span></div><div class="kpi"><strong>${counts.done}</strong><span>Completati</span></div><div class="kpi"><strong>${counts.pending}</strong><span>In attesa</span></div><div class="kpi"><strong>${counts.workers}</strong><span>Operatori</span></div><div class="kpi"><strong>${counts.photos}</strong><span>Foto</span></div></section>${body}<div class="footer">Generato da Overgreen Cloud</div><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),500));<\/script></body></html>`;
+    if(!body)body='<div class="empty">Nessun lavoro trovato per il periodo e i filtri selezionati.</div>';
+    const html=`<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Report Overgreen ${esc(data.period?.short||data.date)}</title><style>${printableReportStyles()}</style></head><body><header class="header"><div><div class="brand">OVERGREEN</div><div class="subtitle">Report attività ${mode==='full'?'completo':'sintetico'}</div></div><div><div class="date">${esc(data.period?.label||fmt(data.date))}</div><div class="filters">${esc(typeLabel)} · ${esc(workerLabel)}</div></div></header><section class="summary"><div class="kpi"><strong>${counts.total}</strong><span>Lavori</span></div><div class="kpi"><strong>${counts.ordinary}</strong><span>Ordinari</span></div><div class="kpi"><strong>${counts.extra}</strong><span>Extra</span></div><div class="kpi"><strong>${counts.done}</strong><span>Completati</span></div><div class="kpi"><strong>${counts.pending}</strong><span>In attesa</span></div><div class="kpi"><strong>${counts.workers}</strong><span>Operatori</span></div><div class="kpi"><strong>${counts.photos}</strong><span>Foto</span></div></section>${body}<div class="footer">Generato da Overgreen Cloud</div><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),500));<\/script></body></html>`;
     popup.document.open();popup.document.write(html);popup.document.close();
     toast(mode==='full'?'PDF completo pronto':'PDF sintetico pronto');
   }catch(err){popup.close();alert('Impossibile preparare il PDF: '+err.message)}
 }
 async function shareDailyReport(){
   const text=buildDailyReportText();
-  try{if(navigator.share)await navigator.share({title:'Report giornaliero Overgreen',text});else{await navigator.clipboard.writeText(text);toast('Riepilogo copiato')}}catch(err){if(err?.name!=='AbortError')alert('Condivisione non riuscita: '+err.message)}
+  try{if(navigator.share)await navigator.share({title:'Report attività Overgreen',text});else{await navigator.clipboard.writeText(text);toast('Riepilogo copiato')}}catch(err){if(err?.name!=='AbortError')alert('Condivisione non riuscita: '+err.message)}
 }
 function renderDailyReport(){
   if(!admin())return setView('dashboard');renderReportFilters();
@@ -546,13 +577,13 @@ function renderDailyReport(){
   const docCount=attachments.filter(a=>a.tipo!=='foto_generica'&&a.extra_id&&data.extra.some(e=>e.id===a.extra_id)).length;
   const pending=all.filter(x=>x.row.stato==='in_attesa').length,done=data.ordinary.filter(i=>i.stato==='convalidato').length+data.extra.filter(e=>e.stato==='completato').length;
   $('reportSummary').innerHTML=`<div class="report-kpi"><strong>${all.length}</strong><span>Lavori totali</span></div><div class="report-kpi"><strong>${data.ordinary.length}</strong><span>Ordinari</span></div><div class="report-kpi"><strong>${data.extra.length}</strong><span>Extra</span></div><div class="report-kpi"><strong>${done}</strong><span>Completati</span></div><div class="report-kpi"><strong>${pending}</strong><span>In attesa</span></div><div class="report-kpi"><strong>${workerIds.size}</strong><span>Operatori</span></div><div class="report-kpi"><strong>${photoCount}</strong><span>Foto</span></div><div class="report-kpi"><strong>${docCount}</strong><span>Documenti</span></div>`;
-  const list=$('reportList');list.innerHTML='';if(!all.length){list.innerHTML='<section class="panel report-empty"><strong>Nessun lavoro trovato</strong><p class="muted">Non risultano attività concluse per questa data con i filtri selezionati.</p></section>';return}
+  const list=$('reportList');list.innerHTML='';if(!all.length){list.innerHTML='<section class="panel report-empty"><strong>Nessun lavoro trovato</strong><p class="muted">Non risultano attività concluse per il periodo selezionato con questi filtri.</p></section>';return}
   for(const item of all){
     const r=item.row,isOrd=item.kind==='ordinary',st=isOrd?stores.find(s=>s.id===r.store_id):stores.find(s=>s.id===r.store_id),names=reportWorkerNames(item.kind,r.id);
     const pics=attachments.filter(a=>a.tipo==='foto_generica'&&(isOrd?a.intervention_id===r.id:a.extra_id===r.id));
     const docs=isOrd?[]:attachments.filter(a=>a.extra_id===r.id&&a.tipo!=='foto_generica');
     const title=isOrd?(st?.nome||'Punto vendita'):r.titolo,place=isOrd?(st?.indirizzo||st?.citta||''):(st?.nome||r.nome_esterno||r.indirizzo_esterno||'');
-    const c=document.createElement('article');c.className='card daily-report-card';c.innerHTML=`<div class="daily-report-head"><div><span class="report-kind">${isOrd?'INTERVENTO ORDINARIO':'LAVORO EXTRA'}</span><h3>${esc(title)}</h3><p class="muted">${esc(place)}</p></div><span class="badge-state">${esc(reportStatusLabel(r.stato))}</span></div><div class="report-meta"><span>👤 ${esc(names.join(' · ')||'Operatore non indicato')}</span><span>📷 ${pics.length}</span>${docs.length?`<span>📄 ${docs.length}</span>`:''}</div><div class="report-note"><strong>Note</strong><p>${esc((isOrd?r.note:(r.note_lorenzo||r.descrizione))||'Nessuna nota')}</p></div><div class="report-photo-grid"></div><div class="actions report-actions">${st?'<button class="secondary" data-store>Scheda punto vendita</button>':''}${docs.map(a=>`<button class="secondary" data-doc="${a.id}">${esc(attachmentLabel(a))}</button>`).join('')}</div>`;
+    const c=document.createElement('article');c.className='card daily-report-card';c.innerHTML=`<div class="daily-report-head"><div><span class="report-kind">${isOrd?'INTERVENTO ORDINARIO':'LAVORO EXTRA'}</span><h3>${esc(title)}</h3><p class="muted">${esc(place)}</p></div><span class="badge-state">${esc(reportStatusLabel(r.stato))}</span></div><div class="report-meta"><span>📅 ${esc(fmt(isOrd?r.data_intervento:r.giorno_intervento))}</span><span>👤 ${esc(names.join(' · ')||'Operatore non indicato')}</span><span>📷 ${pics.length}</span>${docs.length?`<span>📄 ${docs.length}</span>`:''}</div><div class="report-note"><strong>Note</strong><p>${esc((isOrd?r.note:(r.note_lorenzo||r.descrizione))||'Nessuna nota')}</p></div><div class="report-photo-grid"></div><div class="actions report-actions">${st?'<button class="secondary" data-store>Scheda punto vendita</button>':''}${docs.map(a=>`<button class="secondary" data-doc="${a.id}">${esc(attachmentLabel(a))}</button>`).join('')}</div>`;
     c.querySelector('[data-store]')?.addEventListener('click',()=>openStoreDetail(st));
     c.querySelectorAll('[data-doc]').forEach(b=>b.onclick=()=>openAttachment(attachments.find(a=>a.id===b.dataset.doc)));
     const gallery=c.querySelector('.report-photo-grid');for(const a of pics){const b=document.createElement('button');b.type='button';b.className='report-photo';b.innerHTML='<span>📷</span>';gallery.appendChild(b);signedAttachmentUrl(a).then(url=>{b.innerHTML=`<img src="${url}" alt="${esc(a.nome_file||'Foto')}" loading="lazy">`;b.onclick=()=>window.open(url,'_blank')}).catch(()=>b.onclick=()=>openArchiveAttachment(a))}
@@ -1164,7 +1195,7 @@ $('closeExtraForm').onsubmit=async e=>{
 function isRecoverableJwtError(err){const m=String(err?.message||err||'').toLowerCase();return m.includes('jwt issued at future')||m.includes('jwt expired')||m.includes('invalid refresh token')||m.includes('refresh token not found')}
 async function resetBrokenSession(){try{await sb.auth.signOut({scope:'local'})}catch{};localStorage.removeItem('sb-'+new URL(cfg.supabaseUrl).hostname.split('.')[0]+'-auth-token');sessionStorage.clear();session=null;$('app').classList.add('hidden');$('loginScreen').classList.remove('hidden');const box=$('loginError');if(box){box.textContent='La sessione era scaduta o non valida. Accedi di nuovo.';box.classList.remove('hidden')}}
 
-$('reportDate')?.addEventListener('change',renderDailyReport);$('reportType')?.addEventListener('change',renderDailyReport);$('reportWorker')?.addEventListener('change',renderDailyReport);$('reportRefresh')?.addEventListener('click',async()=>{await loadAll();renderDailyReport();toast('Report aggiornato')});$('shareDailyReport')?.addEventListener('click',shareDailyReport);$('exportDailyReportCompact')?.addEventListener('click',()=>exportDailyReportPdf('compact'));$('exportDailyReportFull')?.addEventListener('click',()=>exportDailyReportPdf('full'));
+$('reportDate')?.addEventListener('change',renderDailyReport);$('reportStartDate')?.addEventListener('change',renderDailyReport);$('reportEndDate')?.addEventListener('change',renderDailyReport);$('reportMonth')?.addEventListener('change',renderDailyReport);document.querySelectorAll('[data-report-mode]').forEach(b=>b.addEventListener('click',()=>setReportMode(b.dataset.reportMode)));$('reportType')?.addEventListener('change',renderDailyReport);$('reportWorker')?.addEventListener('change',renderDailyReport);$('reportRefresh')?.addEventListener('click',async()=>{await loadAll();renderDailyReport();toast('Report aggiornato')});$('shareDailyReport')?.addEventListener('click',shareDailyReport);$('exportDailyReportCompact')?.addEventListener('click',()=>exportDailyReportPdf('compact'));$('exportDailyReportFull')?.addEventListener('click',()=>exportDailyReportPdf('full'));
 
 sb.auth.onAuthStateChange(async(_event,s)=>{session=s;if(!s){$('loginScreen').classList.remove('hidden');$('app').classList.add('hidden');return}$('loginScreen').classList.add('hidden');$('app').classList.remove('hidden');try{await loadAll();setView('dashboard')}catch(err){console.error(err);if(isRecoverableJwtError(err))return resetBrokenSession();alert('Errore collegamento: '+err.message)}});
 $('scheduleDate').value=tomorrow();renderSchedulePicker();

@@ -816,10 +816,24 @@ function wrapPdfText(text,font,size,maxWidth){
   if(line)lines.push(line);return lines;
 }
 async function fetchAttachmentBytes(a){const url=await signedAttachmentUrl(a);const res=await fetch(url);if(!res.ok)throw new Error(`Impossibile leggere ${attachmentLabel(a)}`);return new Uint8Array(await res.arrayBuffer())}
+async function normalizeImageForPdf(bytes,mime='image/jpeg'){
+  const blob=new Blob([bytes],{type:mime||'image/jpeg'}),url=URL.createObjectURL(blob);
+  try{
+    const img=await new Promise((resolve,reject)=>{const el=new Image();el.onload=()=>resolve(el);el.onerror=()=>reject(new Error('Immagine non leggibile'));el.src=url});
+    const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
+    const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0);
+    const out=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Conversione immagine non riuscita')),'image/jpeg',0.92));
+    return new Uint8Array(await out.arrayBuffer());
+  }finally{URL.revokeObjectURL(url)}
+}
+async function embedUprightImage(targetDoc,bytes,mime='image/jpeg'){
+  const normalized=await normalizeImageForPdf(bytes,mime);
+  return targetDoc.embedJpg(normalized);
+}
 async function appendAttachmentAsFullPage(targetDoc,a){
   const bytes=await fetchAttachmentBytes(a),mime=String(a.mime_type||'').toLowerCase(),name=String(a.nome_file||'').toLowerCase();
   if(mime.includes('pdf')||name.endsWith('.pdf')){const source=await PDFLib.PDFDocument.load(bytes);if(!source.getPageCount())throw new Error(`${attachmentLabel(a)} è vuoto`);const [page]=await targetDoc.copyPages(source,[0]);targetDoc.addPage(page);return}
-  let image;try{image=(mime.includes('png')||name.endsWith('.png'))?await targetDoc.embedPng(bytes):await targetDoc.embedJpg(bytes)}catch{throw new Error(`${attachmentLabel(a)} deve essere PDF, JPG o PNG`)}
+  let image;try{image=await embedUprightImage(targetDoc,bytes,mime)}catch{throw new Error(`${attachmentLabel(a)} deve essere PDF, JPG o PNG`)}
   const page=targetDoc.addPage([595.28,841.89]),pw=page.getWidth(),ph=page.getHeight(),scale=Math.min(pw/image.width,ph/image.height);page.drawImage(image,{x:(pw-image.width*scale)/2,y:(ph-image.height*scale)/2,width:image.width*scale,height:image.height*scale});
 }
 async function generateExtraClosurePdf(e,button){
@@ -836,7 +850,7 @@ async function generateExtraClosurePdf(e,button){
     for(const [label,value] of fields){page.drawText(label,{x:margin,y,size:8,font:bold,color:muted});const lines=wrapPdfText(value,regular,11,w-105);lines.slice(0,2).forEach((line,i)=>page.drawText(line,{x:margin+105,y:y-i*14,size:11,font:regular,color:rgb(.08,.17,.12)}));y-=Math.max(27,lines.slice(0,2).length*14+8)}
     y-=4;page.drawLine({start:{x:margin,y},end:{x:page.getWidth()-margin,y},thickness:1,color:rgb(.82,.88,.84)});y-=25;
     page.drawText('NOTE DI CHIUSURA',{x:margin,y,size:9,font:bold,color:green});y-=18;const notes=e.note_lorenzo||e.descrizione||'Nessuna nota inserita.';for(const line of wrapPdfText(notes,regular,10,w).slice(0,8)){page.drawText(line,{x:margin,y,size:10,font:regular,color:rgb(.08,.17,.12)});y-=14}
-    if(pics.length&&y>190){y-=10;page.drawText(`FOTO ALLEGATE (${pics.length})`,{x:margin,y,size:9,font:bold,color:green});y-=15;const selected=pics.slice(0,4),gap=8,cols=2,cellW=(w-gap)/2,cellH=105;for(let i=0;i<selected.length;i++){try{const a=selected[i],bytes=await fetchAttachmentBytes(a),mime=String(a.mime_type||'').toLowerCase(),img=mime.includes('png')?await doc.embedPng(bytes):await doc.embedJpg(bytes),col=i%cols,row=Math.floor(i/cols),x=margin+col*(cellW+gap),top=y-row*(cellH+gap),scale=Math.min(cellW/img.width,cellH/img.height);page.drawImage(img,{x:x+(cellW-img.width*scale)/2,y:top-cellH+(cellH-img.height*scale)/2,width:img.width*scale,height:img.height*scale})}catch{}}
+    if(pics.length&&y>190){y-=10;page.drawText(`FOTO ALLEGATE (${pics.length})`,{x:margin,y,size:9,font:bold,color:green});y-=15;const selected=pics.slice(0,4),gap=8,cols=2,cellW=(w-gap)/2,cellH=105;for(let i=0;i<selected.length;i++){try{const a=selected[i],bytes=await fetchAttachmentBytes(a),mime=String(a.mime_type||'').toLowerCase(),img=await embedUprightImage(doc,bytes,mime),col=i%cols,row=Math.floor(i/cols),x=margin+col*(cellW+gap),top=y-row*(cellH+gap),scale=Math.min(cellW/img.width,cellH/img.height);page.drawImage(img,{x:x+(cellW-img.width*scale)/2,y:top-cellH+(cellH-img.height*scale)/2,width:img.width*scale,height:img.height*scale})}catch{}}
     }
     page.drawText('Generato da Overgreen Cloud',{x:margin,y:22,size:8,font:regular,color:muted});
     await appendAttachmentAsFullPage(doc,requestFile);await appendAttachmentAsFullPage(doc,reportOvergreen);await appendAttachmentAsFullPage(doc,reportEurospin);

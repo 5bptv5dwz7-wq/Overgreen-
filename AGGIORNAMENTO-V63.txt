@@ -1,0 +1,7 @@
+OVERGREEN CLOUD — AGGIORNAMENTO V63
+
+- Corretto l'orientamento automatico delle immagini nei PDF di chiusura degli extra.
+- Le fotografie e i rapportini fotografati vengono normalizzati prima di essere inseriti nel PDF.
+- Vengono rispettate le informazioni di orientamento EXIF generate da iPhone e altri smartphone.
+- Corrette sia le immagini a pagina intera sia le anteprime fotografiche nel riepilogo iniziale.
+- Nessuna migrazione SQL necessaria.

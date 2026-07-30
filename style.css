@@ -187,3 +187,5 @@
 .report-period-tabs button{background:#edf4ef;color:#165b35;border:1px solid #d4e2da}
 .report-period-tabs button.active{background:#17623a;color:#fff;border-color:#17623a}
 @media(max-width:620px){.report-period-tabs{grid-template-columns:1fr}.report-filter-grid{grid-template-columns:1fr}}
+
+.closure-stamp{margin:.55rem 0;padding:.55rem .7rem;border-radius:10px;background:#eef7f1;color:#234b35;font-size:.88rem;font-weight:650}

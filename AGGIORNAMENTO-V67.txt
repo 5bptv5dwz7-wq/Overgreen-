@@ -1,0 +1,13 @@
+OVERGREEN CLOUD V67
+
+- Salvataggio automatico dell'orario di chiusura per passaggi ordinari ed extra.
+- Registrazione dell'utente che effettua la chiusura.
+- Orario preso dal database tramite trigger SQL.
+- Visualizzazione della chiusura nello storico, negli extra, nelle convalide e nei report.
+- Data e ora incluse nei report PDF e nella chiusura PDF degli extra.
+- L'amministratore può correggere data e ora dalla modifica dello storico o della chiusura extra.
+- Per i vecchi lavori senza timestamp viene mostrato "Orario non disponibile".
+
+INSTALLAZIONE
+1. Eseguire MIGRAZIONE-V67.sql su Supabase SQL Editor.
+2. Caricare i file dell'app aggiornati.

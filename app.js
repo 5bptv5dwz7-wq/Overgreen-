@@ -936,13 +936,35 @@ async function replaceExtraAttachment(extraId,tipo,file){
   }catch(err){await sb.storage.from('documenti').remove([path]);throw err}
 }
 
+let extraGroupOpenState={todo:true,scheduled:true,completed:false};
+function extraSearchText(e){
+  const st=stores.find(s=>s.id===e.store_id),assigned=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean);
+  return [e.titolo,e.descrizione,e.note_lorenzo,e.stato,st?.nome,st?.indirizzo,st?.citta,e.nome_esterno,e.indirizzo_esterno,extraRequestDate(e),e.giorno_intervento,...assigned].filter(Boolean).join(' ').toLocaleLowerCase('it');
+}
+function extraIsScheduled(e){
+  const hasDate=!!e.giorno_intervento,hasWorker=extraWorkers.some(w=>w.extra_id===e.id);
+  return e.stato!=='completato'&&e.stato!=='in_attesa'&&hasDate&&hasWorker;
+}
 function renderExtras(){
-  const root=$('extrasList');root.innerHTML='';
-  const visible=extras;
-  const open=visible.filter(e=>e.stato!=='completato').sort((a,b)=>String(extraRequestDate(a)||'').localeCompare(String(extraRequestDate(b)||''))),done=visible.filter(e=>e.stato==='completato');
-  const addSection=(title,list,empty)=>{const h=document.createElement('h2');h.className='extra-section-title';h.textContent=title;root.appendChild(h);if(!list.length){const p=document.createElement('p');p.className='muted extra-empty';p.textContent=empty;root.appendChild(p)}else list.forEach(e=>root.appendChild(extraCard(e)))};
-  addSection('Extra aperti',open,'Nessun extra aperto.');
-  addSection('Extra eseguiti',done,'Nessun extra eseguito.');
+  const root=$('extrasList');if(!root)return;root.innerHTML='';
+  const search=($('extraSearchInput')?.value||'').trim().toLocaleLowerCase('it');
+  $('clearExtraSearch')?.classList.toggle('hidden',!search);
+  const visible=extras.filter(e=>!search||extraSearchText(e).includes(search));
+  const byRequest=(a,b)=>String(extraRequestDate(a)||'').localeCompare(String(extraRequestDate(b)||''));
+  const todo=visible.filter(e=>e.stato!=='completato'&&e.stato!=='in_attesa'&&!extraIsScheduled(e)).sort(byRequest);
+  const scheduled=visible.filter(extraIsScheduled).sort((a,b)=>String(a.giorno_intervento||'').localeCompare(String(b.giorno_intervento||''))||byRequest(a,b));
+  const completed=visible.filter(e=>['in_attesa','completato'].includes(e.stato)).sort((a,b)=>String(b.giorno_intervento||extraRequestDate(b)||'').localeCompare(String(a.giorno_intervento||extraRequestDate(a)||'')));
+  const addGroup=(key,title,list,empty)=>{
+    const details=document.createElement('details');details.className=`extra-group extra-group-${key}`;details.open=search?list.length>0:extraGroupOpenState[key];
+    const summary=document.createElement('summary');summary.innerHTML=`<span>${esc(title)}</span><strong>${list.length}</strong>`;details.appendChild(summary);
+    const body=document.createElement('div');body.className='extra-group-body';
+    if(!list.length){const p=document.createElement('p');p.className='muted extra-empty';p.textContent=search?'Nessun risultato in questa sezione.':empty;body.appendChild(p)}else list.forEach(e=>body.appendChild(extraCard(e)));
+    details.appendChild(body);details.addEventListener('toggle',()=>{if(!search)extraGroupOpenState[key]=details.open});root.appendChild(details);
+  };
+  addGroup('todo','Da fare',todo,'Nessun extra da programmare o assegnare.');
+  addGroup('scheduled','Programmati',scheduled,'Nessun extra programmato.');
+  addGroup('completed','Completati',completed,'Nessun extra completato.');
+  if(search&&!visible.length){const p=document.createElement('p');p.className='extra-no-results';p.textContent=`Nessun extra trovato per “${$('extraSearchInput').value.trim()}”.`;root.prepend(p)}
 }
 function openExtraEdit(e){
   $('extraEditId').value=e.id;$('extraEditWithOrdinary').checked=!!e.con_ordinario;$('extraEditTitle').value=e.titolo||'';$('extraEditDescription').value=e.descrizione||'';$('extraEditRequestDate').value=extraRequestDate(e)||today();$('extraEditDate').value=e.giorno_intervento||'';
@@ -971,6 +993,7 @@ $('rememberAccess').checked=localStorage.getItem(REMEMBER_ACCESS_KEY)!=='0';
 $('loginForm').onsubmit = async (e) => { e.preventDefault(); const b=$('loginForm').querySelector('button[type=submit]'); const box=$('loginError'); box.classList.add('hidden'); box.textContent=''; b.disabled=true; b.textContent='Accesso…'; try { const email=$('loginEmail').value.trim(); const password=$('loginPassword').value; if(!email||!password) throw new Error('Inserisci email e password.'); localStorage.setItem(REMEMBER_ACCESS_KEY,$('rememberAccess').checked?'1':'0'); await signIn(email,password); } catch(err) { console.error(err); box.textContent=err?.message||'Accesso non riuscito.'; box.classList.remove('hidden'); } finally { b.disabled=false; b.textContent='Accedi'; } };
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeDialog(b));$('helpBtn').onclick=openHelp;document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{storeFilter=b.dataset.filter;renderStores()});
 $('globalSearch').oninput=renderGlobalSearch;$('dashboardRefresh').onclick=loadAll;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){scheduleDateFilter='all';$('scheduleDateFilter').value='all';setView('schedule')}else if(b.dataset.dash==='today'){scheduleDateFilter='today';$('scheduleDateFilter').value='today';setView('schedule')}else if(b.dataset.dash==='openextras')setView('extras');else setView('stores')});$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('addScheduleSearch').oninput=renderAddSchedulePicker;$('newExtraBtn').onclick=()=>{$('extraForm').reset();$('extraRequestDate').value=today();$('extraDate').value='';renderExtraStoreOptions();openDialog('extraDialog')};
+$('extraSearchInput').oninput=renderExtras;$('clearExtraSearch').onclick=()=>{$('extraSearchInput').value='';renderExtras();$('extraSearchInput').focus()};
 function addDonePhotos(fileList){
   const incoming=[...fileList].filter(f=>f.type.startsWith('image/'));
   for(const file of incoming){

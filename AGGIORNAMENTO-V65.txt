@@ -1,0 +1,9 @@
+OVERGREEN CLOUD V65
+
+- Sezione Extra organizzata in tre menu richiudibili: Da fare, Programmati e Completati.
+- Da fare e Programmati sono aperti per impostazione iniziale; Completati resta chiuso.
+- Conteggio automatico accanto a ogni sezione.
+- Ricerca istantanea per titolo, descrizione, note, punto vendita, indirizzo, operatore, data e stato.
+- Durante la ricerca si aprono automaticamente solo le sezioni che contengono risultati.
+- Gli extra in attesa di convalida sono raccolti tra i completati.
+- Nessuna migrazione SQL richiesta.

@@ -1,0 +1,6 @@
+OVERGREEN CLOUD V64
+
+- Ingrandite nettamente le fotografie nella prima pagina del PDF di chiusura extra.
+- Layout fotografico adattivo: 1 foto grande, 2 foto affiancate, 3 foto più grandi su una riga, 4 foto in griglia 2×2.
+- Mantenuta la correzione automatica dell'orientamento delle immagini.
+- Nessuna modifica SQL necessaria.

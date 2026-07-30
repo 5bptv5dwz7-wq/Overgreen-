@@ -850,7 +850,21 @@ async function generateExtraClosurePdf(e,button){
     for(const [label,value] of fields){page.drawText(label,{x:margin,y,size:8,font:bold,color:muted});const lines=wrapPdfText(value,regular,11,w-105);lines.slice(0,2).forEach((line,i)=>page.drawText(line,{x:margin+105,y:y-i*14,size:11,font:regular,color:rgb(.08,.17,.12)}));y-=Math.max(27,lines.slice(0,2).length*14+8)}
     y-=4;page.drawLine({start:{x:margin,y},end:{x:page.getWidth()-margin,y},thickness:1,color:rgb(.82,.88,.84)});y-=25;
     page.drawText('NOTE DI CHIUSURA',{x:margin,y,size:9,font:bold,color:green});y-=18;const notes=e.note_lorenzo||e.descrizione||'Nessuna nota inserita.';for(const line of wrapPdfText(notes,regular,10,w).slice(0,8)){page.drawText(line,{x:margin,y,size:10,font:regular,color:rgb(.08,.17,.12)});y-=14}
-    if(pics.length&&y>190){y-=10;page.drawText(`FOTO ALLEGATE (${pics.length})`,{x:margin,y,size:9,font:bold,color:green});y-=15;const selected=pics.slice(0,4),gap=8,cols=2,cellW=(w-gap)/2,cellH=105;for(let i=0;i<selected.length;i++){try{const a=selected[i],bytes=await fetchAttachmentBytes(a),mime=String(a.mime_type||'').toLowerCase(),img=await embedUprightImage(doc,bytes,mime),col=i%cols,row=Math.floor(i/cols),x=margin+col*(cellW+gap),top=y-row*(cellH+gap),scale=Math.min(cellW/img.width,cellH/img.height);page.drawImage(img,{x:x+(cellW-img.width*scale)/2,y:top-cellH+(cellH-img.height*scale)/2,width:img.width*scale,height:img.height*scale})}catch{}}
+    if(pics.length&&y>190){
+      y-=10;page.drawText(`FOTO ALLEGATE (${pics.length})`,{x:margin,y,size:9,font:bold,color:green});y-=15;
+      const selected=pics.slice(0,4),gap=10,count=selected.length;
+      let cols=2,rows=2,cellH=150;
+      if(count===1){cols=1;rows=1;cellH=Math.min(300,Math.max(190,y-38))}
+      else if(count===2){cols=2;rows=1;cellH=Math.min(245,Math.max(175,y-38))}
+      else if(count===3){cols=3;rows=1;cellH=Math.min(215,Math.max(165,y-38))}
+      else{cols=2;rows=2;cellH=Math.min(160,Math.max(125,(y-48-gap)/2))}
+      const cellW=(w-gap*(cols-1))/cols;
+      for(let i=0;i<selected.length;i++){
+        try{
+          const a=selected[i],bytes=await fetchAttachmentBytes(a),mime=String(a.mime_type||'').toLowerCase(),img=await embedUprightImage(doc,bytes,mime),col=i%cols,row=Math.floor(i/cols),x=margin+col*(cellW+gap),top=y-row*(cellH+gap),scale=Math.min(cellW/img.width,cellH/img.height);
+          page.drawImage(img,{x:x+(cellW-img.width*scale)/2,y:top-cellH+(cellH-img.height*scale)/2,width:img.width*scale,height:img.height*scale})
+        }catch{}
+      }
     }
     page.drawText('Generato da Overgreen Cloud',{x:margin,y:22,size:8,font:regular,color:muted});
     await appendAttachmentAsFullPage(doc,requestFile);await appendAttachmentAsFullPage(doc,reportOvergreen);await appendAttachmentAsFullPage(doc,reportEurospin);

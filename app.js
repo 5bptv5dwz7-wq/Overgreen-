@@ -157,8 +157,12 @@ function closeDialog(d){d.closest('dialog')?.close()}
 function isStoreProgrammed(storeId){return scheduleItems.some(item=>item.store_id===storeId&&effectiveScheduleState(item)!=='completato'&&schedules.some(s=>s.id===item.schedule_id))}
 function isUrgentStore(s){const n=days(s.ultimo_passaggio),lim=Number(s.intervallo_giorni)||15;return n!==null&&n>lim+10}
 function status(s){if(isStoreProgrammed(s.id))return'scheduled';const n=days(s.ultimo_passaggio),lim=s.intervallo_giorni||15;if(n===null||n>lim)return'due';if(n>=lim-3)return'warning';return'ok'}
-let currentView='dashboard';
-function setView(name){currentView=name;document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');$('pageTitle').textContent={dashboard:'Dashboard',stores:'Punti vendita',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report attività',settings:'Impostazioni'}[name];if(name==='dashboard')renderDashboard();if(name==='stores')renderStores();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='reports')renderDailyReport();if(name==='settings'){ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin())loadSupabaseUsage();}}
+const CURRENT_VIEW_KEY='overgreen_current_view';
+let currentView=localStorage.getItem(CURRENT_VIEW_KEY)||'dashboard';
+function setView(name){
+  if(!$(name+'View'))name='dashboard';
+  currentView=name;localStorage.setItem(CURRENT_VIEW_KEY,name);
+  document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');$('pageTitle').textContent={dashboard:'Dashboard',stores:'Punti vendita',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report attività',settings:'Impostazioni'}[name];if(name==='dashboard')renderDashboard();if(name==='stores')renderStores();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='reports')renderDailyReport();if(name==='settings'){ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin())loadSupabaseUsage();}}
 async function signIn(email,password){const {error}=await sb.auth.signInWithPassword({email,password});if(error)throw error;}
 async function signOut(){await sb.auth.signOut();location.reload()}
 async function loadAll(){
@@ -1205,6 +1209,17 @@ async function resetBrokenSession(){try{await sb.auth.signOut({scope:'local'})}c
 
 $('reportDate')?.addEventListener('change',renderDailyReport);$('reportStartDate')?.addEventListener('change',renderDailyReport);$('reportEndDate')?.addEventListener('change',renderDailyReport);$('reportMonth')?.addEventListener('change',renderDailyReport);document.querySelectorAll('[data-report-mode]').forEach(b=>b.addEventListener('click',()=>setReportMode(b.dataset.reportMode)));$('reportType')?.addEventListener('change',renderDailyReport);$('reportWorker')?.addEventListener('change',renderDailyReport);$('reportRefresh')?.addEventListener('click',async()=>{await loadAll();renderDailyReport();toast('Report aggiornato')});$('shareDailyReport')?.addEventListener('click',shareDailyReport);$('exportDailyReportCompact')?.addEventListener('click',()=>exportDailyReportPdf('compact'));$('exportDailyReportFull')?.addEventListener('click',()=>exportDailyReportPdf('full'));
 
-sb.auth.onAuthStateChange(async(_event,s)=>{session=s;if(!s){$('loginScreen').classList.remove('hidden');$('app').classList.add('hidden');return}$('loginScreen').classList.add('hidden');$('app').classList.remove('hidden');try{await loadAll();setView('dashboard')}catch(err){console.error(err);if(isRecoverableJwtError(err))return resetBrokenSession();alert('Errore collegamento: '+err.message)}});
+sb.auth.onAuthStateChange(async(event,s)=>{
+  session=s;
+  if(!s){$('loginScreen').classList.remove('hidden');$('app').classList.add('hidden');return}
+  $('loginScreen').classList.add('hidden');$('app').classList.remove('hidden');
+  try{
+    await loadAll();
+    // Un rinnovo della sessione o il ritorno da un documento esterno non deve
+    // riportare l'utente alla Dashboard. Ripristina l'ultima sezione aperta.
+    const savedView=localStorage.getItem(CURRENT_VIEW_KEY)||currentView||'dashboard';
+    setView(savedView);
+  }catch(err){console.error(err);if(isRecoverableJwtError(err))return resetBrokenSession();alert('Errore collegamento: '+err.message)}
+});
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(console.error));

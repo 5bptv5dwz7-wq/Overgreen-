@@ -1,0 +1,7 @@
+OVERGREEN CLOUD V70
+
+- Corretto il ritorno automatico alla Dashboard dopo l'apertura e la chiusura di un file allegato.
+- L'app memorizza la sezione attualmente aperta (Extra, Punti vendita, Programmazione, Report o Impostazioni).
+- Se iOS sospende o ricarica l'app mentre viene visualizzato un PDF, al ritorno viene ripristinata la stessa sezione.
+- Anche i rinnovi automatici della sessione Supabase non cambiano più schermata.
+- Nessuna modifica SQL necessaria.

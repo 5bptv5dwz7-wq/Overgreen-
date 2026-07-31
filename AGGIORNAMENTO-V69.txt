@@ -1,0 +1,13 @@
+OVERGREEN CLOUD V69
+
+- Aggiunta categoria obbligatoria per i nuovi extra: Verde oppure Pulizie.
+- Categoria modificabile anche successivamente.
+- Aggiunto filtro categoria nella ricerca Extra.
+- Ricerca testuale estesa anche alla categoria.
+- Extra Verde evidenziati in verde con icona foglia.
+- Extra Pulizie evidenziati in azzurro con icona scopa.
+- Distinzione visiva applicata nella sezione Extra, nella Dashboard, nella Programmazione e negli extra collegati agli ordinari.
+- Categoria inclusa anche nel PDF di chiusura.
+- Gli extra precedenti senza categoria restano visibili come “Categoria non indicata” e possono essere aggiornati da Modifica.
+
+Prima dell'uso eseguire MIGRAZIONE-V69.sql in Supabase.

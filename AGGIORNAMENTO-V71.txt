@@ -1,0 +1,8 @@
+OVERGREEN CLOUD V71
+
+- Il pulsante Apri extra nella Dashboard apre direttamente l'extra selezionato.
+- Viene aperta automaticamente la sezione corretta: Da fare, Programmati o Completati.
+- Ricerca e filtro categoria vengono azzerati solo per garantire che l'extra sia visibile.
+- La scheda viene portata al centro dello schermo ed evidenziata temporaneamente.
+- Lo stesso comportamento vale per i risultati della ricerca generale e per gli extra aperti dalla scheda punto vendita.
+- Nessuna migrazione SQL necessaria.

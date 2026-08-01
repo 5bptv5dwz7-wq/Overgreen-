@@ -306,7 +306,7 @@ function renderDashboard(){
           const e=job.extra,st=stores.find(s=>s.id===e.store_id),done=extraDone(e),urgent=e.urgente===true||e.priorita==='urgente'||elapsedDaysFrom(extraRequestDate(e))>=7,c=document.createElement('article');
           c.className=`dashboard-line-job standalone-extra ${extraCategoryClass(e)} ${done?'is-done':urgent?'is-urgent':'is-open'}`;
           const extraNotes=[e.descrizione,e.note_lorenzo].filter(v=>String(v||'').trim());
-          c.innerHTML=`<div class="job-main"><span class="job-kind">EXTRA</span><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span><strong>${esc(st?.nome||e.nome_esterno||'Extra')}</strong><small>${esc(e.titolo)} · ${done?'Completato':urgent?'Urgente':'Da eseguire'}</small>${extraNotes.length?`<div class="dashboard-job-notes"><strong>${done?'Descrizione / note':'Descrizione'}</strong>${extraNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}</div><div class="actions"><button data-open-extra>Apri extra</button></div>`;c.querySelector('[data-open-extra]').onclick=()=>setView('extras');list.appendChild(c)
+          c.innerHTML=`<div class="job-main"><span class="job-kind">EXTRA</span><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span><strong>${esc(st?.nome||e.nome_esterno||'Extra')}</strong><small>${esc(e.titolo)} · ${done?'Completato':urgent?'Urgente':'Da eseguire'}</small>${extraNotes.length?`<div class="dashboard-job-notes"><strong>${done?'Descrizione / note':'Descrizione'}</strong>${extraNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}</div><div class="actions"><button data-open-extra>Apri extra</button></div>`;c.querySelector('[data-open-extra]').onclick=()=>openExtraById(e.id);list.appendChild(c)
         }
       }
       box.appendChild(section)
@@ -330,7 +330,7 @@ function renderGlobalSearch(){
   const foundExtras=extras.filter(e=>`${e.titolo} ${e.numero_target||''} ${e.categoria_target||''} ${extraCategoryLabel(e)} ${e.descrizione||''} ${e.nome_esterno||''} ${stores.find(s=>s.id===e.store_id)?.nome||''}`.toLowerCase().includes(q)).slice(0,5);
   const foundProfiles=profiles.filter(p=>p.nome.toLowerCase().includes(q)).slice(0,4);
   for(const st of foundStores){const c=document.createElement('article');c.className='card global-result';c.innerHTML=`<strong>🏪 ${esc(st.nome)}</strong><small class="muted">Punto vendita · ${esc(st.citta||st.indirizzo||'')}</small>`;c.onclick=()=>showStoreDetail(st);root.appendChild(c)}
-  for(const e of foundExtras){const c=document.createElement('article');c.className='card global-result';c.innerHTML=`<strong>🧾 ${esc(e.titolo)}</strong><small class="muted">Extra · richiesta ${fmt(extraRequestDate(e))} · ${esc(elapsedDaysLabel(e))} · ${e.giorno_intervento?`esecuzione ${fmt(e.giorno_intervento)}`:'da programmare'}</small>`;c.onclick=()=>setView('extras');root.appendChild(c)}
+  for(const e of foundExtras){const c=document.createElement('article');c.className='card global-result';c.innerHTML=`<strong>🧾 ${esc(e.titolo)}</strong><small class="muted">Extra · richiesta ${fmt(extraRequestDate(e))} · ${esc(elapsedDaysLabel(e))} · ${e.giorno_intervento?`esecuzione ${fmt(e.giorno_intervento)}`:'da programmare'}</small>`;c.onclick=()=>openExtraById(e.id);root.appendChild(c)}
   for(const p of foundProfiles){const c=document.createElement('article');c.className='card global-result';c.innerHTML=`<strong>👤 ${esc(p.nome)}</strong><small class="muted">${p.ruolo==='admin'?'Amministratore':'Dipendente'}</small>`;c.onclick=()=>{scheduleWorkerFilter=p.id;$('scheduleWorkerFilter').value=p.id;setView('schedule')};root.appendChild(c)}
   if(!root.children.length)root.innerHTML='<p class="muted">Nessun risultato.</p>';
 }
@@ -462,7 +462,7 @@ async function showStoreDetail(s){
   body.querySelector('[data-detail-edit]')?.addEventListener('click',()=>openStore(s));
   body.querySelector('[data-open-full-history]')?.addEventListener('click',()=>showHistory(s));
   body.querySelectorAll('[data-sheet-tab]').forEach(btn=>btn.onclick=()=>{body.querySelectorAll('[data-sheet-tab]').forEach(x=>x.classList.toggle('active',x===btn));body.querySelectorAll('[data-sheet-panel]').forEach(x=>x.classList.toggle('hidden',x.dataset.sheetPanel!==btn.dataset.sheetTab))});
-  body.querySelectorAll('[data-open-extra-id]').forEach(btn=>btn.onclick=()=>{const e=extras.find(x=>x.id===btn.dataset.openExtraId);if(e){$('storeDetailDialog').close();setView('extras');setTimeout(()=>document.querySelector(`[data-extra-card-id="${e.id}"]`)?.scrollIntoView({behavior:'smooth',block:'center'}),100)}});
+  body.querySelectorAll('[data-open-extra-id]').forEach(btn=>btn.onclick=()=>{const e=extras.find(x=>x.id===btn.dataset.openExtraId);if(e){$('storeDetailDialog').close();openExtraById(e.id)}});
   body.querySelector('[data-upload-plan]')?.addEventListener('change',e=>uploadStoreArchiveFiles(s,'planimetria',[...e.target.files]).catch(err=>alert(err.message)));
   body.querySelector('[data-upload-photo]')?.addEventListener('change',e=>uploadStoreArchiveFiles(s,'foto',[...e.target.files]).catch(err=>alert(err.message)));
 
@@ -979,6 +979,23 @@ async function replaceExtraAttachment(extraId,tipo,file){
 }
 
 let extraGroupOpenState={todo:true,scheduled:true,completed:false};
+
+function openExtraById(extraId){
+  const e=extras.find(x=>x.id===extraId);if(!e)return;
+  if($('extraSearchInput'))$('extraSearchInput').value='';
+  if($('extraCategoryFilter'))$('extraCategoryFilter').value='all';
+  const groupKey=['in_attesa','completato'].includes(e.stato)?'completed':extraIsScheduled(e)?'scheduled':'todo';
+  extraGroupOpenState[groupKey]=true;
+  setView('extras');
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    const card=document.querySelector(`[data-extra-card-id="${extraId}"]`);if(!card)return;
+    const group=card.closest('details');if(group)group.open=true;
+    card.scrollIntoView({behavior:'smooth',block:'center'});
+    card.classList.remove('extra-focus');void card.offsetWidth;card.classList.add('extra-focus');
+    setTimeout(()=>card.classList.remove('extra-focus'),2400);
+  }));
+}
+
 function extraSearchText(e){
   const st=stores.find(s=>s.id===e.store_id),assigned=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean);
   return [e.titolo,e.numero_target,e.categoria_target,extraCategoryLabel(e),e.descrizione,e.note_lorenzo,e.stato,st?.nome,st?.indirizzo,st?.citta,e.nome_esterno,e.indirizzo_esterno,extraRequestDate(e),e.giorno_intervento,...assigned].filter(Boolean).join(' ').toLocaleLowerCase('it');

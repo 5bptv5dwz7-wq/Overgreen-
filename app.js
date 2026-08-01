@@ -837,7 +837,7 @@ function renderSchedules(){
 
   const assignedIds=assignedExtraIds();
   let visibleExtraJobs=(admin()?extras:extras.filter(e=>assignedIds.has(e.id)))
-    .filter(e=>['programmato','ricevuto','da_integrare','in_attesa'].includes(e.stato))
+    .filter(extraIsScheduled)
     .filter(extraMatchesScheduleDate);
   if(scheduleWorkerFilter!=='all')visibleExtraJobs=visibleExtraJobs.filter(e=>extraWorkers.some(w=>w.extra_id===e.id&&w.profile_id===scheduleWorkerFilter));
   visibleExtraJobs.sort((a,b)=>String(a.giorno_intervento).localeCompare(String(b.giorno_intervento))||String(a.titolo||'').localeCompare(String(b.titolo||'')));
@@ -979,21 +979,30 @@ async function replaceExtraAttachment(extraId,tipo,file){
 }
 
 let extraGroupOpenState={todo:true,scheduled:true,completed:false};
+let pendingExtraFocusId=null;
+
+function focusExtraCard(extraId,attempt=0){
+  const card=document.querySelector(`[data-extra-card-id="${extraId}"]`);
+  if(!card){if(attempt<6)setTimeout(()=>focusExtraCard(extraId,attempt+1),120+attempt*90);return}
+  const group=card.closest('details');if(group)group.open=true;
+  const header=document.querySelector('header'),headerHeight=header?header.getBoundingClientRect().height:0;
+  const top=Math.max(0,window.scrollY+card.getBoundingClientRect().top-headerHeight-14);
+  window.scrollTo({top,behavior:attempt>1?'smooth':'auto'});
+  card.classList.remove('extra-focus');void card.offsetWidth;card.classList.add('extra-focus');
+  setTimeout(()=>card.classList.remove('extra-focus'),2600);
+}
 
 function openExtraById(extraId){
   const e=extras.find(x=>x.id===extraId);if(!e)return;
   if($('extraSearchInput'))$('extraSearchInput').value='';
   if($('extraCategoryFilter'))$('extraCategoryFilter').value='all';
   const groupKey=['in_attesa','completato'].includes(e.stato)?'completed':extraIsScheduled(e)?'scheduled':'todo';
+  extraGroupOpenState={todo:false,scheduled:false,completed:false};
   extraGroupOpenState[groupKey]=true;
+  pendingExtraFocusId=extraId;
   setView('extras');
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{
-    const card=document.querySelector(`[data-extra-card-id="${extraId}"]`);if(!card)return;
-    const group=card.closest('details');if(group)group.open=true;
-    card.scrollIntoView({behavior:'smooth',block:'center'});
-    card.classList.remove('extra-focus');void card.offsetWidth;card.classList.add('extra-focus');
-    setTimeout(()=>card.classList.remove('extra-focus'),2400);
-  }));
+  [0,80,220,500,900].forEach((delay,i)=>setTimeout(()=>focusExtraCard(extraId,i),delay));
+  setTimeout(()=>{if(pendingExtraFocusId===extraId)pendingExtraFocusId=null},1800);
 }
 
 function extraSearchText(e){
@@ -1011,9 +1020,10 @@ function renderExtras(){
   $('clearExtraSearch')?.classList.toggle('hidden',!search);
   const visible=extras.filter(e=>(categoryFilter==='all'||extraCategory(e)===categoryFilter)&&(!search||extraSearchText(e).includes(search)));
   const byRequest=(a,b)=>String(extraRequestDate(a)||'').localeCompare(String(extraRequestDate(b)||''));
-  const todo=visible.filter(e=>e.stato!=='completato'&&e.stato!=='in_attesa'&&!extraIsScheduled(e)).sort(byRequest);
-  const scheduled=visible.filter(extraIsScheduled).sort((a,b)=>String(a.giorno_intervento||'').localeCompare(String(b.giorno_intervento||''))||byRequest(a,b));
-  const completed=visible.filter(e=>['in_attesa','completato'].includes(e.stato)).sort((a,b)=>String(b.giorno_intervento||extraRequestDate(b)||'').localeCompare(String(a.giorno_intervento||extraRequestDate(a)||'')));
+  const putFocusedFirst=list=>pendingExtraFocusId?[...list].sort((a,b)=>(a.id===pendingExtraFocusId?-1:b.id===pendingExtraFocusId?1:0)):list;
+  const todo=putFocusedFirst(visible.filter(e=>e.stato!=='completato'&&e.stato!=='in_attesa'&&!extraIsScheduled(e)).sort(byRequest));
+  const scheduled=putFocusedFirst(visible.filter(extraIsScheduled).sort((a,b)=>String(a.giorno_intervento||'').localeCompare(String(b.giorno_intervento||''))||byRequest(a,b)));
+  const completed=putFocusedFirst(visible.filter(e=>['in_attesa','completato'].includes(e.stato)).sort((a,b)=>String(b.giorno_intervento||extraRequestDate(b)||'').localeCompare(String(a.giorno_intervento||extraRequestDate(a)||''))));
   const addGroup=(key,title,list,empty)=>{
     const details=document.createElement('details');details.className=`extra-group extra-group-${key}`;details.open=search?list.length>0:extraGroupOpenState[key];
     const summary=document.createElement('summary');summary.innerHTML=`<span>${esc(title)}</span><strong>${list.length}</strong>`;details.appendChild(summary);

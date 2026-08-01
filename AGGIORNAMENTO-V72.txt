@@ -1,0 +1,9 @@
+OVERGREEN CLOUD V72
+
+- Il pulsante “Apri extra” dalla Dashboard porta ora esattamente alla scheda richiesta.
+- La sezione corretta viene aperta automaticamente e le altre vengono chiuse.
+- L’extra selezionato viene portato in cima alla propria sezione, centrato e evidenziato.
+- Aggiunti più tentativi di posizionamento per rendere lo scorrimento affidabile anche su iPhone e con liste molto lunghe.
+- In Programmazione, “Lavori extra programmati” mostra soltanto extra con data di esecuzione e almeno un dipendente assegnato.
+- Gli extra non ancora programmati restano esclusivamente nella sezione Extra > Da fare.
+- Nessuna migrazione SQL necessaria.

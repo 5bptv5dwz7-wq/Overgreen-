@@ -852,8 +852,22 @@ function renderSchedules(){
 function renderSchedulePicker(){const q=$('scheduleSearch').value.toLowerCase(),w=$('scheduleStores');const selected=new Set([...w.querySelectorAll('input:checked')].map(x=>x.value));w.innerHTML='';stores.filter(s=>s.nome.toLowerCase().includes(q)).sort((a,b)=>(days(b.ultimo_passaggio)??9999)-(days(a.ultimo_passaggio)??9999)).forEach(s=>{const l=document.createElement('label'),programmed=isStoreProgrammed(s.id);l.innerHTML=`<input type="checkbox" value="${s.id}" ${selected.has(s.id)?'checked':''}><span><strong>${esc(s.nome)}</strong>${programmed?' <em class="picker-programmed">In programma</em>':''}<br><small>${days(s.ultimo_passaggio)??'—'} giorni · ultimo ${fmt(s.ultimo_passaggio)}</small></span>`;w.appendChild(l)})}
 
 function pdfSafeName(value){return String(value||'extra').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase()||'extra'}
+function pdfSafeText(value){
+  return String(value??'')
+    .replace(/[‘’‚‛]/g,"'")
+    .replace(/[“”„‟]/g,'\"')
+    .replace(/[–—]/g,'-')
+    .replace(/…/g,'...')
+    .replace(/•/g,'-')
+    .replace(/→/g,'->')
+    .replace(/←/g,'<-')
+    .replace(/€/g,'EUR')
+    .replace(/[^\x20-\x7E\xA0-\xFF]/g,'')
+    .replace(/\s+/g,' ')
+    .trim();
+}
 function wrapPdfText(text,font,size,maxWidth){
-  const words=String(text||'').replace(/\s+/g,' ').trim().split(' ').filter(Boolean),lines=[];let line='';
+  const words=pdfSafeText(text).split(' ').filter(Boolean),lines=[];let line='';
   for(const word of words){const test=line?line+' '+word:word;if(font.widthOfTextAtSize(test,size)<=maxWidth)line=test;else{if(line)lines.push(line);line=word}}
   if(line)lines.push(line);return lines;
 }
@@ -888,10 +902,10 @@ async function generateExtraClosurePdf(e,button){
     const margin=42,w=page.getWidth()-margin*2;let y=790;
     page.drawText('OVERGREEN',{x:margin,y,size:22,font:bold,color:green});page.drawText('REPORT DI CHIUSURA LAVORO EXTRA',{x:margin,y:y-29,size:11,font:bold,color:muted});y-=62;
     const place=st?.nome||e.nome_esterno||'Luogo non indicato',address=st?.indirizzo||[e.indirizzo_esterno,st?.citta].filter(Boolean).join(' · ');
-    const fields=[['LAVORO',e.titolo],['CATEGORIA',extraCategoryLabel(e)],['LUOGO',place],['INDIRIZZO',address||'Non indicato'],['DATA RICHIESTA',fmt(extraRequestDate(e))],['DATA ESECUZIONE',fmt(e.giorno_intervento)],['ORARIO CHIUSURA',fmtClosedAt(e.closed_at)],['CHIUSO DA',closedByName(e)],['OPERATORI',names.join(', ')||'Non indicati'],['STATO','Chiuso e convalidato']];
+    const fields=[['LAVORO',e.titolo],['CATEGORIA',extraCategory(e)==='verde'?'Verde':extraCategory(e)==='pulizie'?'Pulizie':'Categoria non indicata'],['LUOGO',place],['INDIRIZZO',address||'Non indicato'],['DATA RICHIESTA',fmt(extraRequestDate(e))],['DATA ESECUZIONE',fmt(e.giorno_intervento)],['ORARIO CHIUSURA',fmtClosedAt(e.closed_at)],['CHIUSO DA',closedByName(e)],['OPERATORI',names.join(', ')||'Non indicati'],['STATO','Chiuso e convalidato']];
     for(const [label,value] of fields){page.drawText(label,{x:margin,y,size:8,font:bold,color:muted});const lines=wrapPdfText(value,regular,11,w-105);lines.slice(0,2).forEach((line,i)=>page.drawText(line,{x:margin+105,y:y-i*14,size:11,font:regular,color:rgb(.08,.17,.12)}));y-=Math.max(27,lines.slice(0,2).length*14+8)}
     y-=4;page.drawLine({start:{x:margin,y},end:{x:page.getWidth()-margin,y},thickness:1,color:rgb(.82,.88,.84)});y-=25;
-    page.drawText('NOTE DI CHIUSURA',{x:margin,y,size:9,font:bold,color:green});y-=18;const notes=e.note_lorenzo||e.descrizione||'Nessuna nota inserita.';for(const line of wrapPdfText(notes,regular,10,w).slice(0,8)){page.drawText(line,{x:margin,y,size:10,font:regular,color:rgb(.08,.17,.12)});y-=14}
+    page.drawText('NOTE DI CHIUSURA',{x:margin,y,size:9,font:bold,color:green});y-=18;const notes=pdfSafeText(e.note_lorenzo||e.descrizione||'Nessuna nota inserita.');for(const line of wrapPdfText(notes,regular,10,w).slice(0,8)){page.drawText(line,{x:margin,y,size:10,font:regular,color:rgb(.08,.17,.12)});y-=14}
     if(pics.length&&y>190){
       y-=10;page.drawText(`FOTO ALLEGATE (${pics.length})`,{x:margin,y,size:9,font:bold,color:green});y-=15;
       const selected=pics.slice(0,4),gap=10,count=selected.length;

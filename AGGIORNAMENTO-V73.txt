@@ -1,0 +1,7 @@
+OVERGREEN CLOUD V73
+
+- Corretta la generazione del PDF di chiusura extra quando nei dati sono presenti emoji o simboli non supportati dal font PDF standard.
+- La categoria Verde/Pulizie nel PDF viene ora scritta senza emoji.
+- Aggiunta una pulizia automatica dei caratteri incompatibili anche in titolo, note, luogo, indirizzo, operatori e altri campi del report.
+- Restano attive tutte le modifiche della V72.
+- Nessuna modifica SQL necessaria.

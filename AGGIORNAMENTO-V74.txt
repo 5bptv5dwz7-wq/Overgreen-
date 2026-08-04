@@ -1,0 +1,15 @@
+OVERGREEN CLOUD V74 — CLIENTI E COMMESSE
+
+- Introduzione clienti: Eurospin, Intesa Sanpaolo e Privati.
+- Punti vendita rinominati in Sedi e clienti.
+- Ogni sede ed extra può essere associato a un cliente.
+- Filtri cliente in Sedi, Extra e Report.
+- Tipologia sede configurabile.
+- Scadenza distinta dalla data programmata.
+- Modello di chiusura per Eurospin, Intesa e Privati.
+- Chiusura Eurospin invariata.
+- Intesa richiede ticket e almeno una foto; documento facoltativo.
+- Privati richiedono note/foto senza rapportini Eurospin.
+- Badge cliente in Dashboard e schede extra.
+
+Prima dell'uso eseguire MIGRAZIONE-V74.sql in Supabase.

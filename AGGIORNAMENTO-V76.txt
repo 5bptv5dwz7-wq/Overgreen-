@@ -1,0 +1,7 @@
+OVERGREEN CLOUD V76
+
+- I contatori Totali, Scaduti, In scadenza e Fatti oggi ora seguono il cliente selezionato.
+- Se scegli Eurospin, Intesa o Privati, i quattro riepiloghi mostrano esclusivamente i dati di quella categoria.
+- Se scegli Tutti, i contatori tornano a mostrare il totale generale.
+- Aggiornata la cache dell'app.
+- Nessun SQL necessario.

@@ -624,12 +624,16 @@ function renderDailyReport(){
 
 function renderStores(){
  const q=$('searchInput').value.trim().toLowerCase(),sort=$('sortSelect').value;
- let list=stores.filter(s=>(storeClientFilter==='all'||clientType(s)===storeClientFilter)&&`${s.nome} ${s.citta||''} ${s.indirizzo||''} ${clientLabel(s)}`.toLowerCase().includes(q));
+ const clientStores=stores.filter(s=>storeClientFilter==='all'||clientType(s)===storeClientFilter);
+ let list=clientStores.filter(s=>`${s.nome} ${s.citta||''} ${s.indirizzo||''} ${clientLabel(s)}`.toLowerCase().includes(q));
  if(storeFilter!=='all')list=list.filter(s=>storeFilter==='today'?s.ultimo_passaggio===today():storeFilter==='urgent'?isUrgentStore(s):status(s)===storeFilter);
  list.sort((a,b)=>sort==='alpha'?a.nome.localeCompare(b.nome,'it'):(days(b.ultimo_passaggio)??9999)-(days(a.ultimo_passaggio)??9999));
  $('storesList').innerHTML='';for(const s of list){const n=days(s.ultimo_passaggio),pending=interventions.some(i=>i.store_id===s.id&&i.stato==='in_attesa'),storeState=status(s),programmed=storeState==='scheduled';const c=document.createElement('article');c.className=`card store-card ${storeState}`;c.innerHTML=`<div class="status-bar"></div><div><div class="card-top"><div><h3 data-detail>${esc(s.nome)}</h3><p class="muted">${esc(s.citta||s.indirizzo||'')}</p></div><div class="days">${n===null?'—':n+' gg'}</div></div>${programmed?'<p class="programmed-label">📅 In programma</p>':''}${pending?'<p class="pending">⏳ In attesa di convalida</p>':''}<p class="muted">Ultimo passaggio: ${fmt(s.ultimo_passaggio)}</p><div class="actions"><button class="secondary" data-map>Maps</button><button data-history>Storico</button>${!pending?'<button data-done>Eseguito</button>':''}${admin()?'<button class="secondary" data-edit>Modifica</button>':''}</div></div>`;
  c.querySelector('[data-detail]').onclick=()=>showStoreDetail(s);c.querySelector('[data-map]').onclick=()=>openAppleMaps(s.indirizzo,clientLabel(s)+' '+s.nome);c.querySelector('[data-history]').onclick=()=>showHistory(s);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(s));c.querySelector('[data-edit]')?.addEventListener('click',()=>openStore(s));$('storesList').appendChild(c)}
- $('totalCount').textContent=stores.length;$('dueCount').textContent=stores.filter(s=>status(s)==='due').length;$('warningCount').textContent=stores.filter(s=>status(s)==='warning').length;$('todayCount').textContent=stores.filter(s=>s.ultimo_passaggio===today()).length;
+ $('totalCount').textContent=clientStores.length;
+ $('dueCount').textContent=clientStores.filter(s=>status(s)==='due').length;
+ $('warningCount').textContent=clientStores.filter(s=>status(s)==='warning').length;
+ $('todayCount').textContent=clientStores.filter(s=>s.ultimo_passaggio===today()).length;
 }
 function renderWorkers(){for(const id of ['doneWorkers','scheduleWorkers','extraWorkers']){const w=$(id);if(!w)continue;w.innerHTML='';profiles.filter(p=>p.attivo).forEach(p=>{const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${p.id}"> ${esc(p.nome)}`;w.appendChild(l)})}}
 function openStore(s=null){$('storeForm').reset();$('storeId').value=s?.id||'';$('storeClient').value=clientType(s);$('storeSiteType').value=s?.site_type||'punto_vendita';$('storeName').value=s?.nome||'';$('storeAddress').value=s?.indirizzo||'';$('storeCity').value=s?.citta||'';$('storeLast').value=s?.ultimo_passaggio||'';$('storeInterval').value=s?.intervallo_giorni||15;$('storeNotes').value=s?.note||'';openDialog('storeDialog')}

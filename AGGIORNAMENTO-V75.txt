@@ -1,0 +1,14 @@
+OVERGREEN CLOUD V75 — CORREZIONE COMPLETA V74
+
+- Corretto il blocco "Can't find variable: clientLabel".
+- Aggiunte e verificate le funzioni cliente mancanti: tipo, etichetta, badge e modello di chiusura.
+- Corretta la visualizzazione delle scadenze degli extra.
+- Corretta la conversione data/ora nei moduli di modifica.
+- Corretto il salvataggio della modifica extra: ora usa davvero i campi della finestra Modifica.
+- Corretto il salvataggio degli interventi ordinari: non legge più campi appartenenti al modulo Extra.
+- Corretto l'apertura della scheda sede dai risultati di ricerca.
+- Corretto il nome passato a Maps in base al cliente reale.
+- Controllati riferimenti DOM, funzioni richiamate e sintassi JavaScript.
+- Aggiornata la cache dell'app alla V75.
+
+Non serve eseguire altro SQL se MIGRAZIONE-V74 è già stata eseguita con successo.

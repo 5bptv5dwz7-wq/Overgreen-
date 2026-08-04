@@ -1,0 +1,13 @@
+OVERGREEN CLOUD V77 - PROGRAMMAZIONE 2.0
+
+- Nuova programmazione rapida ottimizzata per telefono.
+- Selezione multipla di più sedi nella stessa operazione.
+- Sedi raggruppate e richiudibili per Eurospin, Intesa Sanpaolo e Privati.
+- Ricerca per nome, città, indirizzo, note e cliente.
+- Filtro cliente sia nel selettore sia nell'elenco dei lavori programmati.
+- Pulsanti rapidi Oggi e Domani.
+- Conteggio in tempo reale delle sedi selezionate.
+- Riepilogo sedi da programmare ed extra senza programmazione.
+- Lista giornaliera più compatta, con cliente, squadra, ordine ed extra collegati.
+- Filtri combinabili per cliente, squadra e periodo.
+- Nessuna migrazione SQL necessaria.

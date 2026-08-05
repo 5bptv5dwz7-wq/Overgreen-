@@ -255,6 +255,7 @@ async function reconcileProgrammingConsistency(){
 }
 function renderDashboard(){
   if(!$('dashToday'))return;
+  const currentTravelToken=++travelRenderToken;
   const todayStr=today();
   const visible=visibleSchedules();
   const myExtraIds=assignedExtraIds();
@@ -342,15 +343,16 @@ function renderDashboard(){
           const pending=itemPending(row.item);
           const ordinaryNotes=[row.schedule?.nota_generale,st?.note].filter(v=>String(v||'').trim());
           c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span><strong>${esc(st?.nome||'Punto vendita')}</strong>${(st?.indirizzo||st?.citta)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${done?'Completato':pending?'In attesa di convalida':'Da eseguire'}</small>${ordinaryNotes.length?`<div class="dashboard-job-notes"><strong>Note</strong>${ordinaryNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>`<div class="embedded-extra ${extraCategoryClass(e)} ${extraDone(e)?'is-done':'is-open'}"><span>${extraDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span>${e.numero_target?`<small class="target-number">Target: ${esc(e.numero_target)}</small>`:''}<small>${extraDone(e)?'Completato':'Da fare insieme al passaggio'}</small>${e.descrizione?`<p class="embedded-extra-description">${esc(e.descrizione)}</p>`:''}</div></div>`).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${done?'<button class="secondary" disabled>✓ Completato</button>':pending?'<button class="secondary" disabled>⏳ In attesa</button>':'<button data-done>✓ Eseguito</button>'}</div>`;
-          c.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,row.item.id));list.appendChild(c)
+          c.dataset.routeAddress=routeAddressForStore(st);c.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,row.item.id));list.appendChild(c)
         }else{
           const e=job.extra,st=stores.find(s=>s.id===e.store_id),done=extraDone(e),urgent=e.urgente===true||e.priorita==='urgente'||elapsedDaysFrom(extraRequestDate(e))>=7,c=document.createElement('article');
           c.className=`dashboard-line-job standalone-extra ${extraCategoryClass(e)} ${done?'is-done':urgent?'is-urgent':'is-open'}`;
           const extraNotes=[e.descrizione,e.note_lorenzo].filter(v=>String(v||'').trim());
-          c.innerHTML=`<div class="job-main"><span class="job-kind">EXTRA</span>${clientBadge(e)}<span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span><strong>${esc(st?.nome||e.nome_esterno||'Extra')}</strong>${(st?.indirizzo||st?.citta||e.indirizzo_esterno)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo||e.indirizzo_esterno,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${esc(e.titolo)} · ${done?'Completato':urgent?'Urgente':'Da eseguire'}</small>${extraNotes.length?`<div class="dashboard-job-notes"><strong>${done?'Descrizione / note':'Descrizione'}</strong>${extraNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}</div><div class="actions"><button data-open-extra>Apri extra</button></div>`;c.querySelector('[data-open-extra]').onclick=()=>openExtraById(e.id);list.appendChild(c)
+          c.innerHTML=`<div class="job-main"><span class="job-kind">EXTRA</span>${clientBadge(e)}<span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span><strong>${esc(st?.nome||e.nome_esterno||'Extra')}</strong>${(st?.indirizzo||st?.citta||e.indirizzo_esterno)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo||e.indirizzo_esterno,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${esc(e.titolo)} · ${done?'Completato':urgent?'Urgente':'Da eseguire'}</small>${extraNotes.length?`<div class="dashboard-job-notes"><strong>${done?'Descrizione / note':'Descrizione'}</strong>${extraNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}</div><div class="actions"><button data-open-extra>Apri extra</button></div>`;c.dataset.routeAddress=routeAddressForExtra(e,st);c.querySelector('[data-open-extra]').onclick=()=>openExtraById(e.id);list.appendChild(c)
         }
       }
-      box.appendChild(section)
+      box.appendChild(section);
+      hydrateWorkerTravel(section,currentTravelToken);
     }
     if(!allJobsCount)box.innerHTML='<p class="muted dashboard-day-empty">Nessun lavoro programmato.</p>';
     next.appendChild(details)
@@ -525,6 +527,52 @@ function openGoogleMaps(address,name='',city=''){
 }
 // Alias mantenuto per compatibilità con eventuali richiami meno recenti.
 const openAppleMaps=openGoogleMaps;
+
+const travelCacheKey='overgreen-travel-cache-v1';
+let travelRenderToken=0;
+function readTravelCache(){try{return JSON.parse(localStorage.getItem(travelCacheKey)||'{}')}catch{return {}}}
+function writeTravelCache(cache){try{localStorage.setItem(travelCacheKey,JSON.stringify(cache))}catch{}}
+function normalizedRouteAddress(address){return String(address||'').replace(/\s+/g,' ').trim()}
+async function geocodeRouteAddress(address){
+  const key='geo:'+normalizedRouteAddress(address).toLowerCase(),cache=readTravelCache();
+  if(cache[key]&&Date.now()-cache[key].savedAt<1000*60*60*24*180)return cache[key].value;
+  const url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=it&q='+encodeURIComponent(address);
+  const r=await fetch(url,{headers:{'Accept':'application/json'}});if(!r.ok)throw new Error('Indirizzo non trovato');
+  const rows=await r.json();if(!rows?.length)throw new Error('Indirizzo non trovato');
+  const value={lat:Number(rows[0].lat),lon:Number(rows[0].lon)};cache[key]={savedAt:Date.now(),value};writeTravelCache(cache);return value;
+}
+async function routeBetweenAddresses(from,to){
+  const a=normalizedRouteAddress(from),b=normalizedRouteAddress(to),key='route:'+a.toLowerCase()+'>'+b.toLowerCase(),cache=readTravelCache();
+  if(cache[key]&&Date.now()-cache[key].savedAt<1000*60*60*24*30)return cache[key].value;
+  const [p1,p2]=await Promise.all([geocodeRouteAddress(a),geocodeRouteAddress(b)]);
+  const url=`https://router.project-osrm.org/route/v1/driving/${p1.lon},${p1.lat};${p2.lon},${p2.lat}?overview=false&steps=false`;
+  const r=await fetch(url);if(!r.ok)throw new Error('Percorso non disponibile');const data=await r.json();
+  const route=data.routes?.[0];if(!route)throw new Error('Percorso non disponibile');
+  const value={km:route.distance/1000,minutes:Math.max(1,Math.round(route.duration/60))};cache[key]={savedAt:Date.now(),value};writeTravelCache(cache);return value;
+}
+function routeAddressForStore(st){return [st?.indirizzo,st?.citta,'Italia'].filter(Boolean).join(', ')}
+function routeAddressForExtra(e,st){return [st?.indirizzo||e?.indirizzo_esterno,st?.citta,'Italia'].filter(Boolean).join(', ')}
+function formatTravelMinutes(minutes){const h=Math.floor(minutes/60),m=minutes%60;return h?`${h} h${m?' '+m+' min':''}`:`${m} min`}
+async function hydrateWorkerTravel(section,token){
+  const cards=[...section.querySelectorAll('.dashboard-line-job[data-route-address]')];if(cards.length<2)return;
+  const summary=document.createElement('div');summary.className='worker-travel-summary';summary.innerHTML='<strong>🚗 Percorso</strong><span>Calcolo in corso…</span>';
+  section.querySelector('h3')?.after(summary);
+  let totalKm=0,totalMinutes=0,okCount=0;
+  for(let i=0;i<cards.length-1;i++){
+    if(token!==travelRenderToken)return;
+    const separator=document.createElement('div');separator.className='dashboard-travel-leg';separator.innerHTML='<span>↓</span><strong>Calcolo viaggio…</strong>';
+    cards[i].after(separator);
+    try{
+      const route=await routeBetweenAddresses(cards[i].dataset.routeAddress,cards[i+1].dataset.routeAddress);
+      if(token!==travelRenderToken)return;
+      totalKm+=route.km;totalMinutes+=route.minutes;okCount++;
+      separator.innerHTML=`<span>↓</span><strong>🚗 ${formatTravelMinutes(route.minutes)} · ${route.km.toFixed(route.km<10?1:0)} km</strong>`;
+    }catch(err){separator.innerHTML='<span>↓</span><small>Viaggio non calcolabile</small>'}
+  }
+  if(token!==travelRenderToken)return;
+  summary.querySelector('span').textContent=okCount?`${totalKm.toFixed(totalKm<10?1:0)} km · ${formatTravelMinutes(totalMinutes)} di guida`:'Dati di viaggio non disponibili';
+}
+
 function historyStatusLabel(stato){
   return ({convalidato:'Convalidato',in_attesa:'In attesa',rifiutato:'Rifiutato'})[stato]||stato.replaceAll('_',' ');
 }

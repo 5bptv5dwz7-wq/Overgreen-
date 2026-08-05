@@ -1,0 +1,10 @@
+OVERGREEN CLOUD V82 - TEMPI DI VIAGGIO IN DASHBOARD
+
+- Calcolo automatico del percorso stradale tra un lavoro e il successivo.
+- Visualizzazione in Dashboard di minuti e chilometri tra le tappe.
+- Totale chilometri e tempo di guida per ogni squadra/giornata.
+- Indirizzi completi con città per evitare omonimie.
+- Cache locale dei risultati per ridurre chiamate e tempi di caricamento.
+- Nessuna migrazione SQL necessaria.
+
+Nota tecnica: il calcolo usa geocodifica OpenStreetMap e routing OSRM, senza chiavi API. Google Maps continua a essere usato dal pulsante Maps per la navigazione.

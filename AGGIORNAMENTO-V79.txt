@@ -1,0 +1,8 @@
+OVERGREEN CLOUD V79
+
+- Corretto il cliente mostrato nella Programmazione: le filiali Intesa non vengono più etichettate Eurospin.
+- Aggiunto l’indirizzo sotto ogni lavoro ordinario ed extra nella Dashboard.
+- Aggiunto il pulsante “Nota giornata” nella Programmazione per modificare o cancellare la nota generale anche dopo il salvataggio.
+- Aggiornata la cache dell’app.
+
+Non serve alcuna migrazione SQL.

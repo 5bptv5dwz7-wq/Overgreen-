@@ -1,0 +1,6 @@
+OVERGREEN CLOUD V83 - CLIENTE VISIBILE IN DASHBOARD
+
+- Aggiunto il badge cliente anche ai passaggi ordinari nella Dashboard.
+- Ogni lavoro indica chiaramente Eurospin, Intesa Sanpaolo oppure Privato.
+- Gli extra mantengono il badge cliente gia presente.
+- Nessuna migrazione SQL necessaria.

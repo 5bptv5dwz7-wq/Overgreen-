@@ -13,7 +13,7 @@ const SEED_STORES=[{"name": "ABBIATEGRASSO", "lastDone": "2026-06-17"}, {"name":
 const $=id=>document.getElementById(id);
 let session=null,profile=null,profiles=[],managedUsers=[],stores=[],interventions=[],schedules=[],scheduleMembers=[],scheduleItems=[],extras=[],extraWorkers=[],interventionWorkers=[],attachments=[];
 let combinedExtraClosureQueue=[];
-let storeFilter='all',storeClientFilter='all',extraClientFilter='all',scheduleClientFilter='all',scheduleWorkerFilter='all',scheduleDateFilter='all',scheduleExactDate=null,scheduleViewMode='list';
+let storeFilter='all',storeClientFilter='all',extraClientFilter='all',scheduleClientFilter='all',scheduleWorkerFilter='all',scheduleDateFilter='all',scheduleExactDate=null;
 let loadAllPromise=null,currentHistoryStoreId=null;
 let historyEditPhotoFiles=[];
 let donePhotoFiles=[];
@@ -936,6 +936,62 @@ async function moveScheduleItem(item,direction){
   const p1=item.posizione||at+1,p2=swap.posizione||at+direction+1;
   let r=await sb.from('schedule_items').update({posizione:p2}).eq('id',item.id);if(r.error)return alert(r.error.message);r=await sb.from('schedule_items').update({posizione:p1}).eq('id',swap.id);if(r.error)return alert(r.error.message);toast('Ordine aggiornato');await loadAll();
 }
+
+async function persistScheduleOrder(scheduleId,orderedItems){
+  if(!admin()||!scheduleId||!Array.isArray(orderedItems)||!orderedItems.length)return;
+  for(let index=0;index<orderedItems.length;index++){
+    const item=orderedItems[index],wanted=index+1;
+    if(Number(item.posizione)===wanted)continue;
+    const {error}=await sb.from('schedule_items').update({posizione:wanted}).eq('id',item.id);
+    if(error)throw error;
+    item.posizione=wanted;
+  }
+}
+function enableScheduleDrag(container,schedule){
+  if(!admin()||!container||!schedule)return;
+  let dragging=null,placeholder=null,startY=0,startTop=0,pointerId=null,moved=false;
+  const rows=()=>[...container.querySelectorAll('.schedule-item[data-schedule-item-id]')];
+  const cleanup=()=>{
+    if(dragging){dragging.classList.remove('dragging');dragging.style.transform='';dragging.style.width='';dragging.style.zIndex='';}
+    placeholder?.remove();dragging=null;placeholder=null;pointerId=null;moved=false;
+    document.body.classList.remove('schedule-drag-active');
+  };
+  container.querySelectorAll('[data-drag-handle]').forEach(handle=>{
+    handle.addEventListener('pointerdown',ev=>{
+      if(ev.button!==undefined&&ev.button!==0)return;
+      const row=handle.closest('.schedule-item[data-schedule-item-id]');if(!row)return;
+      ev.preventDefault();ev.stopPropagation();
+      pointerId=ev.pointerId;handle.setPointerCapture?.(pointerId);
+      const rect=row.getBoundingClientRect();startY=ev.clientY;startTop=rect.top;
+      placeholder=document.createElement('div');placeholder.className='schedule-drag-placeholder';placeholder.style.height=rect.height+'px';
+      row.after(placeholder);dragging=row;dragging.classList.add('dragging');dragging.style.width=rect.width+'px';dragging.style.zIndex='1000';
+      document.body.classList.add('schedule-drag-active');
+    });
+    handle.addEventListener('pointermove',ev=>{
+      if(!dragging||ev.pointerId!==pointerId)return;
+      ev.preventDefault();moved=true;
+      const dy=ev.clientY-startY;dragging.style.transform=`translateY(${dy}px)`;
+      const center=startTop+dy+dragging.getBoundingClientRect().height/2;
+      const candidates=rows().filter(x=>x!==dragging);
+      let before=null;
+      for(const candidate of candidates){const r=candidate.getBoundingClientRect();if(center<r.top+r.height/2){before=candidate;break}}
+      if(before)container.insertBefore(placeholder,before);else container.appendChild(placeholder);
+      const edge=70;if(ev.clientY<edge)window.scrollBy(0,-12);else if(ev.clientY>window.innerHeight-edge)window.scrollBy(0,12);
+    });
+    const finish=async ev=>{
+      if(!dragging||ev.pointerId!==pointerId)return;
+      ev.preventDefault();
+      const row=dragging;container.insertBefore(row,placeholder);cleanup();
+      if(!moved)return;
+      const orderedRows=rows();
+      const orderedItems=orderedRows.map(r=>scheduleItems.find(i=>i.id===r.dataset.scheduleItemId)).filter(Boolean);
+      orderedRows.forEach((r,i)=>{const n=r.querySelector('.schedule-order-number');if(n)n.textContent=String(i+1)});
+      try{await persistScheduleOrder(schedule.id,orderedItems);toast('Ordine del giro aggiornato');await loadAll()}
+      catch(error){alert('Non riesco a salvare il nuovo ordine: '+error.message);await loadAll()}
+    };
+    handle.addEventListener('pointerup',finish);handle.addEventListener('pointercancel',finish);
+  });
+}
 function openAddScheduleItems(schedule){
   if(!admin())return;
   $('addScheduleItemsForm').reset();$('addScheduleId').value=schedule.id;
@@ -976,87 +1032,6 @@ async function editScheduleDayNote(schedule){
   toast(note?'Nota della giornata aggiornata':'Nota della giornata eliminata');
   renderSchedules();renderDashboard();
 }
-
-let scheduleLeafletMap=null,scheduleMapLayer=null,scheduleMapRenderToken=0;
-const scheduleMapColors=['#126b42','#245c9f','#c66a1a','#9a3f72','#6d5a12','#5d48a6','#b44242','#167a78'];
-function teamColor(key){let n=0;for(const ch of String(key||''))n=(n*31+ch.charCodeAt(0))>>>0;return scheduleMapColors[n%scheduleMapColors.length]}
-function scheduleMapTeamInfo(schedule,extra=null){
-  const rows=extra?extraWorkers.filter(w=>w.extra_id===extra.id):scheduleMembers.filter(m=>m.schedule_id===schedule.id);
-  const people=rows.map(m=>profiles.find(p=>p.id===m.profile_id)).filter(Boolean);
-  const key=people.length?people.map(p=>p.id).sort().join('-'):'unassigned';
-  return {key,label:people.length?people.map(p=>p.nome).join(' + '):'Da assegnare',color:teamColor(key)};
-}
-function setScheduleViewMode(mode){
-  scheduleViewMode=mode==='map'?'map':'list';
-  const isMap=scheduleViewMode==='map';
-  $('scheduleMapPanel')?.classList.toggle('hidden',!isMap);
-  document.querySelector('#scheduleView .quick-planner')?.classList.toggle('hidden',isMap);
-  $('scheduleList')?.classList.toggle('hidden',isMap);
-  $('scheduleListMode')?.classList.toggle('active',!isMap);
-  $('scheduleMapMode')?.classList.toggle('active',isMap);
-  if(isMap){setTimeout(()=>{scheduleLeafletMap?.invalidateSize();renderScheduleMap()},40)}
-}
-function mapVisibleSchedules(){
-  let list=visibleSchedules().filter(scheduleMatchesDate);
-  if(scheduleWorkerFilter!=='all')list=list.filter(s=>scheduleMembers.some(m=>m.schedule_id===s.id&&m.profile_id===scheduleWorkerFilter));
-  if(scheduleClientFilter!=='all')list=list.filter(s=>scheduleItems.some(i=>i.schedule_id===s.id&&scheduleClientMatchesStore(stores.find(st=>st.id===i.store_id))));
-  return list.sort((a,b)=>String(a.giorno).localeCompare(String(b.giorno)));
-}
-function collectScheduleMapJobs(){
-  const groups=[];
-  for(const schedule of mapVisibleSchedules()){
-    let items=scheduleItems.filter(i=>i.schedule_id===schedule.id&&i.tipo==='ordinario'&&effectiveScheduleState(i)!=='completato').sort((a,b)=>(a.posizione||0)-(b.posizione||0));
-    if(scheduleClientFilter!=='all')items=items.filter(i=>scheduleClientMatchesStore(stores.find(st=>st.id===i.store_id)));
-    const team=scheduleMapTeamInfo(schedule),jobs=items.map((item,index)=>{const store=stores.find(st=>st.id===item.store_id);return {kind:'ordinary',schedule,item,store,team,order:index+1,address:routeAddressForStore(store),date:schedule.giorno}}).filter(x=>x.store&&normalizedRouteAddress(x.address));
-    if(jobs.length)groups.push({id:schedule.id,team,date:schedule.giorno,jobs});
-  }
-  const assignedIds=assignedExtraIds();
-  let extraJobs=(admin()?extras:extras.filter(e=>assignedIds.has(e.id))).filter(extraIsScheduled).filter(extraMatchesScheduleDate);
-  if(scheduleWorkerFilter!=='all')extraJobs=extraJobs.filter(e=>extraWorkers.some(w=>w.extra_id===e.id&&w.profile_id===scheduleWorkerFilter));
-  if(scheduleClientFilter!=='all')extraJobs=extraJobs.filter(e=>String(e.client_type||'eurospin')===scheduleClientFilter);
-  for(const extra of extraJobs){
-    const store=stores.find(st=>st.id===extra.store_id),team=scheduleMapTeamInfo(null,extra),address=routeAddressForExtra(extra,store);
-    if(normalizedRouteAddress(address))groups.push({id:'extra-'+extra.id,team,date:extra.giorno_intervento,jobs:[{kind:'extra',extra,store,team,address,date:extra.giorno_intervento}]});
-  }
-  return groups;
-}
-function ensureScheduleLeafletMap(){
-  if(!window.L||!$('scheduleMap'))return null;
-  if(!scheduleLeafletMap){
-    scheduleLeafletMap=L.map('scheduleMap',{zoomControl:true}).setView([44.75,8.6],7);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(scheduleLeafletMap);
-    scheduleMapLayer=L.layerGroup().addTo(scheduleLeafletMap);
-  }
-  scheduleLeafletMap.invalidateSize();return scheduleLeafletMap;
-}
-function mapPinIcon(color,label,isExtra=false){return L.divIcon({className:'overgreen-map-marker',html:`<div class="overgreen-map-pin${isExtra?' extra':''}" style="background:${color}"><span>${esc(label)}</span></div>`,iconSize:[36,42],iconAnchor:[18,39],popupAnchor:[0,-35]})}
-function googleMapsSearchUrl(address){return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`}
-async function renderScheduleMap(){
-  if(scheduleViewMode!=='map')return;
-  const token=++scheduleMapRenderToken,map=ensureScheduleLeafletMap(),statusBox=$('scheduleMapStatus'),legend=$('scheduleMapLegend');if(!map)return;
-  scheduleMapLayer.clearLayers();legend.innerHTML='';statusBox.textContent='Caricamento indirizzi e percorsi…';
-  const groups=collectScheduleMapJobs(),teamSeen=new Map();for(const g of groups)teamSeen.set(g.team.key,g.team);
-  for(const t of teamSeen.values()){const row=document.createElement('span');row.innerHTML=`<i style="background:${t.color}"></i>${esc(t.label)}`;legend.appendChild(row)}
-  if(!groups.length){statusBox.textContent='Nessun lavoro programmato con i filtri selezionati.';return}
-  const allLatLng=[],located=[];let failed=0;
-  for(const group of groups){
-    const groupPoints=[];
-    for(const job of group.jobs){
-      if(token!==scheduleMapRenderToken)return;
-      try{
-        const point=await geocodeRouteAddress(job.address);if(token!==scheduleMapRenderToken)return;
-        const latlng=[point.lat,point.lon];allLatLng.push(latlng);groupPoints.push(latlng);located.push(job);
-        const isExtra=job.kind==='extra',name=isExtra?(job.store?.nome||job.extra.nome_esterno||'Extra'):(job.store?.nome||'Sede'),client=isExtra?clientLabel(job.extra):clientLabel(job.store),detail=isExtra?job.extra.titolo:`Ordine ${job.order}`,address=job.address;
-        const popup=`<div><span class="map-popup-client">${esc(client)}</span><div class="map-popup-title">${esc(name)}</div><div class="map-popup-meta">${esc(detail)}<br>📅 ${esc(fmt(job.date))}<br>👤 ${esc(job.team.label)}<br>📍 ${esc(address)}</div><div class="map-popup-actions"><a href="${googleMapsSearchUrl(address)}" target="_blank" rel="noopener">Google Maps</a></div></div>`;
-        L.marker(latlng,{icon:mapPinIcon(job.team.color,isExtra?'E':String(job.order),isExtra)}).bindPopup(popup).addTo(scheduleMapLayer);
-      }catch{failed++}
-    }
-    if(groupPoints.length>1)L.polyline(groupPoints,{color:group.team.color,weight:4,opacity:.72,dashArray:'8 7'}).addTo(scheduleMapLayer);
-  }
-  if(token!==scheduleMapRenderToken)return;
-  if(allLatLng.length===1)map.setView(allLatLng[0],13);else if(allLatLng.length)map.fitBounds(allLatLng,{padding:[35,35],maxZoom:13});
-  statusBox.textContent=`${located.length} lavori visualizzati${failed?` · ${failed} indirizzi non trovati`:''}. Le linee seguono l’ordine della programmazione.`;
-}
 function renderSchedules(){
   const currentScheduleTravelToken=++scheduleTravelRenderToken;
   $('scheduleTitle').textContent=admin()?'Programmazione':'I miei lavori';
@@ -1081,11 +1056,13 @@ function renderSchedules(){
       const effectiveState=effectiveScheduleState(item);
       r.className=`schedule-item schedule-item-compact ${effectiveState}`;
       r.dataset.routeAddress=routeAddressForStore(st);
+      r.dataset.scheduleItemId=item.id;
       const stato=effectiveState==='in_attesa'?'In attesa di convalida':'Da eseguire',linked=linkedExtrasForScheduleItem(item.id);
-      r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${displayIndex+1}</div><div class="schedule-item-copy">${scheduleClientBadge(st)}<strong data-store-detail>${esc(st?.nome||'Sede')}</strong><small>${esc(st?.citta||st?.indirizzo||'')} · ${stato}</small></div>${admin()?'<div class="order-buttons"><button type="button" class="secondary compact-btn" data-up title="Sposta prima">↑</button><button type="button" class="secondary compact-btn" data-down title="Sposta dopo">↓</button></div>':''}</div>${linked.length?`<div class="linked-extra-reminder compact-linked"><strong>Extra collegati (${linked.length})</strong>${linked.map(e=>`<span class="linked-extra-category ${extraCategoryClass(e)}"><b>${esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}</span>`).join('')}</div>`:''}<div class="actions schedule-item-actions"><button class="secondary" data-map>Maps</button>${effectiveState==='da_fare'?'<button data-done>Eseguito</button>':''}${admin()&&effectiveState==='da_fare'?'<button class="danger-btn" data-delete-scheduled>Elimina</button>':''}</div>`;
-      r.querySelector('[data-store-detail]').onclick=()=>showStoreDetail(st);r.querySelector('[data-up]')?.addEventListener('click',()=>moveScheduleItem(item,-1));r.querySelector('[data-down]')?.addEventListener('click',()=>moveScheduleItem(item,1));r.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);
+      r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${displayIndex+1}</div><div class="schedule-item-copy">${scheduleClientBadge(st)}<strong data-store-detail>${esc(st?.nome||'Sede')}</strong><small>${esc(st?.citta||st?.indirizzo||'')} · ${stato}</small></div>${admin()?'<button type="button" class="drag-handle" data-drag-handle title="Tieni premuto e trascina" aria-label="Trascina per cambiare ordine">☰</button>':''}</div>${linked.length?`<div class="linked-extra-reminder compact-linked"><strong>Extra collegati (${linked.length})</strong>${linked.map(e=>`<span class="linked-extra-category ${extraCategoryClass(e)}"><b>${esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}</span>`).join('')}</div>`:''}<div class="actions schedule-item-actions"><button class="secondary" data-map>Maps</button>${effectiveState==='da_fare'?'<button data-done>Eseguito</button>':''}${admin()&&effectiveState==='da_fare'?'<button class="danger-btn" data-delete-scheduled>Elimina</button>':''}</div>`;
+      r.querySelector('[data-store-detail]').onclick=()=>showStoreDetail(st);r.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);
       r.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,item.id));r.querySelector('[data-delete-scheduled]')?.addEventListener('click',()=>deleteScheduleItem(item,st));c.appendChild(r)
     }}
+    enableScheduleDrag(c,s);
     $('scheduleList').appendChild(c);
     hydrateScheduleTravel(c,currentScheduleTravelToken);
   }
@@ -1100,7 +1077,6 @@ function renderSchedules(){
     for(const e of visibleExtraJobs){const c=extraCard(e);c.classList.add('schedule-extra-card');$('scheduleList').appendChild(c)}
   }
   if(!$('scheduleList').children.length)$('scheduleList').innerHTML='<div class="card report-empty"><strong>Nessun lavoro con questi filtri</strong><p class="muted">Cambia cliente, data o squadra.</p></div>';
-  setScheduleViewMode(scheduleViewMode);
 }
 function renderSchedulePicker(){
   const q=String($('scheduleSearch')?.value||'').trim().toLowerCase(),w=$('scheduleStores');if(!w)return;
@@ -1347,7 +1323,7 @@ async function seedStores(){if(!admin())return;if(stores.length&&!confirm(`Sono 
 $('rememberAccess').checked=localStorage.getItem(REMEMBER_ACCESS_KEY)!=='0';
 $('loginForm').onsubmit = async (e) => { e.preventDefault(); const b=$('loginForm').querySelector('button[type=submit]'); const box=$('loginError'); box.classList.add('hidden'); box.textContent=''; b.disabled=true; b.textContent='Accesso…'; try { const email=$('loginEmail').value.trim(); const password=$('loginPassword').value; if(!email||!password) throw new Error('Inserisci email e password.'); localStorage.setItem(REMEMBER_ACCESS_KEY,$('rememberAccess').checked?'1':'0'); await signIn(email,password); } catch(err) { console.error(err); box.textContent=err?.message||'Accesso non riuscito.'; box.classList.remove('hidden'); } finally { b.disabled=false; b.textContent='Accedi'; } };
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeDialog(b));$('helpBtn').onclick=openHelp;document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));document.querySelectorAll('[data-client-filter]').forEach(b=>b.onclick=()=>{storeClientFilter=b.dataset.clientFilter;document.querySelectorAll('[data-client-filter]').forEach(x=>x.classList.toggle('active',x===b));renderStores()});document.querySelectorAll('[data-extra-client]').forEach(b=>b.onclick=()=>{extraClientFilter=b.dataset.extraClient;document.querySelectorAll('[data-extra-client]').forEach(x=>x.classList.toggle('active',x===b));renderExtras()});document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{storeFilter=b.dataset.filter;renderStores()});
-$('globalSearch').oninput=renderGlobalSearch;$('dashboardRefresh').onclick=loadAll;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){scheduleDateFilter='all';$('scheduleDateFilter').value='all';setView('schedule')}else if(b.dataset.dash==='today'){scheduleDateFilter='today';$('scheduleDateFilter').value='today';setView('schedule')}else if(b.dataset.dash==='openextras')setView('extras');else if(b.dataset.dash==='todayextras'){$('extraSearchInput').value=today();setView('extras');renderExtras()}else setView('stores')});$('scheduleClientFilter').onchange=e=>{scheduleClientFilter=e.target.value;renderSchedules()};$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('scheduleListMode').onclick=()=>setScheduleViewMode('list');$('scheduleMapMode').onclick=()=>setScheduleViewMode('map');$('scheduleMapRefresh').onclick=()=>renderScheduleMap();$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('bulkIntervalBtn').onclick=openBulkIntervalDialog;$('bulkIntervalClient').onchange=updateBulkIntervalPreview;$('bulkIntervalSiteType').onchange=updateBulkIntervalPreview;$('bulkIntervalDays').oninput=updateBulkIntervalPreview;$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('schedulePickerClient').onchange=renderSchedulePicker;document.querySelectorAll('[data-quick-date]').forEach(b=>b.onclick=()=>{$('scheduleDate').value=b.dataset.quickDate==='today'?today():tomorrow()});$('addScheduleSearch').oninput=renderAddSchedulePicker;$('newExtraBtn').onclick=()=>{$('extraForm').reset();$('extraRequestDate').value=today();$('extraDate').value='';$('extraDeadline').value='';$('extraClient').value='eurospin';$('extraClosureProfile').value='eurospin';renderExtraStoreOptions();openDialog('extraDialog')};
+$('globalSearch').oninput=renderGlobalSearch;$('dashboardRefresh').onclick=loadAll;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){scheduleDateFilter='all';$('scheduleDateFilter').value='all';setView('schedule')}else if(b.dataset.dash==='today'){scheduleDateFilter='today';$('scheduleDateFilter').value='today';setView('schedule')}else if(b.dataset.dash==='openextras')setView('extras');else if(b.dataset.dash==='todayextras'){$('extraSearchInput').value=today();setView('extras');renderExtras()}else setView('stores')});$('scheduleClientFilter').onchange=e=>{scheduleClientFilter=e.target.value;renderSchedules()};$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('bulkIntervalBtn').onclick=openBulkIntervalDialog;$('bulkIntervalClient').onchange=updateBulkIntervalPreview;$('bulkIntervalSiteType').onchange=updateBulkIntervalPreview;$('bulkIntervalDays').oninput=updateBulkIntervalPreview;$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('schedulePickerClient').onchange=renderSchedulePicker;document.querySelectorAll('[data-quick-date]').forEach(b=>b.onclick=()=>{$('scheduleDate').value=b.dataset.quickDate==='today'?today():tomorrow()});$('addScheduleSearch').oninput=renderAddSchedulePicker;$('newExtraBtn').onclick=()=>{$('extraForm').reset();$('extraRequestDate').value=today();$('extraDate').value='';$('extraDeadline').value='';$('extraClient').value='eurospin';$('extraClosureProfile').value='eurospin';renderExtraStoreOptions();openDialog('extraDialog')};
 $('extraClient').onchange=()=>{$('extraClosureProfile').value=$('extraClient').value};$('extraEditClient').onchange=()=>{$('extraEditClosureProfile').value=$('extraEditClient').value};$('extraSearchInput').oninput=renderExtras;$('extraCategoryFilter').onchange=renderExtras;$('clearExtraSearch').onclick=()=>{$('extraSearchInput').value='';renderExtras();$('extraSearchInput').focus()};
 function addDonePhotos(fileList){
   const incoming=[...fileList].filter(f=>f.type.startsWith('image/'));

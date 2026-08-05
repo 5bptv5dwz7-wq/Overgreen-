@@ -1,0 +1,10 @@
+OVERGREEN CLOUD V88 - TRASCINAMENTO PROGRAMMAZIONE
+
+- Base utilizzata: V86 stabile, senza la prova della mappa.
+- Nella Programmazione ogni sede ha ora una maniglia ☰.
+- Tieni premuta la maniglia e trascina la scheda nella nuova posizione.
+- Al rilascio l'ordine viene salvato su Supabase.
+- Numerazione, distanze e tempi di viaggio vengono ricalcolati automaticamente.
+- Funziona anche su iPhone tramite Pointer Events.
+- Le frecce su/giù sono state sostituite dalla maniglia di trascinamento.
+- Nessuna migrazione SQL necessaria.

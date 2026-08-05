@@ -1,0 +1,7 @@
+OVERGREEN CLOUD V81
+
+Correzione Programmazione:
+- le sedi Intesa Sanpaolo vengono ora etichettate correttamente come Intesa Sanpaolo;
+- le sedi Eurospin e Privati mantengono la propria etichetta corretta;
+- corretta anche la ricerca per cliente nel selettore della programmazione;
+- nessuna modifica SQL necessaria.

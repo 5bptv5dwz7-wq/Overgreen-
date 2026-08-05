@@ -147,6 +147,7 @@ function extraCategory(e){return ['verde','pulizie'].includes(e?.categoria_targe
 function extraCategoryLabel(e){return extraCategory(e)==='verde'?'🌿 Verde':extraCategory(e)==='pulizie'?'🧹 Pulizie':'Categoria non indicata'}
 function extraCategoryClass(e){return extraCategory(e)?`category-${extraCategory(e)}`:'category-unknown'}
 function clientType(row){
+  if(typeof row==='string'&&['eurospin','intesa','privato'].includes(row))return row;
   const direct=row?.client_type;
   if(['eurospin','intesa','privato'].includes(direct))return direct;
   const linked=row?.store_id?stores.find(s=>s.id===row.store_id):null;

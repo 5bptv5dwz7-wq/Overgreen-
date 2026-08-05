@@ -1,0 +1,8 @@
+OVERGREEN CLOUD V78
+
+- Corretto il collegamento Maps delle sedi: l'indirizzo ora include anche la città.
+- Una sede come "Via Cairoli 139, Ovada" non viene più cercata erroneamente a Genova.
+- Tutti i pulsanti Maps ora aprono Google Maps tramite link universale.
+- Se Google Maps è installato su iPhone viene aperta l'app; altrimenti si apre Google Maps sul web.
+- Correzione applicata a Dashboard, Sedi e clienti, scheda sede e Programmazione.
+- Nessuna migrazione SQL necessaria.

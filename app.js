@@ -321,7 +321,7 @@ function renderDashboard(){
           const pending=itemPending(row.item);
           const ordinaryNotes=[row.schedule?.nota_generale,st?.note].filter(v=>String(v||'').trim());
           c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span><strong>${esc(st?.nome||'Punto vendita')}</strong><small>${done?'Completato':pending?'In attesa di convalida':'Da eseguire'}</small>${ordinaryNotes.length?`<div class="dashboard-job-notes"><strong>Note</strong>${ordinaryNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>`<div class="embedded-extra ${extraCategoryClass(e)} ${extraDone(e)?'is-done':'is-open'}"><span>${extraDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span>${e.numero_target?`<small class="target-number">Target: ${esc(e.numero_target)}</small>`:''}<small>${extraDone(e)?'Completato':'Da fare insieme al passaggio'}</small>${e.descrizione?`<p class="embedded-extra-description">${esc(e.descrizione)}</p>`:''}</div></div>`).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${done?'<button class="secondary" disabled>✓ Completato</button>':pending?'<button class="secondary" disabled>⏳ In attesa</button>':'<button data-done>✓ Eseguito</button>'}</div>`;
-          c.querySelector('[data-map]').onclick=()=>openAppleMaps(st?.indirizzo,'Eurospin '+(st?.nome||''));c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,row.item.id));list.appendChild(c)
+          c.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,row.item.id));list.appendChild(c)
         }else{
           const e=job.extra,st=stores.find(s=>s.id===e.store_id),done=extraDone(e),urgent=e.urgente===true||e.priorita==='urgente'||elapsedDaysFrom(extraRequestDate(e))>=7,c=document.createElement('article');
           c.className=`dashboard-line-job standalone-extra ${extraCategoryClass(e)} ${done?'is-done':urgent?'is-urgent':'is-open'}`;
@@ -478,7 +478,7 @@ async function showStoreDetail(s){
     </section>`;
 
   const body=$('storeDetailBody');
-  body.querySelector('[data-detail-map]').onclick=()=>openAppleMaps(s.indirizzo,clientLabel(s)+' '+s.nome);
+  body.querySelector('[data-detail-map]').onclick=()=>openGoogleMaps(s.indirizzo,clientLabel(s)+' '+s.nome,s.citta);
   body.querySelector('[data-detail-edit]')?.addEventListener('click',()=>openStore(s));
   body.querySelector('[data-open-full-history]')?.addEventListener('click',()=>showHistory(s));
   body.querySelectorAll('[data-sheet-tab]').forEach(btn=>btn.onclick=()=>{body.querySelectorAll('[data-sheet-tab]').forEach(x=>x.classList.toggle('active',x===btn));body.querySelectorAll('[data-sheet-panel]').forEach(x=>x.classList.toggle('hidden',x.dataset.sheetPanel!==btn.dataset.sheetTab))});
@@ -495,11 +495,15 @@ async function showStoreDetail(s){
 
 function openDuplicateSchedule(s){$('duplicateScheduleId').value=s.id;$('duplicateScheduleDate').value=tomorrow();openDialog('duplicateScheduleDialog')}
 
-function openAppleMaps(address,name=''){
-  const query=encodeURIComponent(address||name||'');
-  // Un solo collegamento: su iPhone apre Maps senza un secondo reindirizzamento al ritorno.
-  window.location.href=`https://maps.apple.com/?q=${query}`;
+function openGoogleMaps(address,name='',city=''){
+  const parts=[address,city].map(v=>String(v||'').trim()).filter(Boolean);
+  const destination=parts.length?parts.join(', '):String(name||'').trim();
+  const query=encodeURIComponent(destination);
+  // Il link universale apre Google Maps se installato, altrimenti la versione web.
+  window.location.href=`https://www.google.com/maps/search/?api=1&query=${query}`;
 }
+// Alias mantenuto per compatibilità con eventuali richiami meno recenti.
+const openAppleMaps=openGoogleMaps;
 function historyStatusLabel(stato){
   return ({convalidato:'Convalidato',in_attesa:'In attesa',rifiutato:'Rifiutato'})[stato]||stato.replaceAll('_',' ');
 }
@@ -629,7 +633,7 @@ function renderStores(){
  if(storeFilter!=='all')list=list.filter(s=>storeFilter==='today'?s.ultimo_passaggio===today():storeFilter==='urgent'?isUrgentStore(s):status(s)===storeFilter);
  list.sort((a,b)=>sort==='alpha'?a.nome.localeCompare(b.nome,'it'):(days(b.ultimo_passaggio)??9999)-(days(a.ultimo_passaggio)??9999));
  $('storesList').innerHTML='';for(const s of list){const n=days(s.ultimo_passaggio),pending=interventions.some(i=>i.store_id===s.id&&i.stato==='in_attesa'),storeState=status(s),programmed=storeState==='scheduled';const c=document.createElement('article');c.className=`card store-card ${storeState}`;c.innerHTML=`<div class="status-bar"></div><div><div class="card-top"><div><h3 data-detail>${esc(s.nome)}</h3><p class="muted">${esc(s.citta||s.indirizzo||'')}</p></div><div class="days">${n===null?'—':n+' gg'}</div></div>${programmed?'<p class="programmed-label">📅 In programma</p>':''}${pending?'<p class="pending">⏳ In attesa di convalida</p>':''}<p class="muted">Ultimo passaggio: ${fmt(s.ultimo_passaggio)}</p><div class="actions"><button class="secondary" data-map>Maps</button><button data-history>Storico</button>${!pending?'<button data-done>Eseguito</button>':''}${admin()?'<button class="secondary" data-edit>Modifica</button>':''}</div></div>`;
- c.querySelector('[data-detail]').onclick=()=>showStoreDetail(s);c.querySelector('[data-map]').onclick=()=>openAppleMaps(s.indirizzo,clientLabel(s)+' '+s.nome);c.querySelector('[data-history]').onclick=()=>showHistory(s);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(s));c.querySelector('[data-edit]')?.addEventListener('click',()=>openStore(s));$('storesList').appendChild(c)}
+ c.querySelector('[data-detail]').onclick=()=>showStoreDetail(s);c.querySelector('[data-map]').onclick=()=>openGoogleMaps(s.indirizzo,clientLabel(s)+' '+s.nome,s.citta);c.querySelector('[data-history]').onclick=()=>showHistory(s);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(s));c.querySelector('[data-edit]')?.addEventListener('click',()=>openStore(s));$('storesList').appendChild(c)}
  $('totalCount').textContent=clientStores.length;
  $('dueCount').textContent=clientStores.filter(s=>status(s)==='due').length;
  $('warningCount').textContent=clientStores.filter(s=>status(s)==='warning').length;
@@ -862,7 +866,7 @@ function renderSchedules(){
       r.className=`schedule-item schedule-item-compact ${effectiveState}`;
       const stato=effectiveState==='in_attesa'?'In attesa di convalida':'Da eseguire',linked=linkedExtrasForScheduleItem(item.id);
       r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${item.posizione||'•'}</div><div class="schedule-item-copy">${scheduleClientBadge(st)}<strong data-store-detail>${esc(st?.nome||'Sede')}</strong><small>${esc(st?.citta||st?.indirizzo||'')} · ${stato}</small></div>${admin()?'<div class="order-buttons"><button type="button" class="secondary compact-btn" data-up title="Sposta prima">↑</button><button type="button" class="secondary compact-btn" data-down title="Sposta dopo">↓</button></div>':''}</div>${linked.length?`<div class="linked-extra-reminder compact-linked"><strong>Extra collegati (${linked.length})</strong>${linked.map(e=>`<span class="linked-extra-category ${extraCategoryClass(e)}"><b>${esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}</span>`).join('')}</div>`:''}<div class="actions schedule-item-actions"><button class="secondary" data-map>Maps</button>${effectiveState==='da_fare'?'<button data-done>Eseguito</button>':''}${admin()&&effectiveState==='da_fare'?'<button class="danger-btn" data-delete-scheduled>Elimina</button>':''}</div>`;
-      r.querySelector('[data-store-detail]').onclick=()=>showStoreDetail(st);r.querySelector('[data-up]')?.addEventListener('click',()=>moveScheduleItem(item,-1));r.querySelector('[data-down]')?.addEventListener('click',()=>moveScheduleItem(item,1));r.querySelector('[data-map]').onclick=()=>openAppleMaps(st?.indirizzo,clientLabel(st?.client_type)+' '+(st?.nome||''));
+      r.querySelector('[data-store-detail]').onclick=()=>showStoreDetail(st);r.querySelector('[data-up]')?.addEventListener('click',()=>moveScheduleItem(item,-1));r.querySelector('[data-down]')?.addEventListener('click',()=>moveScheduleItem(item,1));r.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st?.client_type)+' '+(st?.nome||''),st?.citta);
       r.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,item.id));r.querySelector('[data-delete-scheduled]')?.addEventListener('click',()=>deleteScheduleItem(item,st));c.appendChild(r)
     }}
     $('scheduleList').appendChild(c)

@@ -274,10 +274,30 @@ function renderDashboard(){
   $('dashToday').textContent=todaysItems.length+todaysExtras.length;
   $('dashPending').textContent=admin()?interventions.filter(i=>i.stato==='in_attesa').length+extras.filter(e=>e.stato==='in_attesa').length:interventions.filter(i=>i.stato==='in_attesa'&&i.inserito_da===profile.id).length+extras.filter(e=>e.stato==='in_attesa'&&myExtraIds.has(e.id)).length;
   $('dashDone').textContent=todaysDoneItems.length+todaysDoneExtras.length;
-  $('dashDue').textContent=stores.filter(s=>status(s)==='due').length;
-  $('dashScheduled').textContent=stores.filter(s=>status(s)==='scheduled').length;
-  $('dashUrgent').textContent=stores.filter(isUrgentStore).length;
-  $('dashOpenExtras').textContent=openExtraJobs().length;
+
+  const dashCards={
+    due:$('dashDue')?.closest('.dash-card'),
+    scheduled:$('dashScheduled')?.closest('.dash-card'),
+    urgent:$('dashUrgent')?.closest('.dash-card'),
+    openExtras:$('dashOpenExtras')?.closest('.dash-card')
+  };
+  if(admin()){
+    $('dashDue').textContent=stores.filter(s=>status(s)==='due').length;
+    dashCards.due?.querySelector('span')&&(dashCards.due.querySelector('span').textContent='Punti scaduti');
+    if(dashCards.due)dashCards.due.dataset.dash='due';
+    $('dashScheduled').textContent=stores.filter(s=>status(s)==='scheduled').length;
+    $('dashUrgent').textContent=stores.filter(isUrgentStore).length;
+    $('dashOpenExtras').textContent=openExtraJobs().length;
+    Object.values(dashCards).forEach(card=>card?.classList.remove('hidden'));
+  }else{
+    const assignedTodayExtras=extras.filter(e=>myExtraIds.has(e.id)&&e.giorno_intervento===todayStr).length;
+    $('dashDue').textContent=assignedTodayExtras;
+    dashCards.due?.querySelector('span')&&(dashCards.due.querySelector('span').textContent='Extra assegnati oggi');
+    if(dashCards.due)dashCards.due.dataset.dash='todayextras';
+    dashCards.scheduled?.classList.add('hidden');
+    dashCards.urgent?.classList.add('hidden');
+    dashCards.openExtras?.classList.add('hidden');
+  }
 
   const oldStrip=$('dashboardOperationalStrip');
   if(oldStrip)oldStrip.remove();
@@ -1141,7 +1161,7 @@ async function seedStores(){if(!admin())return;if(stores.length&&!confirm(`Sono 
 $('rememberAccess').checked=localStorage.getItem(REMEMBER_ACCESS_KEY)!=='0';
 $('loginForm').onsubmit = async (e) => { e.preventDefault(); const b=$('loginForm').querySelector('button[type=submit]'); const box=$('loginError'); box.classList.add('hidden'); box.textContent=''; b.disabled=true; b.textContent='Accesso…'; try { const email=$('loginEmail').value.trim(); const password=$('loginPassword').value; if(!email||!password) throw new Error('Inserisci email e password.'); localStorage.setItem(REMEMBER_ACCESS_KEY,$('rememberAccess').checked?'1':'0'); await signIn(email,password); } catch(err) { console.error(err); box.textContent=err?.message||'Accesso non riuscito.'; box.classList.remove('hidden'); } finally { b.disabled=false; b.textContent='Accedi'; } };
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeDialog(b));$('helpBtn').onclick=openHelp;document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));document.querySelectorAll('[data-client-filter]').forEach(b=>b.onclick=()=>{storeClientFilter=b.dataset.clientFilter;document.querySelectorAll('[data-client-filter]').forEach(x=>x.classList.toggle('active',x===b));renderStores()});document.querySelectorAll('[data-extra-client]').forEach(b=>b.onclick=()=>{extraClientFilter=b.dataset.extraClient;document.querySelectorAll('[data-extra-client]').forEach(x=>x.classList.toggle('active',x===b));renderExtras()});document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{storeFilter=b.dataset.filter;renderStores()});
-$('globalSearch').oninput=renderGlobalSearch;$('dashboardRefresh').onclick=loadAll;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){scheduleDateFilter='all';$('scheduleDateFilter').value='all';setView('schedule')}else if(b.dataset.dash==='today'){scheduleDateFilter='today';$('scheduleDateFilter').value='today';setView('schedule')}else if(b.dataset.dash==='openextras')setView('extras');else setView('stores')});$('scheduleClientFilter').onchange=e=>{scheduleClientFilter=e.target.value;renderSchedules()};$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('schedulePickerClient').onchange=renderSchedulePicker;document.querySelectorAll('[data-quick-date]').forEach(b=>b.onclick=()=>{$('scheduleDate').value=b.dataset.quickDate==='today'?today():tomorrow()});$('addScheduleSearch').oninput=renderAddSchedulePicker;$('newExtraBtn').onclick=()=>{$('extraForm').reset();$('extraRequestDate').value=today();$('extraDate').value='';$('extraDeadline').value='';$('extraClient').value='eurospin';$('extraClosureProfile').value='eurospin';renderExtraStoreOptions();openDialog('extraDialog')};
+$('globalSearch').oninput=renderGlobalSearch;$('dashboardRefresh').onclick=loadAll;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){scheduleDateFilter='all';$('scheduleDateFilter').value='all';setView('schedule')}else if(b.dataset.dash==='today'){scheduleDateFilter='today';$('scheduleDateFilter').value='today';setView('schedule')}else if(b.dataset.dash==='openextras')setView('extras');else if(b.dataset.dash==='todayextras'){$('extraSearchInput').value=today();setView('extras');renderExtras()}else setView('stores')});$('scheduleClientFilter').onchange=e=>{scheduleClientFilter=e.target.value;renderSchedules()};$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('schedulePickerClient').onchange=renderSchedulePicker;document.querySelectorAll('[data-quick-date]').forEach(b=>b.onclick=()=>{$('scheduleDate').value=b.dataset.quickDate==='today'?today():tomorrow()});$('addScheduleSearch').oninput=renderAddSchedulePicker;$('newExtraBtn').onclick=()=>{$('extraForm').reset();$('extraRequestDate').value=today();$('extraDate').value='';$('extraDeadline').value='';$('extraClient').value='eurospin';$('extraClosureProfile').value='eurospin';renderExtraStoreOptions();openDialog('extraDialog')};
 $('extraClient').onchange=()=>{$('extraClosureProfile').value=$('extraClient').value};$('extraEditClient').onchange=()=>{$('extraEditClosureProfile').value=$('extraEditClient').value};$('extraSearchInput').oninput=renderExtras;$('extraCategoryFilter').onchange=renderExtras;$('clearExtraSearch').onclick=()=>{$('extraSearchInput').value='';renderExtras();$('extraSearchInput').focus()};
 function addDonePhotos(fileList){
   const incoming=[...fileList].filter(f=>f.type.startsWith('image/'));

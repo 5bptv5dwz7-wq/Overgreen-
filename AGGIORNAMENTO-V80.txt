@@ -1,0 +1,14 @@
+OVERGREEN CLOUD V80
+
+Dashboard dipendenti semplificata.
+
+Per gli utenti non amministratori vengono mostrati soltanto quattro contatori:
+- Da fare oggi
+- Da convalidare
+- Completati oggi
+- Extra assegnati oggi
+
+I contatori amministratore restano invariati.
+Premendo "Extra assegnati oggi" si apre la sezione Extra filtrata sulla data odierna.
+
+Nessuna migrazione SQL necessaria.

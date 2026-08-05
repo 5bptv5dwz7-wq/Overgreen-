@@ -207,3 +207,29 @@
 .dashboard-job-address{display:block;color:#55645d;font-weight:650;margin-top:4px;line-height:1.35}
 .worker-travel-summary{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:8px 0 10px;padding:10px 12px;border-radius:14px;background:#f2f7f3;color:#19452e;font-size:.9rem}.worker-travel-summary span{text-align:right;color:#587066}.dashboard-travel-leg{display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 4px;color:#2d6545}.dashboard-travel-leg span{font-size:1.15rem}.dashboard-travel-leg strong{font-size:.92rem}.dashboard-travel-leg small{color:#7b8680}
 .store-admin-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}.store-admin-actions .full{margin:0}.bulk-interval-preview{display:grid;gap:4px;background:#eef6f1;border:1px solid #d5e6da;border-radius:14px;padding:13px;margin:14px 0}.bulk-interval-preview span{color:var(--muted);font-size:.9rem}@media(max-width:600px){.store-admin-actions{grid-template-columns:1fr}}
+
+/* V87 - Vista mappa programmazione */
+.schedule-toolbar{grid-template-columns:repeat(3,minmax(0,1fr)) auto;align-items:center}
+.schedule-view-toggle{display:flex;gap:7px;background:#eef4f0;border-radius:14px;padding:4px}
+.schedule-view-toggle button{min-height:40px;padding:8px 12px;white-space:nowrap;background:transparent;border-color:transparent;box-shadow:none}
+.schedule-view-toggle button.active{background:#fff;border-color:var(--line);box-shadow:0 4px 12px rgba(8,73,43,.08)}
+.schedule-map-panel{padding:16px;overflow:hidden}
+.schedule-map-head{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;margin-bottom:12px}
+.schedule-map-head h2{margin:4px 0}
+.schedule-map{height:min(68vh,720px);min-height:460px;border-radius:18px;overflow:hidden;border:1px solid var(--line);background:#eaf0eb;z-index:1}
+.schedule-map-legend{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 11px}
+.schedule-map-legend span{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border-radius:999px;background:#f1f5f2;font-size:.75rem;font-weight:800}
+.schedule-map-legend i{width:11px;height:11px;border-radius:50%;display:block}
+.schedule-map-status{padding:10px 2px 0}
+.overgreen-map-marker{background:transparent;border:0}
+.overgreen-map-pin{width:34px;height:34px;border:3px solid #fff;border-radius:50% 50% 50% 8px;transform:rotate(-45deg);display:grid;place-items:center;box-shadow:0 4px 12px rgba(0,0,0,.28)}
+.overgreen-map-pin span{transform:rotate(45deg);font-size:.76rem;font-weight:950;color:#fff}
+.overgreen-map-pin.extra{border-radius:50%;transform:none}
+.overgreen-map-pin.extra span{transform:none}
+.map-popup-client{display:inline-flex;border-radius:999px;padding:3px 7px;background:#eef4f0;font-size:.68rem;font-weight:900;margin-bottom:5px}
+.map-popup-title{font-size:1rem;font-weight:900;margin-bottom:3px}
+.map-popup-meta{font-size:.78rem;color:#52625a;line-height:1.45}
+.map-popup-actions{display:flex;gap:6px;margin-top:9px}
+.map-popup-actions a{display:inline-flex;padding:7px 9px;border-radius:9px;background:#075f37;color:#fff!important;text-decoration:none;font-weight:800;font-size:.75rem}
+.leaflet-popup-content{margin:13px 15px;min-width:190px}
+@media(max-width:760px){.schedule-toolbar{grid-template-columns:1fr}.schedule-view-toggle{width:100%}.schedule-view-toggle button{flex:1}.schedule-map-head{display:block}.schedule-map-head button{margin-top:9px}.schedule-map{height:62vh;min-height:420px}.quick-planner.map-hidden{display:none}}

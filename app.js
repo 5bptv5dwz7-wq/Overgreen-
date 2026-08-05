@@ -13,7 +13,7 @@ const SEED_STORES=[{"name": "ABBIATEGRASSO", "lastDone": "2026-06-17"}, {"name":
 const $=id=>document.getElementById(id);
 let session=null,profile=null,profiles=[],managedUsers=[],stores=[],interventions=[],schedules=[],scheduleMembers=[],scheduleItems=[],extras=[],extraWorkers=[],interventionWorkers=[],attachments=[];
 let combinedExtraClosureQueue=[];
-let storeFilter='all',storeClientFilter='all',extraClientFilter='all',scheduleClientFilter='all',scheduleWorkerFilter='all',scheduleDateFilter='all',scheduleExactDate=null;
+let storeFilter='all',storeClientFilter='all',extraClientFilter='all',scheduleClientFilter='all',scheduleWorkerFilter='all',scheduleDateFilter='all',scheduleExactDate=null,scheduleViewMode='list';
 let loadAllPromise=null,currentHistoryStoreId=null;
 let historyEditPhotoFiles=[];
 let donePhotoFiles=[];
@@ -976,6 +976,87 @@ async function editScheduleDayNote(schedule){
   toast(note?'Nota della giornata aggiornata':'Nota della giornata eliminata');
   renderSchedules();renderDashboard();
 }
+
+let scheduleLeafletMap=null,scheduleMapLayer=null,scheduleMapRenderToken=0;
+const scheduleMapColors=['#126b42','#245c9f','#c66a1a','#9a3f72','#6d5a12','#5d48a6','#b44242','#167a78'];
+function teamColor(key){let n=0;for(const ch of String(key||''))n=(n*31+ch.charCodeAt(0))>>>0;return scheduleMapColors[n%scheduleMapColors.length]}
+function scheduleMapTeamInfo(schedule,extra=null){
+  const rows=extra?extraWorkers.filter(w=>w.extra_id===extra.id):scheduleMembers.filter(m=>m.schedule_id===schedule.id);
+  const people=rows.map(m=>profiles.find(p=>p.id===m.profile_id)).filter(Boolean);
+  const key=people.length?people.map(p=>p.id).sort().join('-'):'unassigned';
+  return {key,label:people.length?people.map(p=>p.nome).join(' + '):'Da assegnare',color:teamColor(key)};
+}
+function setScheduleViewMode(mode){
+  scheduleViewMode=mode==='map'?'map':'list';
+  const isMap=scheduleViewMode==='map';
+  $('scheduleMapPanel')?.classList.toggle('hidden',!isMap);
+  document.querySelector('#scheduleView .quick-planner')?.classList.toggle('hidden',isMap);
+  $('scheduleList')?.classList.toggle('hidden',isMap);
+  $('scheduleListMode')?.classList.toggle('active',!isMap);
+  $('scheduleMapMode')?.classList.toggle('active',isMap);
+  if(isMap){setTimeout(()=>{scheduleLeafletMap?.invalidateSize();renderScheduleMap()},40)}
+}
+function mapVisibleSchedules(){
+  let list=visibleSchedules().filter(scheduleMatchesDate);
+  if(scheduleWorkerFilter!=='all')list=list.filter(s=>scheduleMembers.some(m=>m.schedule_id===s.id&&m.profile_id===scheduleWorkerFilter));
+  if(scheduleClientFilter!=='all')list=list.filter(s=>scheduleItems.some(i=>i.schedule_id===s.id&&scheduleClientMatchesStore(stores.find(st=>st.id===i.store_id))));
+  return list.sort((a,b)=>String(a.giorno).localeCompare(String(b.giorno)));
+}
+function collectScheduleMapJobs(){
+  const groups=[];
+  for(const schedule of mapVisibleSchedules()){
+    let items=scheduleItems.filter(i=>i.schedule_id===schedule.id&&i.tipo==='ordinario'&&effectiveScheduleState(i)!=='completato').sort((a,b)=>(a.posizione||0)-(b.posizione||0));
+    if(scheduleClientFilter!=='all')items=items.filter(i=>scheduleClientMatchesStore(stores.find(st=>st.id===i.store_id)));
+    const team=scheduleMapTeamInfo(schedule),jobs=items.map((item,index)=>{const store=stores.find(st=>st.id===item.store_id);return {kind:'ordinary',schedule,item,store,team,order:index+1,address:routeAddressForStore(store),date:schedule.giorno}}).filter(x=>x.store&&normalizedRouteAddress(x.address));
+    if(jobs.length)groups.push({id:schedule.id,team,date:schedule.giorno,jobs});
+  }
+  const assignedIds=assignedExtraIds();
+  let extraJobs=(admin()?extras:extras.filter(e=>assignedIds.has(e.id))).filter(extraIsScheduled).filter(extraMatchesScheduleDate);
+  if(scheduleWorkerFilter!=='all')extraJobs=extraJobs.filter(e=>extraWorkers.some(w=>w.extra_id===e.id&&w.profile_id===scheduleWorkerFilter));
+  if(scheduleClientFilter!=='all')extraJobs=extraJobs.filter(e=>String(e.client_type||'eurospin')===scheduleClientFilter);
+  for(const extra of extraJobs){
+    const store=stores.find(st=>st.id===extra.store_id),team=scheduleMapTeamInfo(null,extra),address=routeAddressForExtra(extra,store);
+    if(normalizedRouteAddress(address))groups.push({id:'extra-'+extra.id,team,date:extra.giorno_intervento,jobs:[{kind:'extra',extra,store,team,address,date:extra.giorno_intervento}]});
+  }
+  return groups;
+}
+function ensureScheduleLeafletMap(){
+  if(!window.L||!$('scheduleMap'))return null;
+  if(!scheduleLeafletMap){
+    scheduleLeafletMap=L.map('scheduleMap',{zoomControl:true}).setView([44.75,8.6],7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(scheduleLeafletMap);
+    scheduleMapLayer=L.layerGroup().addTo(scheduleLeafletMap);
+  }
+  scheduleLeafletMap.invalidateSize();return scheduleLeafletMap;
+}
+function mapPinIcon(color,label,isExtra=false){return L.divIcon({className:'overgreen-map-marker',html:`<div class="overgreen-map-pin${isExtra?' extra':''}" style="background:${color}"><span>${esc(label)}</span></div>`,iconSize:[36,42],iconAnchor:[18,39],popupAnchor:[0,-35]})}
+function googleMapsSearchUrl(address){return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`}
+async function renderScheduleMap(){
+  if(scheduleViewMode!=='map')return;
+  const token=++scheduleMapRenderToken,map=ensureScheduleLeafletMap(),statusBox=$('scheduleMapStatus'),legend=$('scheduleMapLegend');if(!map)return;
+  scheduleMapLayer.clearLayers();legend.innerHTML='';statusBox.textContent='Caricamento indirizzi e percorsi…';
+  const groups=collectScheduleMapJobs(),teamSeen=new Map();for(const g of groups)teamSeen.set(g.team.key,g.team);
+  for(const t of teamSeen.values()){const row=document.createElement('span');row.innerHTML=`<i style="background:${t.color}"></i>${esc(t.label)}`;legend.appendChild(row)}
+  if(!groups.length){statusBox.textContent='Nessun lavoro programmato con i filtri selezionati.';return}
+  const allLatLng=[],located=[];let failed=0;
+  for(const group of groups){
+    const groupPoints=[];
+    for(const job of group.jobs){
+      if(token!==scheduleMapRenderToken)return;
+      try{
+        const point=await geocodeRouteAddress(job.address);if(token!==scheduleMapRenderToken)return;
+        const latlng=[point.lat,point.lon];allLatLng.push(latlng);groupPoints.push(latlng);located.push(job);
+        const isExtra=job.kind==='extra',name=isExtra?(job.store?.nome||job.extra.nome_esterno||'Extra'):(job.store?.nome||'Sede'),client=isExtra?clientLabel(job.extra):clientLabel(job.store),detail=isExtra?job.extra.titolo:`Ordine ${job.order}`,address=job.address;
+        const popup=`<div><span class="map-popup-client">${esc(client)}</span><div class="map-popup-title">${esc(name)}</div><div class="map-popup-meta">${esc(detail)}<br>📅 ${esc(fmt(job.date))}<br>👤 ${esc(job.team.label)}<br>📍 ${esc(address)}</div><div class="map-popup-actions"><a href="${googleMapsSearchUrl(address)}" target="_blank" rel="noopener">Google Maps</a></div></div>`;
+        L.marker(latlng,{icon:mapPinIcon(job.team.color,isExtra?'E':String(job.order),isExtra)}).bindPopup(popup).addTo(scheduleMapLayer);
+      }catch{failed++}
+    }
+    if(groupPoints.length>1)L.polyline(groupPoints,{color:group.team.color,weight:4,opacity:.72,dashArray:'8 7'}).addTo(scheduleMapLayer);
+  }
+  if(token!==scheduleMapRenderToken)return;
+  if(allLatLng.length===1)map.setView(allLatLng[0],13);else if(allLatLng.length)map.fitBounds(allLatLng,{padding:[35,35],maxZoom:13});
+  statusBox.textContent=`${located.length} lavori visualizzati${failed?` · ${failed} indirizzi non trovati`:''}. Le linee seguono l’ordine della programmazione.`;
+}
 function renderSchedules(){
   const currentScheduleTravelToken=++scheduleTravelRenderToken;
   $('scheduleTitle').textContent=admin()?'Programmazione':'I miei lavori';
@@ -1019,6 +1100,7 @@ function renderSchedules(){
     for(const e of visibleExtraJobs){const c=extraCard(e);c.classList.add('schedule-extra-card');$('scheduleList').appendChild(c)}
   }
   if(!$('scheduleList').children.length)$('scheduleList').innerHTML='<div class="card report-empty"><strong>Nessun lavoro con questi filtri</strong><p class="muted">Cambia cliente, data o squadra.</p></div>';
+  setScheduleViewMode(scheduleViewMode);
 }
 function renderSchedulePicker(){
   const q=String($('scheduleSearch')?.value||'').trim().toLowerCase(),w=$('scheduleStores');if(!w)return;
@@ -1265,7 +1347,7 @@ async function seedStores(){if(!admin())return;if(stores.length&&!confirm(`Sono 
 $('rememberAccess').checked=localStorage.getItem(REMEMBER_ACCESS_KEY)!=='0';
 $('loginForm').onsubmit = async (e) => { e.preventDefault(); const b=$('loginForm').querySelector('button[type=submit]'); const box=$('loginError'); box.classList.add('hidden'); box.textContent=''; b.disabled=true; b.textContent='Accesso…'; try { const email=$('loginEmail').value.trim(); const password=$('loginPassword').value; if(!email||!password) throw new Error('Inserisci email e password.'); localStorage.setItem(REMEMBER_ACCESS_KEY,$('rememberAccess').checked?'1':'0'); await signIn(email,password); } catch(err) { console.error(err); box.textContent=err?.message||'Accesso non riuscito.'; box.classList.remove('hidden'); } finally { b.disabled=false; b.textContent='Accedi'; } };
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeDialog(b));$('helpBtn').onclick=openHelp;document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));document.querySelectorAll('[data-client-filter]').forEach(b=>b.onclick=()=>{storeClientFilter=b.dataset.clientFilter;document.querySelectorAll('[data-client-filter]').forEach(x=>x.classList.toggle('active',x===b));renderStores()});document.querySelectorAll('[data-extra-client]').forEach(b=>b.onclick=()=>{extraClientFilter=b.dataset.extraClient;document.querySelectorAll('[data-extra-client]').forEach(x=>x.classList.toggle('active',x===b));renderExtras()});document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{storeFilter=b.dataset.filter;renderStores()});
-$('globalSearch').oninput=renderGlobalSearch;$('dashboardRefresh').onclick=loadAll;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){scheduleDateFilter='all';$('scheduleDateFilter').value='all';setView('schedule')}else if(b.dataset.dash==='today'){scheduleDateFilter='today';$('scheduleDateFilter').value='today';setView('schedule')}else if(b.dataset.dash==='openextras')setView('extras');else if(b.dataset.dash==='todayextras'){$('extraSearchInput').value=today();setView('extras');renderExtras()}else setView('stores')});$('scheduleClientFilter').onchange=e=>{scheduleClientFilter=e.target.value;renderSchedules()};$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('bulkIntervalBtn').onclick=openBulkIntervalDialog;$('bulkIntervalClient').onchange=updateBulkIntervalPreview;$('bulkIntervalSiteType').onchange=updateBulkIntervalPreview;$('bulkIntervalDays').oninput=updateBulkIntervalPreview;$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('schedulePickerClient').onchange=renderSchedulePicker;document.querySelectorAll('[data-quick-date]').forEach(b=>b.onclick=()=>{$('scheduleDate').value=b.dataset.quickDate==='today'?today():tomorrow()});$('addScheduleSearch').oninput=renderAddSchedulePicker;$('newExtraBtn').onclick=()=>{$('extraForm').reset();$('extraRequestDate').value=today();$('extraDate').value='';$('extraDeadline').value='';$('extraClient').value='eurospin';$('extraClosureProfile').value='eurospin';renderExtraStoreOptions();openDialog('extraDialog')};
+$('globalSearch').oninput=renderGlobalSearch;$('dashboardRefresh').onclick=loadAll;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){scheduleDateFilter='all';$('scheduleDateFilter').value='all';setView('schedule')}else if(b.dataset.dash==='today'){scheduleDateFilter='today';$('scheduleDateFilter').value='today';setView('schedule')}else if(b.dataset.dash==='openextras')setView('extras');else if(b.dataset.dash==='todayextras'){$('extraSearchInput').value=today();setView('extras');renderExtras()}else setView('stores')});$('scheduleClientFilter').onchange=e=>{scheduleClientFilter=e.target.value;renderSchedules()};$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('scheduleListMode').onclick=()=>setScheduleViewMode('list');$('scheduleMapMode').onclick=()=>setScheduleViewMode('map');$('scheduleMapRefresh').onclick=()=>renderScheduleMap();$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('bulkIntervalBtn').onclick=openBulkIntervalDialog;$('bulkIntervalClient').onchange=updateBulkIntervalPreview;$('bulkIntervalSiteType').onchange=updateBulkIntervalPreview;$('bulkIntervalDays').oninput=updateBulkIntervalPreview;$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('schedulePickerClient').onchange=renderSchedulePicker;document.querySelectorAll('[data-quick-date]').forEach(b=>b.onclick=()=>{$('scheduleDate').value=b.dataset.quickDate==='today'?today():tomorrow()});$('addScheduleSearch').oninput=renderAddSchedulePicker;$('newExtraBtn').onclick=()=>{$('extraForm').reset();$('extraRequestDate').value=today();$('extraDate').value='';$('extraDeadline').value='';$('extraClient').value='eurospin';$('extraClosureProfile').value='eurospin';renderExtraStoreOptions();openDialog('extraDialog')};
 $('extraClient').onchange=()=>{$('extraClosureProfile').value=$('extraClient').value};$('extraEditClient').onchange=()=>{$('extraEditClosureProfile').value=$('extraEditClient').value};$('extraSearchInput').oninput=renderExtras;$('extraCategoryFilter').onchange=renderExtras;$('clearExtraSearch').onclick=()=>{$('extraSearchInput').value='';renderExtras();$('extraSearchInput').focus()};
 function addDonePhotos(fileList){
   const incoming=[...fileList].filter(f=>f.type.startsWith('image/'));

@@ -1,0 +1,15 @@
+OVERGREEN CLOUD V87
+
+VISTA MAPPA DELLA PROGRAMMAZIONE
+
+- Aggiunto il selettore Lista / Mappa nella schermata Programmazione.
+- La mappa mostra i lavori programmati in base ai filtri cliente, squadra e data.
+- Ogni squadra usa un colore diverso.
+- I punti ordinari mostrano il numero d'ordine del giro.
+- Gli extra programmati sono indicati con la lettera E.
+- Le linee collegano le sedi seguendo l'ordine impostato nella programmazione.
+- Toccando un punto si vedono cliente, sede, data, squadra, indirizzo e collegamento a Google Maps.
+- Aggiunta legenda delle squadre e conteggio degli indirizzi non trovati.
+- Coordinate e indirizzi sfruttano la cache già usata per le distanze.
+
+Non serve SQL.

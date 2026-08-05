@@ -1,0 +1,7 @@
+OVERGREEN CLOUD V84
+
+- Mostra nella Programmazione i tempi e i chilometri tra una sede e la successiva.
+- Aggiunge il riepilogo totale del percorso per ogni giornata e squadra.
+- Usa lo stesso calcolo e la stessa cache della Dashboard.
+- Ricalcola automaticamente dopo modifiche all’ordine, aggiunte o eliminazioni.
+- Nessuna migrazione SQL necessaria.

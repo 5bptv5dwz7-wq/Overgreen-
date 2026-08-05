@@ -530,6 +530,7 @@ const openAppleMaps=openGoogleMaps;
 
 const travelCacheKey='overgreen-travel-cache-v1';
 let travelRenderToken=0;
+let scheduleTravelRenderToken=0;
 function readTravelCache(){try{return JSON.parse(localStorage.getItem(travelCacheKey)||'{}')}catch{return {}}}
 function writeTravelCache(cache){try{localStorage.setItem(travelCacheKey,JSON.stringify(cache))}catch{}}
 function normalizedRouteAddress(address){return String(address||'').replace(/\s+/g,' ').trim()}
@@ -553,6 +554,25 @@ async function routeBetweenAddresses(from,to){
 function routeAddressForStore(st){return [st?.indirizzo,st?.citta,'Italia'].filter(Boolean).join(', ')}
 function routeAddressForExtra(e,st){return [st?.indirizzo||e?.indirizzo_esterno,st?.citta,'Italia'].filter(Boolean).join(', ')}
 function formatTravelMinutes(minutes){const h=Math.floor(minutes/60),m=minutes%60;return h?`${h} h${m?' '+m+' min':''}`:`${m} min`}
+async function hydrateScheduleTravel(section,token){
+  const cards=[...section.querySelectorAll('.schedule-item[data-route-address]')];if(cards.length<2)return;
+  const summary=document.createElement('div');summary.className='worker-travel-summary schedule-travel-summary';summary.innerHTML='<strong>🚗 Percorso</strong><span>Calcolo in corso…</span>';
+  section.querySelector('.schedule-card-head')?.after(summary);
+  let totalKm=0,totalMinutes=0,okCount=0;
+  for(let i=0;i<cards.length-1;i++){
+    if(token!==scheduleTravelRenderToken)return;
+    const separator=document.createElement('div');separator.className='dashboard-travel-leg schedule-travel-leg';separator.innerHTML='<span>↓</span><strong>Calcolo viaggio…</strong>';
+    cards[i].after(separator);
+    try{
+      const route=await routeBetweenAddresses(cards[i].dataset.routeAddress,cards[i+1].dataset.routeAddress);
+      if(token!==scheduleTravelRenderToken)return;
+      totalKm+=route.km;totalMinutes+=route.minutes;okCount++;
+      separator.innerHTML=`<span>↓</span><strong>🚗 ${formatTravelMinutes(route.minutes)} · ${route.km.toFixed(route.km<10?1:0)} km</strong>`;
+    }catch(err){separator.innerHTML='<span>↓</span><small>Viaggio non calcolabile</small>'}
+  }
+  if(token!==scheduleTravelRenderToken)return;
+  summary.querySelector('span').textContent=okCount?`${totalKm.toFixed(totalKm<10?1:0)} km · ${formatTravelMinutes(totalMinutes)} di guida`:'Dati di viaggio non disponibili';
+}
 async function hydrateWorkerTravel(section,token){
   const cards=[...section.querySelectorAll('.dashboard-line-job[data-route-address]')];if(cards.length<2)return;
   const summary=document.createElement('div');summary.className='worker-travel-summary';summary.innerHTML='<strong>🚗 Percorso</strong><span>Calcolo in corso…</span>';
@@ -925,6 +945,7 @@ async function editScheduleDayNote(schedule){
   renderSchedules();renderDashboard();
 }
 function renderSchedules(){
+  const currentScheduleTravelToken=++scheduleTravelRenderToken;
   $('scheduleTitle').textContent=admin()?'Programmazione':'I miei lavori';
   $('scheduleList').innerHTML='';
   renderScheduleUnplannedSummary();
@@ -946,12 +967,14 @@ function renderSchedules(){
       const st=stores.find(x=>x.id===item.store_id),r=document.createElement('div');
       const effectiveState=effectiveScheduleState(item);
       r.className=`schedule-item schedule-item-compact ${effectiveState}`;
+      r.dataset.routeAddress=routeAddressForStore(st);
       const stato=effectiveState==='in_attesa'?'In attesa di convalida':'Da eseguire',linked=linkedExtrasForScheduleItem(item.id);
       r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${item.posizione||'•'}</div><div class="schedule-item-copy">${scheduleClientBadge(st)}<strong data-store-detail>${esc(st?.nome||'Sede')}</strong><small>${esc(st?.citta||st?.indirizzo||'')} · ${stato}</small></div>${admin()?'<div class="order-buttons"><button type="button" class="secondary compact-btn" data-up title="Sposta prima">↑</button><button type="button" class="secondary compact-btn" data-down title="Sposta dopo">↓</button></div>':''}</div>${linked.length?`<div class="linked-extra-reminder compact-linked"><strong>Extra collegati (${linked.length})</strong>${linked.map(e=>`<span class="linked-extra-category ${extraCategoryClass(e)}"><b>${esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}</span>`).join('')}</div>`:''}<div class="actions schedule-item-actions"><button class="secondary" data-map>Maps</button>${effectiveState==='da_fare'?'<button data-done>Eseguito</button>':''}${admin()&&effectiveState==='da_fare'?'<button class="danger-btn" data-delete-scheduled>Elimina</button>':''}</div>`;
       r.querySelector('[data-store-detail]').onclick=()=>showStoreDetail(st);r.querySelector('[data-up]')?.addEventListener('click',()=>moveScheduleItem(item,-1));r.querySelector('[data-down]')?.addEventListener('click',()=>moveScheduleItem(item,1));r.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);
       r.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,item.id));r.querySelector('[data-delete-scheduled]')?.addEventListener('click',()=>deleteScheduleItem(item,st));c.appendChild(r)
     }}
-    $('scheduleList').appendChild(c)
+    $('scheduleList').appendChild(c);
+    hydrateScheduleTravel(c,currentScheduleTravelToken);
   }
 
   const assignedIds=assignedExtraIds();

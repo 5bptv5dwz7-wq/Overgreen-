@@ -1,0 +1,8 @@
+OVERGREEN CLOUD V86
+
+- Aggiunto nella sezione Sedi e clienti il pulsante "Modifica intervallo categoria".
+- Permette di scegliere Eurospin, Intesa Sanpaolo o Privati.
+- È possibile limitare la modifica a uno specifico tipo di sede oppure applicarla a tutta la categoria.
+- Mostra in anteprima quante sedi verranno aggiornate.
+- Richiede una conferma prima della modifica massiva.
+- Nessuna migrazione SQL necessaria.

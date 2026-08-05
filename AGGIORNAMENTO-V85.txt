@@ -1,0 +1,10 @@
+OVERGREEN CLOUD V85
+
+Correzione numerazione Programmazione
+
+- Dopo l'eliminazione di una sede programmata, le posizioni residue vengono rinumerate automaticamente da 1 in avanti.
+- La numerazione visualizzata segue sempre l'ordine effettivo della lista, senza salti come 1, 2, 3, 7.
+- La correzione vale anche quando sono attivi filtri per cliente.
+- Tempi e distanze continuano a essere ricalcolati secondo il nuovo ordine.
+
+Nessuna migrazione SQL necessaria.

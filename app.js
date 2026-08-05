@@ -888,6 +888,16 @@ async function deleteScheduleItem(item,store){
   }
   scheduleItems=scheduleItems.filter(x=>x.id!==item.id);
   const remaining=scheduleItems.filter(x=>x.schedule_id===item.schedule_id);
+  if(remaining.length){
+    const ordered=remaining.filter(x=>effectiveScheduleState(x)!=='completato').sort((a,b)=>(a.posizione||0)-(b.posizione||0));
+    for(let index=0;index<ordered.length;index++){
+      const wanted=index+1,current=ordered[index];
+      if(current.posizione===wanted)continue;
+      const r=await sb.from('schedule_items').update({posizione:wanted}).eq('id',current.id);
+      if(r.error)return alert('Punto eliminato, ma non riesco a rinumerare il giro: '+r.error.message);
+      current.posizione=wanted;
+    }
+  }
   if(!remaining.length){
     let r=await sb.from('schedule_members').delete().eq('schedule_id',item.schedule_id);if(r.error)return alert(r.error.message);
     r=await sb.from('schedules').delete().eq('id',item.schedule_id);if(r.error)return alert(r.error.message);
@@ -963,13 +973,13 @@ function renderSchedules(){
     c.querySelector('[data-edit-note]')?.addEventListener('click',()=>editScheduleDayNote(s));
     c.querySelector('[data-add-stores]')?.addEventListener('click',()=>openAddScheduleItems(s));
     c.querySelector('[data-duplicate]')?.addEventListener('click',()=>openDuplicateSchedule(s));
-    for(const item of items){if(item.tipo==='ordinario'){
+    for(const [displayIndex,item] of items.entries()){if(item.tipo==='ordinario'){
       const st=stores.find(x=>x.id===item.store_id),r=document.createElement('div');
       const effectiveState=effectiveScheduleState(item);
       r.className=`schedule-item schedule-item-compact ${effectiveState}`;
       r.dataset.routeAddress=routeAddressForStore(st);
       const stato=effectiveState==='in_attesa'?'In attesa di convalida':'Da eseguire',linked=linkedExtrasForScheduleItem(item.id);
-      r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${item.posizione||'•'}</div><div class="schedule-item-copy">${scheduleClientBadge(st)}<strong data-store-detail>${esc(st?.nome||'Sede')}</strong><small>${esc(st?.citta||st?.indirizzo||'')} · ${stato}</small></div>${admin()?'<div class="order-buttons"><button type="button" class="secondary compact-btn" data-up title="Sposta prima">↑</button><button type="button" class="secondary compact-btn" data-down title="Sposta dopo">↓</button></div>':''}</div>${linked.length?`<div class="linked-extra-reminder compact-linked"><strong>Extra collegati (${linked.length})</strong>${linked.map(e=>`<span class="linked-extra-category ${extraCategoryClass(e)}"><b>${esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}</span>`).join('')}</div>`:''}<div class="actions schedule-item-actions"><button class="secondary" data-map>Maps</button>${effectiveState==='da_fare'?'<button data-done>Eseguito</button>':''}${admin()&&effectiveState==='da_fare'?'<button class="danger-btn" data-delete-scheduled>Elimina</button>':''}</div>`;
+      r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${displayIndex+1}</div><div class="schedule-item-copy">${scheduleClientBadge(st)}<strong data-store-detail>${esc(st?.nome||'Sede')}</strong><small>${esc(st?.citta||st?.indirizzo||'')} · ${stato}</small></div>${admin()?'<div class="order-buttons"><button type="button" class="secondary compact-btn" data-up title="Sposta prima">↑</button><button type="button" class="secondary compact-btn" data-down title="Sposta dopo">↓</button></div>':''}</div>${linked.length?`<div class="linked-extra-reminder compact-linked"><strong>Extra collegati (${linked.length})</strong>${linked.map(e=>`<span class="linked-extra-category ${extraCategoryClass(e)}"><b>${esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}</span>`).join('')}</div>`:''}<div class="actions schedule-item-actions"><button class="secondary" data-map>Maps</button>${effectiveState==='da_fare'?'<button data-done>Eseguito</button>':''}${admin()&&effectiveState==='da_fare'?'<button class="danger-btn" data-delete-scheduled>Elimina</button>':''}</div>`;
       r.querySelector('[data-store-detail]').onclick=()=>showStoreDetail(st);r.querySelector('[data-up]')?.addEventListener('click',()=>moveScheduleItem(item,-1));r.querySelector('[data-down]')?.addEventListener('click',()=>moveScheduleItem(item,1));r.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);
       r.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,item.id));r.querySelector('[data-delete-scheduled]')?.addEventListener('click',()=>deleteScheduleItem(item,st));c.appendChild(r)
     }}

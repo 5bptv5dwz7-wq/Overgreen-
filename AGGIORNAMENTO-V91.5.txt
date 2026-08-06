@@ -1,0 +1,8 @@
+OVERGREEN CLOUD V91.5
+
+- PDF sintetico e PDF completo dei Report attivita generati direttamente dall app.
+- Eliminata la stampa HTML/Safari.
+- Nessun URL GitHub, data di stampa o footer del browser.
+- PDF completo con note e fotografie compresse su piu pagine.
+- Condivisione e salvataggio diretto come per il report del singolo intervento.
+- Nessuna modifica SQL necessaria.

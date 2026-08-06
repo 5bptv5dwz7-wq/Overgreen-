@@ -774,25 +774,75 @@ async function previewSingleClientReport(kind,row){
   }catch(err){alert('Impossibile creare il report cliente: '+err.message)}
 }
 
-async function exportDailyReportPdf(mode='compact'){
-  const data=dailyReportData(),popup=window.open('','_blank');
-  if(!popup){alert('Il browser ha bloccato la finestra del PDF. Consenti i popup e riprova.');return}
-  popup.document.write('<!doctype html><title>Preparazione report...</title><body style="font-family:Arial;padding:30px">Preparazione del report PDF...</body>');
-  try{
-    const counts=reportCounts(data),typeLabel=({all:'Tutti i lavori',ordinary:'Interventi ordinari',extra:'Lavori extra'})[$('reportType')?.value||'all'],workerLabel=$('reportWorker')?.selectedOptions?.[0]?.textContent||'Tutti i dipendenti';
-    const groups=[['Interventi ordinari',data.ordinary.map(row=>({kind:'ordinary',row}))],['Lavori extra',data.extra.map(row=>({kind:'extra',row}))]];
-    let body='';
-    for(const [heading,items] of groups){if(!items.length)continue;body+=`<h2 class="section-title">${esc(heading)}</h2>`;
-      for(const item of items){const r=item.row,isOrd=item.kind==='ordinary',st=stores.find(s=>s.id===r.store_id),names=reportWorkerNames(item.kind,r.id),pics=attachments.filter(a=>a.tipo==='foto_generica'&&(isOrd?a.intervention_id===r.id:a.extra_id===r.id)),docs=isOrd?[]:attachments.filter(a=>a.extra_id===r.id&&a.tipo!=='foto_generica'),title=isOrd?(st?.nome||'Punto vendita'):r.titolo,place=isOrd?(st?.indirizzo||st?.citta||''):(st?.nome||r.nome_esterno||r.indirizzo_esterno||''),notes=(isOrd?r.note:(r.note_lorenzo||r.descrizione))||'Nessuna nota';
-        let photoHtml='';if(mode==='full'&&pics.length){const urls=await Promise.all(pics.map(async a=>{try{return await signedAttachmentUrl(a)}catch{return ''}}));photoHtml=`<div class="photos">${urls.filter(Boolean).map((u,n)=>`<img src="${esc(u)}" alt="Foto ${n+1}">`).join('')}</div>`}
-        body+=`<article class="job"><div class="job-head"><div><div class="kind">${isOrd?'INTERVENTO ORDINARIO':'LAVORO EXTRA'}</div><h3>${esc(title)}</h3><div class="place">${esc(place)}</div></div><div class="status">${esc(reportStatusLabel(r.stato))}</div></div><div class="meta"><strong>Data:</strong> ${esc(fmt(isOrd?r.data_intervento:r.giorno_intervento))} · <strong>Chiusura:</strong> ${esc(fmtClosedAt(r.closed_at))} · <strong>Chiuso da:</strong> ${esc(closedByName(r))} · <strong>Operatori:</strong> ${esc(names.join(', ')||'Non indicati')} · <strong>Foto:</strong> ${pics.length}${docs.length?` · <strong>Documenti:</strong> ${docs.length}`:''}</div>${mode==='full'?`<div class="notes"><strong>Note:</strong><br>${esc(notes)}</div>${photoHtml}${docs.length?`<div class="docs"><strong>Documenti allegati:</strong> ${docs.map(attachmentLabel).map(esc).join(' · ')}</div>`:''}`:''}</article>`;
-      }
+async function createDailyReportFile(mode='compact'){
+  if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
+  const {PDFDocument,StandardFonts,rgb}=PDFLib,data=dailyReportData(),counts=reportCounts(data);
+  const typeLabel=({all:'Tutti i lavori',ordinary:'Interventi ordinari',extra:'Lavori extra'})[$('reportType')?.value||'all'];
+  const workerLabel=$('reportWorker')?.selectedOptions?.[0]?.textContent||'Tutti i dipendenti';
+  const pdf=await PDFDocument.create(),regular=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold);
+  const green=rgb(.02,.35,.18),dark=rgb(.08,.18,.13),muted=rgb(.38,.45,.41),border=rgb(.82,.87,.84),soft=rgb(.95,.97,.96);
+  const pageW=595.28,pageH=841.89,margin=42,contentW=pageW-margin*2;
+  let page,y;
+  const addPage=(continuation=false)=>{
+    page=pdf.addPage([pageW,pageH]);y=pageH-48;
+    page.drawText('OVERGREEN',{x:margin,y,size:22,font:bold,color:green});
+    page.drawText(mode==='full'?'Report attivita completo':'Report attivita sintetico',{x:margin,y:y-17,size:10,font:regular,color:muted});
+    page.drawText(pdfSafeText(data.period?.label||fmt(data.date)),{x:pageW-margin-190,y,size:13,font:bold,color:dark,maxWidth:190});
+    page.drawText(pdfSafeText(`${typeLabel} - ${workerLabel}`),{x:pageW-margin-250,y:y-17,size:8,font:regular,color:muted,maxWidth:250});
+    page.drawLine({start:{x:margin,y:y-31},end:{x:pageW-margin,y:y-31},thickness:2,color:green});
+    y-=50;
+    if(!continuation){
+      const items=[['Lavori',counts.total],['Ordinari',counts.ordinary],['Extra',counts.extra],['Completati',counts.done],['In attesa',counts.pending],['Operatori',counts.workers],['Foto',counts.photos]];
+      const gap=6,w=(contentW-gap*3)/4,h=42;
+      items.forEach((it,i)=>{const row=Math.floor(i/4),col=i%4,x=margin+col*(w+gap),yy=y-row*(h+gap);page.drawRectangle({x,y:yy-h,width:w,height:h,borderColor:border,borderWidth:.7,color:soft});page.drawText(String(it[1]),{x:x+8,y:yy-18,size:14,font:bold,color:green});page.drawText(it[0],{x:x+8,y:yy-32,size:7.5,font:regular,color:muted});});
+      y-=h*2+gap*2+8;
     }
-    if(!body)body='<div class="empty">Nessun lavoro trovato per il periodo e i filtri selezionati.</div>';
-    const html=`<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Report Overgreen ${esc(data.period?.short||data.date)}</title><style>${printableReportStyles()}</style></head><body><header class="header"><div><div class="brand">OVERGREEN</div><div class="subtitle">Report attività ${mode==='full'?'completo':'sintetico'}</div></div><div><div class="date">${esc(data.period?.label||fmt(data.date))}</div><div class="filters">${esc(typeLabel)} · ${esc(workerLabel)}</div></div></header><section class="summary"><div class="kpi"><strong>${counts.total}</strong><span>Lavori</span></div><div class="kpi"><strong>${counts.ordinary}</strong><span>Ordinari</span></div><div class="kpi"><strong>${counts.extra}</strong><span>Extra</span></div><div class="kpi"><strong>${counts.done}</strong><span>Completati</span></div><div class="kpi"><strong>${counts.pending}</strong><span>In attesa</span></div><div class="kpi"><strong>${counts.workers}</strong><span>Operatori</span></div><div class="kpi"><strong>${counts.photos}</strong><span>Foto</span></div></section>${body}<div class="footer">Generato da Overgreen Cloud</div><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),500));<\/script></body></html>`;
-    popup.document.open();popup.document.write(html);popup.document.close();
-    toast(mode==='full'?'PDF completo pronto':'PDF sintetico pronto');
-  }catch(err){popup.close();alert('Impossibile preparare il PDF: '+err.message)}
+  };
+  const ensure=(needed=80)=>{if(y-needed<44)addPage(true)};
+  const addSection=title=>{ensure(38);page.drawText(title,{x:margin,y,size:13,font:bold,color:green});y-=8;page.drawLine({start:{x:margin,y},end:{x:pageW-margin,y},thickness:.8,color:border});y-=17;};
+  const drawJob=async(kind,row)=>{
+    const isOrd=kind==='ordinary',st=stores.find(s=>s.id===row.store_id),names=reportWorkerNames(kind,row.id),pics=attachments.filter(a=>a.tipo==='foto_generica'&&(isOrd?a.intervention_id===row.id:a.extra_id===row.id)),docs=isOrd?[]:attachments.filter(a=>a.extra_id===row.id&&a.tipo!=='foto_generica');
+    const title=isOrd?(st?.nome||'Punto vendita'):(row.titolo||'Lavoro extra');
+    const place=isOrd?([st?.indirizzo,st?.citta].filter(Boolean).join(', ')):(st?([st.nome,st.indirizzo,st.citta].filter(Boolean).join(', ')):[row.nome_esterno,row.indirizzo_esterno].filter(Boolean).join(', '));
+    const date=isOrd?row.data_intervento:row.giorno_intervento,notes=(isOrd?row.note:(row.note_lorenzo||row.descrizione))||'Nessuna nota';
+    ensure(mode==='full'?150:82);
+    const top=y;page.drawRectangle({x:margin,y:top-64,width:contentW,height:64,borderColor:border,borderWidth:.7});
+    page.drawText(isOrd?'INTERVENTO ORDINARIO':'LAVORO EXTRA',{x:margin+10,y:top-14,size:7.5,font:bold,color:muted});
+    page.drawText(pdfSafeText(title),{x:margin+10,y:top-30,size:12,font:bold,color:dark,maxWidth:330});
+    page.drawText(pdfSafeText(place||'Luogo non indicato'),{x:margin+10,y:top-46,size:8.5,font:regular,color:muted,maxWidth:330});
+    page.drawText(pdfSafeText(reportStatusLabel(row.stato)),{x:pageW-margin-105,y:top-20,size:8.5,font:bold,color:green,maxWidth:95});
+    const meta=`${fmt(date)} | Chiusura: ${fmtClosedAt(row.closed_at)} | ${closedByName(row)} | ${names.join(', ')||'Operatori non indicati'}`;
+    page.drawText(pdfSafeText(meta),{x:margin+10,y:top-58,size:7.2,font:regular,color:muted,maxWidth:contentW-20});
+    y=top-76;
+    if(mode==='full'){
+      ensure(65);page.drawText('Note',{x:margin+2,y,size:9,font:bold,color:green});y-=14;y=drawWrappedPdfText(page,regular,notes,margin+2,y,contentW-4,8.5,dark,11);y-=8;
+      if(docs.length){ensure(28);page.drawText(pdfSafeText(`Documenti: ${docs.map(attachmentLabel).join(' - ')}`),{x:margin+2,y,size:7.5,font:regular,color:muted,maxWidth:contentW-4});y-=16;}
+      if(pics.length){
+        page.drawText(`Foto (${pics.length})`,{x:margin+2,y,size:9,font:bold,color:green});y-=12;
+        const gap=6,cols=3,imgW=(contentW-gap*2)/3,imgH=92;
+        for(let i=0;i<pics.length;i+=cols){ensure(imgH+16);const rowPics=pics.slice(i,i+cols);for(let j=0;j<rowPics.length;j++){
+          try{const url=await signedAttachmentUrl(rowPics[j]),photo=await compressedPhotoForPdf(url,850,.52),img=await pdf.embedJpg(photo.bytes),ratio=Math.min(imgW/photo.width,imgH/photo.height),dw=photo.width*ratio,dh=photo.height*ratio,x=margin+j*(imgW+gap);page.drawRectangle({x,y:y-imgH,width:imgW,height:imgH,borderColor:border,borderWidth:.6});page.drawImage(img,{x:x+(imgW-dw)/2,y:y-imgH+(imgH-dh)/2,width:dw,height:dh});}catch(e){}
+        }y-=imgH+8;}
+      }else{page.drawText('Nessuna foto allegata',{x:margin+2,y,size:8,font:regular,color:muted});y-=15;}
+    }
+    y-=8;
+  };
+  addPage(false);
+  if(!data.ordinary.length&&!data.extra.length){page.drawText('Nessun lavoro trovato per il periodo e i filtri selezionati.',{x:margin,y,size:11,font:regular,color:muted});}
+  if(data.ordinary.length){addSection('Interventi ordinari');for(const row of data.ordinary)await drawJob('ordinary',row);}
+  if(data.extra.length){addSection('Lavori extra');for(const row of data.extra)await drawJob('extra',row);}
+  pdf.setTitle(`Report attivita Overgreen ${pdfSafeText(data.period?.short||data.date)}`);pdf.setAuthor('Overgreen');pdf.setCreator('Overgreen Cloud');pdf.setProducer('Overgreen Cloud');
+  const bytes=await pdf.save({useObjectStreams:true,addDefaultPage:false});
+  const periodSafe=pdfSafeText(data.period?.short||data.date).replace(/[\/:*?"<>|]/g,' ').replace(/\s+/g,' ').trim();
+  const fileName=`Report attivita ${mode==='full'?'completo':'sintetico'} - ${periodSafe}.pdf`,file=new File([bytes],fileName,{type:'application/pdf'});
+  return {file,fileName,title:`Report attivita ${mode==='full'?'completo':'sintetico'}`,sizeKb:Math.max(1,Math.round(file.size/1024))};
+}
+async function exportDailyReportPdf(mode='compact'){
+  try{
+    toast(mode==='full'?'Creo il PDF completo...':'Creo il PDF sintetico...');
+    const data=await createDailyReportFile(mode);
+    await shareClientReportData(data);
+  }catch(err){alert('Impossibile creare il PDF: '+err.message)}
 }
 async function shareDailyReport(){
   const text=buildDailyReportText();

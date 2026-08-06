@@ -690,59 +690,80 @@ function drawWrappedPdfText(page,font,text,x,y,maxWidth,size,color,lineHeight=si
   for(const word of words){const test=line?line+' '+word:word;if(font.widthOfTextAtSize(test,size)<=maxWidth)line=test;else{if(line)lines.push(line);line=word}}
   if(line)lines.push(line);for(const l of lines){page.drawText(l,{x,y,size,font,color});y-=lineHeight}return y;
 }
-async function exportSingleClientReport(kind,row){
-  try{
-    if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
-    toast('Creo il report cliente...');
-    const {PDFDocument,StandardFonts,rgb}=PDFLib,isOrd=kind==='ordinary',st=stores.find(s=>s.id===row.store_id),names=reportWorkerNames(kind,row.id),pics=attachments.filter(a=>a.tipo==='foto_generica'&&(isOrd?a.intervention_id===row.id:a.extra_id===row.id));
-    const title=isOrd?(st?.nome||'Intervento ordinario'):(row.titolo||'Lavoro extra');
-    const place=isOrd?([st?.indirizzo,st?.citta].filter(Boolean).join(', ')):(st?([st.nome,st.indirizzo,st.citta].filter(Boolean).join(', ')):[row.nome_esterno,row.indirizzo_esterno].filter(Boolean).join(', '));
-    const date=isOrd?row.data_intervento:row.giorno_intervento,notes=(isOrd?row.note:(row.note_lorenzo||row.descrizione))||'Nessuna nota';
-    const pdf=await PDFDocument.create(),regular=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold),green=rgb(.02,.35,.18),dark=rgb(.08,.18,.13),muted=rgb(.38,.45,.41),border=rgb(.82,.87,.84),pageW=595.28,pageH=841.89,margin=48;
-    let page=pdf.addPage([pageW,pageH]),y=pageH-56;
-    const newPage=()=>{page=pdf.addPage([pageW,pageH]);y=pageH-55;return page};
-    page.drawText('OVERGREEN',{x:margin,y,size:24,font:bold,color:green});page.drawText(pdfSafeText(fmt(date)),{x:pageW-margin-bold.widthOfTextAtSize(pdfSafeText(fmt(date)),14),y:y+4,size:14,font:bold,color:dark});
-    page.drawText('Report intervento per il cliente',{x:margin,y:y-20,size:10,font:regular,color:muted});page.drawLine({start:{x:margin,y:y-35},end:{x:pageW-margin,y:y-35},thickness:3,color:green});y-=65;
-    page.drawText(pdfSafeText(clientLabel(st||row)).toUpperCase(),{x:margin,y,size:9,font:bold,color:muted});y-=24;
-    page.drawText(pdfSafeText(title),{x:margin,y,size:18,font:bold,color:green});y-=18;if(place){y=drawWrappedPdfText(page,regular,place,margin,y,pageW-margin*2,10,muted,13);y-=8}
-    const boxes=[['DATA INTERVENTO',fmt(date)],['ORARIO DI CHIUSURA',fmtClosedAt(row.closed_at)],['OPERATORI',names.join(', ')||'Non indicati'],['TIPOLOGIA',isOrd?'Intervento ordinario':'Lavoro extra']];
-    const boxW=(pageW-margin*2-10)/2,boxH=52;for(let i=0;i<4;i++){const col=i%2,rowN=Math.floor(i/2),x=margin+col*(boxW+10),by=y-rowN*(boxH+10)-boxH;page.drawRectangle({x,y:by,width:boxW,height:boxH,borderColor:border,borderWidth:1});page.drawText(boxes[i][0],{x:x+10,y:by+34,size:7,font:regular,color:muted});drawWrappedPdfText(page,bold,boxes[i][1],x+10,by+18,boxW-20,10,dark,11)}y-=boxH*2+28;
-    const noteLines=Math.max(2,Math.ceil(pdfSafeText(notes).length/75)),noteH=Math.min(110,34+noteLines*13);page.drawRectangle({x:margin,y:y-noteH,width:pageW-margin*2,height:noteH,borderColor:border,borderWidth:1});page.drawText("Note dell'intervento",{x:margin+11,y:y-20,size:10,font:bold,color:dark});drawWrappedPdfText(page,regular,notes,margin+11,y-36,pageW-margin*2-22,10,dark,13);y-=noteH+24;
-    if(pics.length){
-      page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=16;
-      const urls=await Promise.all(pics.map(async a=>{try{return await signedAttachmentUrl(a)}catch{return ''}}));
-      const valid=urls.filter(Boolean),gap=8,cols=3,imgW=(pageW-margin*2-gap*2)/3,imgH=112;
-      if(!valid.length){page.drawText('Nessuna documentazione fotografica allegata',{x:margin,y:y-8,size:10,font:regular,color:muted});}
-      for(let rowStart=0;rowStart<valid.length;rowStart+=cols){
-        if(y-imgH<55){newPage();page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=16;}
-        const rowUrls=valid.slice(rowStart,rowStart+cols);
-        for(let col=0;col<rowUrls.length;col++){
-          let photo;try{photo=await compressedPhotoForPdf(rowUrls[col])}catch{continue}
-          const img=await pdf.embedJpg(photo.bytes),x=margin+col*(imgW+gap),scale=Math.min(imgW/photo.width,imgH/photo.height),dw=photo.width*scale,dh=photo.height*scale;
-          page.drawRectangle({x,y:y-imgH,width:imgW,height:imgH,borderColor:border,borderWidth:.7});
-          page.drawImage(img,{x:x+(imgW-dw)/2,y:y-imgH+(imgH-dh)/2,width:dw,height:dh});
-        }
-        y-=imgH+gap;
+async function createSingleClientReportFile(kind,row){
+  if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
+  const {PDFDocument,StandardFonts,rgb}=PDFLib,isOrd=kind==='ordinary',st=stores.find(s=>s.id===row.store_id),names=reportWorkerNames(kind,row.id),pics=attachments.filter(a=>a.tipo==='foto_generica'&&(isOrd?a.intervention_id===row.id:a.extra_id===row.id));
+  const title=isOrd?(st?.nome||'Intervento ordinario'):(row.titolo||'Lavoro extra');
+  const place=isOrd?([st?.indirizzo,st?.citta].filter(Boolean).join(', ')):(st?([st.nome,st.indirizzo,st.citta].filter(Boolean).join(', ')):[row.nome_esterno,row.indirizzo_esterno].filter(Boolean).join(', '));
+  const date=isOrd?row.data_intervento:row.giorno_intervento,notes=(isOrd?row.note:(row.note_lorenzo||row.descrizione))||'Nessuna nota';
+  const pdf=await PDFDocument.create(),regular=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold),green=rgb(.02,.35,.18),dark=rgb(.08,.18,.13),muted=rgb(.38,.45,.41),border=rgb(.82,.87,.84),pageW=595.28,pageH=841.89,margin=48;
+  let page=pdf.addPage([pageW,pageH]),y=pageH-56;
+  const newPage=()=>{page=pdf.addPage([pageW,pageH]);y=pageH-55;return page};
+  page.drawText('OVERGREEN',{x:margin,y,size:24,font:bold,color:green});page.drawText(pdfSafeText(fmt(date)),{x:pageW-margin-bold.widthOfTextAtSize(pdfSafeText(fmt(date)),14),y:y+4,size:14,font:bold,color:dark});
+  page.drawText('Report intervento per il cliente',{x:margin,y:y-20,size:10,font:regular,color:muted});page.drawLine({start:{x:margin,y:y-35},end:{x:pageW-margin,y:y-35},thickness:3,color:green});y-=65;
+  page.drawText(pdfSafeText(clientLabel(st||row)).toUpperCase(),{x:margin,y,size:9,font:bold,color:muted});y-=24;
+  page.drawText(pdfSafeText(title),{x:margin,y,size:18,font:bold,color:green});y-=18;if(place){y=drawWrappedPdfText(page,regular,place,margin,y,pageW-margin*2,10,muted,13);y-=8}
+  const boxes=[['DATA INTERVENTO',fmt(date)],['ORARIO DI CHIUSURA',fmtClosedAt(row.closed_at)],['OPERATORI',names.join(', ')||'Non indicati'],['TIPOLOGIA',isOrd?'Intervento ordinario':'Lavoro extra']];
+  const boxW=(pageW-margin*2-10)/2,boxH=52;for(let i=0;i<4;i++){const col=i%2,rowN=Math.floor(i/2),x=margin+col*(boxW+10),by=y-rowN*(boxH+10)-boxH;page.drawRectangle({x,y:by,width:boxW,height:boxH,borderColor:border,borderWidth:1});page.drawText(boxes[i][0],{x:x+10,y:by+34,size:7,font:regular,color:muted});drawWrappedPdfText(page,bold,boxes[i][1],x+10,by+18,boxW-20,10,dark,11)}y-=boxH*2+28;
+  const noteLines=Math.max(2,Math.ceil(pdfSafeText(notes).length/75)),noteH=Math.min(110,34+noteLines*13);page.drawRectangle({x:margin,y:y-noteH,width:pageW-margin*2,height:noteH,borderColor:border,borderWidth:1});page.drawText("Note dell'intervento",{x:margin+11,y:y-20,size:10,font:bold,color:dark});drawWrappedPdfText(page,regular,notes,margin+11,y-36,pageW-margin*2-22,10,dark,13);y-=noteH+24;
+  if(pics.length){
+    page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=16;
+    const urls=await Promise.all(pics.map(async a=>{try{return await signedAttachmentUrl(a)}catch{return ''}}));
+    const valid=urls.filter(Boolean),gap=8,cols=3,imgW=(pageW-margin*2-gap*2)/3,imgH=112;
+    if(!valid.length){page.drawText('Nessuna documentazione fotografica allegata',{x:margin,y:y-8,size:10,font:regular,color:muted});}
+    for(let rowStart=0;rowStart<valid.length;rowStart+=cols){
+      if(y-imgH<55){newPage();page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=16;}
+      const rowUrls=valid.slice(rowStart,rowStart+cols);
+      for(let col=0;col<rowUrls.length;col++){
+        let photo;try{photo=await compressedPhotoForPdf(rowUrls[col])}catch{continue}
+        const img=await pdf.embedJpg(photo.bytes),x=margin+col*(imgW+gap),scale=Math.min(imgW/photo.width,imgH/photo.height),dw=photo.width*scale,dh=photo.height*scale;
+        page.drawRectangle({x,y:y-imgH,width:imgW,height:imgH,borderColor:border,borderWidth:.7});
+        page.drawImage(img,{x:x+(imgW-dw)/2,y:y-imgH+(imgH-dh)/2,width:dw,height:dh});
       }
-    }else{
-      page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=20;
-      page.drawText('Nessuna documentazione fotografica allegata',{x:margin,y,size:10,font:regular,color:muted});
+      y-=imgH+gap;
     }
-    pdf.setTitle(`Report intervento ${pdfSafeText(title)}`);pdf.setAuthor('Overgreen');pdf.setCreator('Overgreen Cloud');pdf.setProducer('Overgreen Cloud');
-    const bytes=await pdf.save({useObjectStreams:true,addDefaultPage:false});
-    const safeFilePart=value=>pdfSafeText(value).replace(/[\/:*?"<>|]/g,' ').replace(/\s+/g,' ').trim()||'Intervento';
-    const dateForFile=String(date||today()).split('-').reverse().join('-');
-    const fileName=`Report - ${safeFilePart(clientLabel(st||row))} - ${safeFilePart(title)} - ${dateForFile}.pdf`;
-    const file=new File([bytes],fileName,{type:'application/pdf'});
-    const sizeKb=Math.max(1,Math.round(file.size/1024));
+  }else{
+    page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=20;
+    page.drawText('Nessuna documentazione fotografica allegata',{x:margin,y,size:10,font:regular,color:muted});
+  }
+  pdf.setTitle(`Report intervento ${pdfSafeText(title)}`);pdf.setAuthor('Overgreen');pdf.setCreator('Overgreen Cloud');pdf.setProducer('Overgreen Cloud');
+  const bytes=await pdf.save({useObjectStreams:true,addDefaultPage:false});
+  const safeFilePart=value=>pdfSafeText(value).replace(/[\/:*?"<>|]/g,' ').replace(/\s+/g,' ').trim()||'Intervento';
+  const dateForFile=String(date||today()).split('-').reverse().join('-');
+  const fileName=`Report - ${safeFilePart(clientLabel(st||row))} - ${safeFilePart(title)} - ${dateForFile}.pdf`;
+  const file=new File([bytes],fileName,{type:'application/pdf'});
+  return {file,fileName,title,sizeKb:Math.max(1,Math.round(file.size/1024))};
+}
+let clientReportPreviewUrl='';
+function closeClientReportPreview(){
+  const dialog=$('clientReportPreviewDialog');
+  if(dialog?.open)dialog.close();
+  if(clientReportPreviewUrl){URL.revokeObjectURL(clientReportPreviewUrl);clientReportPreviewUrl=''}
+  const frame=$('clientReportPreviewFrame');if(frame)frame.removeAttribute('src');
+  window.currentClientReportFile=null;
+}
+async function downloadClientReportFile(){
+  const data=window.currentClientReportFile;if(!data)return;
+  const {file,fileName,title,sizeKb}=data;
+  try{
     if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){
       await navigator.share({title:`Report cliente ${pdfSafeText(title)}`,text:`Report intervento ${pdfSafeText(title)}`,files:[file]});
       toast(`Report cliente PDF pronto (${sizeKb} KB)`);
     }else{
-      const url=URL.createObjectURL(file),a=document.createElement('a');
-      a.href=url;a.download=fileName;a.rel='noopener';document.body.appendChild(a);a.click();a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),60000);toast(`Report cliente PDF scaricato (${sizeKb} KB)`);
+      const url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download=fileName;a.rel='noopener';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast(`Report cliente PDF scaricato (${sizeKb} KB)`);
     }
+  }catch(err){if(err?.name!=='AbortError')alert('Impossibile scaricare il PDF: '+err.message)}
+}
+async function previewSingleClientReport(kind,row){
+  try{
+    toast('Creo l’anteprima del report...');
+    const data=await createSingleClientReportFile(kind,row);window.currentClientReportFile=data;
+    if(clientReportPreviewUrl)URL.revokeObjectURL(clientReportPreviewUrl);
+    clientReportPreviewUrl=URL.createObjectURL(data.file);
+    $('clientReportPreviewTitle').textContent=`Report cliente · ${data.title}`;
+    $('clientReportPreviewInfo').textContent=`PDF pronto · ${data.sizeKb} KB`;
+    $('clientReportPreviewFrame').src=clientReportPreviewUrl+'#toolbar=0&navpanes=0';
+    $('clientReportPreviewDialog').showModal();
   }catch(err){alert('Impossibile creare il report cliente: '+err.message)}
 }
 
@@ -784,8 +805,8 @@ function renderDailyReport(){
     const pics=attachments.filter(a=>a.tipo==='foto_generica'&&(isOrd?a.intervention_id===r.id:a.extra_id===r.id));
     const docs=isOrd?[]:attachments.filter(a=>a.extra_id===r.id&&a.tipo!=='foto_generica');
     const title=isOrd?(st?.nome||'Punto vendita'):r.titolo,place=isOrd?(st?.indirizzo||st?.citta||''):(st?.nome||r.nome_esterno||r.indirizzo_esterno||'');
-    const c=document.createElement('article');c.className='card daily-report-card';c.innerHTML=`<div class="daily-report-head"><div><span class="report-kind">${isOrd?'INTERVENTO ORDINARIO':'LAVORO EXTRA'}</span><h3>${esc(title)}</h3><p class="muted">${esc(place)}</p></div><span class="badge-state">${esc(reportStatusLabel(r.stato))}</span></div><div class="report-meta"><span>📅 ${esc(fmt(isOrd?r.data_intervento:r.giorno_intervento))}</span><span>🕒 ${esc(fmtClosedAt(r.closed_at))}</span><span>✅ ${esc(closedByName(r))}</span><span>👤 ${esc(names.join(' · ')||'Operatore non indicato')}</span><span>📷 ${pics.length}</span>${docs.length?`<span>📄 ${docs.length}</span>`:''}</div><div class="report-note"><strong>Note</strong><p>${esc((isOrd?r.note:(r.note_lorenzo||r.descrizione))||'Nessuna nota')}</p></div><div class="report-photo-grid"></div><div class="actions report-actions"><button data-client-report>📄 Report cliente PDF</button>${st?'<button class="secondary" data-store>Scheda punto vendita</button>':''}${docs.map(a=>`<button class="secondary" data-doc="${a.id}">${esc(attachmentLabel(a))}</button>`).join('')}</div>`;
-    c.querySelector('[data-client-report]')?.addEventListener('click',()=>exportSingleClientReport(item.kind,r));
+    const c=document.createElement('article');c.className='card daily-report-card';c.innerHTML=`<div class="daily-report-head"><div><span class="report-kind">${isOrd?'INTERVENTO ORDINARIO':'LAVORO EXTRA'}</span><h3>${esc(title)}</h3><p class="muted">${esc(place)}</p></div><span class="badge-state">${esc(reportStatusLabel(r.stato))}</span></div><div class="report-meta"><span>📅 ${esc(fmt(isOrd?r.data_intervento:r.giorno_intervento))}</span><span>🕒 ${esc(fmtClosedAt(r.closed_at))}</span><span>✅ ${esc(closedByName(r))}</span><span>👤 ${esc(names.join(' · ')||'Operatore non indicato')}</span><span>📷 ${pics.length}</span>${docs.length?`<span>📄 ${docs.length}</span>`:''}</div><div class="report-note"><strong>Note</strong><p>${esc((isOrd?r.note:(r.note_lorenzo||r.descrizione))||'Nessuna nota')}</p></div><div class="report-photo-grid"></div><div class="actions report-actions"><button data-client-report>📄 Report cliente</button>${st?'<button class="secondary" data-store>Scheda punto vendita</button>':''}${docs.map(a=>`<button class="secondary" data-doc="${a.id}">${esc(attachmentLabel(a))}</button>`).join('')}</div>`;
+    c.querySelector('[data-client-report]')?.addEventListener('click',()=>previewSingleClientReport(item.kind,r));
     c.querySelector('[data-store]')?.addEventListener('click',()=>showStoreDetail(st));
     c.querySelectorAll('[data-doc]').forEach(b=>b.onclick=()=>openAttachment(attachments.find(a=>a.id===b.dataset.doc)));
     const gallery=c.querySelector('.report-photo-grid');for(const a of pics){const b=document.createElement('button');b.type='button';b.className='report-photo';b.innerHTML='<span>📷</span>';gallery.appendChild(b);signedAttachmentUrl(a).then(url=>{b.innerHTML=`<img src="${url}" alt="${esc(a.nome_file||'Foto')}" loading="lazy">`;b.onclick=()=>window.open(url,'_blank')}).catch(()=>b.onclick=()=>openArchiveAttachment(a))}
@@ -1605,3 +1626,11 @@ sb.auth.onAuthStateChange(async(event,s)=>{
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(console.error));
+
+document.addEventListener('DOMContentLoaded',()=>{
+  $('downloadClientReportPdf')?.addEventListener('click',downloadClientReportFile);
+  $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);
+  $('closeClientReportPreviewBottom')?.addEventListener('click',closeClientReportPreview);
+  $('clientReportPreviewDialog')?.addEventListener('cancel',e=>{e.preventDefault();closeClientReportPreview()});
+  $('clientReportPreviewDialog')?.addEventListener('close',()=>{if(clientReportPreviewUrl){URL.revokeObjectURL(clientReportPreviewUrl);clientReportPreviewUrl=''}window.currentClientReportFile=null});
+});

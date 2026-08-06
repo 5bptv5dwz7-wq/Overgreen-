@@ -1,0 +1,6 @@
+V91.2 - Anteprima report cliente
+- Il pulsante ora si chiama "Report cliente".
+- Prima dello scaricamento si apre un'anteprima PDF a schermo intero.
+- Nell'anteprima è disponibile il pulsante "Scarica PDF".
+- Il PDF viene generato una sola volta e riutilizzato per download/condivisione.
+- Aggiornata la cache PWA.

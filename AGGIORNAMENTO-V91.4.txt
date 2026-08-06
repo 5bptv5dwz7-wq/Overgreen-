@@ -1,0 +1,7 @@
+OVERGREEN CLOUD V91.4
+
+- Lorenzo vede in Dashboard il pulsante “Riapri intervento” sugli ordinari già completati e convalidati.
+- La chiusura precedente resta archiviata nello storico come rifiutata con motivo e data della riapertura.
+- La programmazione torna “Da eseguire” e il dipendente può richiuderla con ora, note e fotografie corrette.
+- L’ultimo passaggio della sede viene ricalcolato sulla precedente chiusura valida.
+- Nessuna migrazione SQL richiesta.

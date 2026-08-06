@@ -669,20 +669,51 @@ function reportCounts(data){
   const photoCount=attachments.filter(a=>a.tipo==='foto_generica'&&((a.intervention_id&&data.ordinary.some(i=>i.id===a.intervention_id))||(a.extra_id&&data.extra.some(e=>e.id===a.extra_id)))).length;
   return {total:all.length,ordinary:data.ordinary.length,extra:data.extra.length,done,pending,workers:workerIds.size,photos:photoCount};
 }
+function pdfSafeText(value){
+  return String(value??'')
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/gu,'')
+    .replace(/[–—]/g,'-').replace(/[’‘]/g,"'").replace(/[“”]/g,'"')
+    .replace(/[^\x20-\x7E\xA0-\xFF\n]/g,' ')
+    .replace(/[ \t]+/g,' ').trim();
+}
+async function compressedPhotoForPdf(url,maxSide=1200,quality=.68){
+  const res=await fetch(url);if(!res.ok)throw new Error('Foto non disponibile');
+  const blob=await res.blob(),bitmap=await createImageBitmap(blob),scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));
+  const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+  const ctx=canvas.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();
+  const out=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Compressione foto non riuscita')),'image/jpeg',quality));
+  return {bytes:await out.arrayBuffer(),width:canvas.width,height:canvas.height};
+}
+function drawWrappedPdfText(page,font,text,x,y,maxWidth,size,color,lineHeight=size*1.25){
+  const words=pdfSafeText(text).split(/\s+/).filter(Boolean),lines=[];let line='';
+  for(const word of words){const test=line?line+' '+word:word;if(font.widthOfTextAtSize(test,size)<=maxWidth)line=test;else{if(line)lines.push(line);line=word}}
+  if(line)lines.push(line);for(const l of lines){page.drawText(l,{x,y,size,font,color});y-=lineHeight}return y;
+}
 async function exportSingleClientReport(kind,row){
-  const popup=window.open('','_blank');
-  if(!popup){alert('Il browser ha bloccato la finestra del PDF. Consenti i popup e riprova.');return}
-  popup.document.write('<!doctype html><title>Preparazione report...</title><body style="font-family:Arial;padding:30px">Preparazione del report cliente...</body>');
   try{
-    const isOrd=kind==='ordinary',st=stores.find(s=>s.id===row.store_id),names=reportWorkerNames(kind,row.id),pics=attachments.filter(a=>a.tipo==='foto_generica'&&(isOrd?a.intervention_id===row.id:a.extra_id===row.id));
+    if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
+    toast('Creo il report cliente...');
+    const {PDFDocument,StandardFonts,rgb}=PDFLib,isOrd=kind==='ordinary',st=stores.find(s=>s.id===row.store_id),names=reportWorkerNames(kind,row.id),pics=attachments.filter(a=>a.tipo==='foto_generica'&&(isOrd?a.intervention_id===row.id:a.extra_id===row.id));
     const title=isOrd?(st?.nome||'Intervento ordinario'):(row.titolo||'Lavoro extra');
-    const place=isOrd?([st?.indirizzo,st?.citta].filter(Boolean).join(' · ')):(st?([st.nome,st.indirizzo,st.citta].filter(Boolean).join(' · ')):[row.nome_esterno,row.indirizzo_esterno].filter(Boolean).join(' · '));
+    const place=isOrd?([st?.indirizzo,st?.citta].filter(Boolean).join(', ')):(st?([st.nome,st.indirizzo,st.citta].filter(Boolean).join(', ')):[row.nome_esterno,row.indirizzo_esterno].filter(Boolean).join(', '));
     const date=isOrd?row.data_intervento:row.giorno_intervento,notes=(isOrd?row.note:(row.note_lorenzo||row.descrizione))||'Nessuna nota';
-    const urls=await Promise.all(pics.map(async a=>{try{return await signedAttachmentUrl(a)}catch{return ''}}));
-    const photoHtml=urls.filter(Boolean).length?`<h2 class="client-photo-title">Documentazione fotografica</h2><div class="photos">${urls.filter(Boolean).map((u,n)=>`<img src="${esc(u)}" alt="Foto ${n+1}">`).join('')}</div>`:'';
-    const html=`<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Report intervento ${esc(title)}</title><style>${printableReportStyles()}</style></head><body><header class="header"><div><div class="brand">OVERGREEN</div><div class="subtitle">Report intervento per il cliente</div></div><div class="date">${esc(fmt(date))}</div></header><div class="client-report-client">${esc(clientLabel(st||row))}</div><h1 class="client-report-title">${esc(title)}</h1>${place?`<div class="place">${esc(place)}</div>`:''}<section class="client-report-data"><div><span>Data intervento</span><strong>${esc(fmt(date))}</strong></div><div><span>Orario di chiusura</span><strong>${esc(fmtClosedAt(row.closed_at))}</strong></div><div><span>Operatori</span><strong>${esc(names.join(', ')||'Non indicati')}</strong></div><div><span>Tipologia</span><strong>${isOrd?'Intervento ordinario':'Lavoro extra'}</strong></div></section><div class="client-notes"><strong>Note dell’intervento</strong><br>${esc(notes)}</div>${photoHtml}<div class="footer">Overgreen</div><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),650));<\/script></body></html>`;
-    popup.document.open();popup.document.write(html);popup.document.close();toast('Report cliente pronto');
-  }catch(err){popup.close();alert('Impossibile preparare il report cliente: '+err.message)}
+    const pdf=await PDFDocument.create(),regular=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold),green=rgb(.02,.35,.18),dark=rgb(.08,.18,.13),muted=rgb(.38,.45,.41),border=rgb(.82,.87,.84),pageW=595.28,pageH=841.89,margin=48;
+    let page=pdf.addPage([pageW,pageH]),y=pageH-56;
+    const newPage=()=>{page=pdf.addPage([pageW,pageH]);y=pageH-55;return page};
+    page.drawText('OVERGREEN',{x:margin,y,size:24,font:bold,color:green});page.drawText(pdfSafeText(fmt(date)),{x:pageW-margin-bold.widthOfTextAtSize(pdfSafeText(fmt(date)),14),y:y+4,size:14,font:bold,color:dark});
+    page.drawText('Report intervento per il cliente',{x:margin,y:y-20,size:10,font:regular,color:muted});page.drawLine({start:{x:margin,y:y-35},end:{x:pageW-margin,y:y-35},thickness:3,color:green});y-=65;
+    page.drawText(pdfSafeText(clientLabel(st||row)).toUpperCase(),{x:margin,y,size:9,font:bold,color:muted});y-=24;
+    page.drawText(pdfSafeText(title),{x:margin,y,size:18,font:bold,color:green});y-=18;if(place){y=drawWrappedPdfText(page,regular,place,margin,y,pageW-margin*2,10,muted,13);y-=8}
+    const boxes=[['DATA INTERVENTO',fmt(date)],['ORARIO DI CHIUSURA',fmtClosedAt(row.closed_at)],['OPERATORI',names.join(', ')||'Non indicati'],['TIPOLOGIA',isOrd?'Intervento ordinario':'Lavoro extra']];
+    const boxW=(pageW-margin*2-10)/2,boxH=52;for(let i=0;i<4;i++){const col=i%2,rowN=Math.floor(i/2),x=margin+col*(boxW+10),by=y-rowN*(boxH+10)-boxH;page.drawRectangle({x,y:by,width:boxW,height:boxH,borderColor:border,borderWidth:1});page.drawText(boxes[i][0],{x:x+10,y:by+34,size:7,font:regular,color:muted});drawWrappedPdfText(page,bold,boxes[i][1],x+10,by+18,boxW-20,10,dark,11)}y-=boxH*2+28;
+    const noteLines=Math.max(2,Math.ceil(pdfSafeText(notes).length/75)),noteH=Math.min(110,34+noteLines*13);page.drawRectangle({x:margin,y:y-noteH,width:pageW-margin*2,height:noteH,borderColor:border,borderWidth:1});page.drawText("Note dell'intervento",{x:margin+11,y:y-20,size:10,font:bold,color:dark});drawWrappedPdfText(page,regular,notes,margin+11,y-36,pageW-margin*2-22,10,dark,13);y-=noteH+24;
+    if(pics.length){page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=16;const urls=await Promise.all(pics.map(async a=>{try{return await signedAttachmentUrl(a)}catch{return ''}}));const valid=urls.filter(Boolean),gap=8,cols=3,imgW=(pageW-margin*2-gap*2)/3,imgH=112;
+      for(let i=0;i<valid.length;i++){if(y-imgH<50){newPage();page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=16}let photo;try{photo=await compressedPhotoForPdf(valid[i])}catch{continue}const img=await pdf.embedJpg(photo.bytes),col=i%cols;if(col===0&&i>0)y-=imgH+gap;const x=margin+col*(imgW+gap),scale=Math.min(imgW/photo.width,imgH/photo.height),dw=photo.width*scale,dh=photo.height*scale;page.drawRectangle({x,y:y-imgH,width:imgW,height:imgH,borderColor:border,borderWidth:.7});page.drawImage(img,{x:x+(imgW-dw)/2,y:y-imgH+(imgH-dh)/2,width:dw,height:dh});if(col===cols-1||i===valid.length-1){/* row completed */}}
+    }
+    pdf.setTitle(`Report intervento ${pdfSafeText(title)}`);pdf.setAuthor('Overgreen');pdf.setCreator('Overgreen Cloud');pdf.setProducer('Overgreen Cloud');
+    const bytes=await pdf.save({useObjectStreams:true,addDefaultPage:false}),blob=new Blob([bytes],{type:'application/pdf'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`report-cliente-${slug(title)}-${date||today()}.pdf`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast(`Report pronto (${Math.max(1,Math.round(blob.size/1024))} KB)`);
+  }catch(err){alert('Impossibile creare il report cliente: '+err.message)}
 }
 
 async function exportDailyReportPdf(mode='compact'){

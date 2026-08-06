@@ -1,0 +1,7 @@
+OVERGREEN CLOUD V90
+
+- Il Report cliente non usa piu la stampa di Safari: il PDF viene creato direttamente dall'app.
+- Eliminati definitivamente URL GitHub, data/ora di stampa e numerazione aggiunti dal browser.
+- Le fotografie vengono ridimensionate e compresse prima dell'inserimento nel PDF.
+- Il file risultante e molto piu leggero, mantenendo una buona qualita visiva.
+- Nessun SQL necessario.

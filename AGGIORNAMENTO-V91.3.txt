@@ -1,0 +1,7 @@
+OVERGREEN CLOUD V91.3
+
+- Sotto ogni intervento ci sono due pulsanti separati: Anteprima e Report cliente PDF.
+- Anteprima apre soltanto la visualizzazione del report e si chiude con Chiudi anteprima.
+- Report cliente PDF genera e condivide/scarica direttamente il PDF senza passare dall'anteprima.
+- Aggiornata la cache PWA.
+- Nessun SQL necessario.

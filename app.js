@@ -742,8 +742,8 @@ function closeClientReportPreview(){
   const frame=$('clientReportPreviewFrame');if(frame)frame.removeAttribute('src');
   window.currentClientReportFile=null;
 }
-async function downloadClientReportFile(){
-  const data=window.currentClientReportFile;if(!data)return;
+async function shareClientReportData(data){
+  if(!data)return;
   const {file,fileName,title,sizeKb}=data;
   try{
     if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){
@@ -753,6 +753,13 @@ async function downloadClientReportFile(){
       const url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download=fileName;a.rel='noopener';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast(`Report cliente PDF scaricato (${sizeKb} KB)`);
     }
   }catch(err){if(err?.name!=='AbortError')alert('Impossibile scaricare il PDF: '+err.message)}
+}
+async function downloadSingleClientReport(kind,row){
+  try{
+    toast('Creo il PDF cliente...');
+    const data=await createSingleClientReportFile(kind,row);
+    await shareClientReportData(data);
+  }catch(err){alert('Impossibile creare il report cliente PDF: '+err.message)}
 }
 async function previewSingleClientReport(kind,row){
   try{
@@ -805,8 +812,9 @@ function renderDailyReport(){
     const pics=attachments.filter(a=>a.tipo==='foto_generica'&&(isOrd?a.intervention_id===r.id:a.extra_id===r.id));
     const docs=isOrd?[]:attachments.filter(a=>a.extra_id===r.id&&a.tipo!=='foto_generica');
     const title=isOrd?(st?.nome||'Punto vendita'):r.titolo,place=isOrd?(st?.indirizzo||st?.citta||''):(st?.nome||r.nome_esterno||r.indirizzo_esterno||'');
-    const c=document.createElement('article');c.className='card daily-report-card';c.innerHTML=`<div class="daily-report-head"><div><span class="report-kind">${isOrd?'INTERVENTO ORDINARIO':'LAVORO EXTRA'}</span><h3>${esc(title)}</h3><p class="muted">${esc(place)}</p></div><span class="badge-state">${esc(reportStatusLabel(r.stato))}</span></div><div class="report-meta"><span>📅 ${esc(fmt(isOrd?r.data_intervento:r.giorno_intervento))}</span><span>🕒 ${esc(fmtClosedAt(r.closed_at))}</span><span>✅ ${esc(closedByName(r))}</span><span>👤 ${esc(names.join(' · ')||'Operatore non indicato')}</span><span>📷 ${pics.length}</span>${docs.length?`<span>📄 ${docs.length}</span>`:''}</div><div class="report-note"><strong>Note</strong><p>${esc((isOrd?r.note:(r.note_lorenzo||r.descrizione))||'Nessuna nota')}</p></div><div class="report-photo-grid"></div><div class="actions report-actions"><button data-client-report>📄 Report cliente</button>${st?'<button class="secondary" data-store>Scheda punto vendita</button>':''}${docs.map(a=>`<button class="secondary" data-doc="${a.id}">${esc(attachmentLabel(a))}</button>`).join('')}</div>`;
-    c.querySelector('[data-client-report]')?.addEventListener('click',()=>previewSingleClientReport(item.kind,r));
+    const c=document.createElement('article');c.className='card daily-report-card';c.innerHTML=`<div class="daily-report-head"><div><span class="report-kind">${isOrd?'INTERVENTO ORDINARIO':'LAVORO EXTRA'}</span><h3>${esc(title)}</h3><p class="muted">${esc(place)}</p></div><span class="badge-state">${esc(reportStatusLabel(r.stato))}</span></div><div class="report-meta"><span>📅 ${esc(fmt(isOrd?r.data_intervento:r.giorno_intervento))}</span><span>🕒 ${esc(fmtClosedAt(r.closed_at))}</span><span>✅ ${esc(closedByName(r))}</span><span>👤 ${esc(names.join(' · ')||'Operatore non indicato')}</span><span>📷 ${pics.length}</span>${docs.length?`<span>📄 ${docs.length}</span>`:''}</div><div class="report-note"><strong>Note</strong><p>${esc((isOrd?r.note:(r.note_lorenzo||r.descrizione))||'Nessuna nota')}</p></div><div class="report-photo-grid"></div><div class="actions report-actions client-report-buttons"><button class="secondary" data-client-preview>📄 Anteprima</button><button data-client-download>⬇️ Report cliente PDF</button>${st?'<button class="secondary" data-store>Scheda punto vendita</button>':''}${docs.map(a=>`<button class="secondary" data-doc="${a.id}">${esc(attachmentLabel(a))}</button>`).join('')}</div>`;
+    c.querySelector('[data-client-preview]')?.addEventListener('click',()=>previewSingleClientReport(item.kind,r));
+    c.querySelector('[data-client-download]')?.addEventListener('click',()=>downloadSingleClientReport(item.kind,r));
     c.querySelector('[data-store]')?.addEventListener('click',()=>showStoreDetail(st));
     c.querySelectorAll('[data-doc]').forEach(b=>b.onclick=()=>openAttachment(attachments.find(a=>a.id===b.dataset.doc)));
     const gallery=c.querySelector('.report-photo-grid');for(const a of pics){const b=document.createElement('button');b.type='button';b.className='report-photo';b.innerHTML='<span>📷</span>';gallery.appendChild(b);signedAttachmentUrl(a).then(url=>{b.innerHTML=`<img src="${url}" alt="${esc(a.nome_file||'Foto')}" loading="lazy">`;b.onclick=()=>window.open(url,'_blank')}).catch(()=>b.onclick=()=>openArchiveAttachment(a))}
@@ -1628,7 +1636,6 @@ $('scheduleDate').value=tomorrow();renderSchedulePicker();
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
-  $('downloadClientReportPdf')?.addEventListener('click',downloadClientReportFile);
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);
   $('closeClientReportPreviewBottom')?.addEventListener('click',closeClientReportPreview);
   $('clientReportPreviewDialog')?.addEventListener('cancel',e=>{e.preventDefault();closeClientReportPreview()});

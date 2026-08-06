@@ -1,0 +1,7 @@
+OVERGREEN CLOUD V89
+
+- Rimossi i riferimenti al sito/URL GitHub dai PDF stampati impostando il layout di stampa senza intestazioni e piè di pagina del browser.
+- Aggiunto il pulsante "Report cliente" su ogni singolo intervento nella sezione Report.
+- Il report cliente contiene esclusivamente i dati del singolo intervento: cliente, sede, indirizzo, data, orario di chiusura, operatori, note e fotografie.
+- Nel report cliente non compaiono contatori, riepiloghi del periodo, filtri, numero di altri lavori o riferimenti ad altre attività.
+- Nessuna modifica SQL necessaria.

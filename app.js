@@ -708,12 +708,31 @@ async function exportSingleClientReport(kind,row){
     const boxes=[['DATA INTERVENTO',fmt(date)],['ORARIO DI CHIUSURA',fmtClosedAt(row.closed_at)],['OPERATORI',names.join(', ')||'Non indicati'],['TIPOLOGIA',isOrd?'Intervento ordinario':'Lavoro extra']];
     const boxW=(pageW-margin*2-10)/2,boxH=52;for(let i=0;i<4;i++){const col=i%2,rowN=Math.floor(i/2),x=margin+col*(boxW+10),by=y-rowN*(boxH+10)-boxH;page.drawRectangle({x,y:by,width:boxW,height:boxH,borderColor:border,borderWidth:1});page.drawText(boxes[i][0],{x:x+10,y:by+34,size:7,font:regular,color:muted});drawWrappedPdfText(page,bold,boxes[i][1],x+10,by+18,boxW-20,10,dark,11)}y-=boxH*2+28;
     const noteLines=Math.max(2,Math.ceil(pdfSafeText(notes).length/75)),noteH=Math.min(110,34+noteLines*13);page.drawRectangle({x:margin,y:y-noteH,width:pageW-margin*2,height:noteH,borderColor:border,borderWidth:1});page.drawText("Note dell'intervento",{x:margin+11,y:y-20,size:10,font:bold,color:dark});drawWrappedPdfText(page,regular,notes,margin+11,y-36,pageW-margin*2-22,10,dark,13);y-=noteH+24;
-    if(pics.length){page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=16;const urls=await Promise.all(pics.map(async a=>{try{return await signedAttachmentUrl(a)}catch{return ''}}));const valid=urls.filter(Boolean),gap=8,cols=3,imgW=(pageW-margin*2-gap*2)/3,imgH=112;
-      for(let i=0;i<valid.length;i++){if(y-imgH<50){newPage();page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=16}let photo;try{photo=await compressedPhotoForPdf(valid[i])}catch{continue}const img=await pdf.embedJpg(photo.bytes),col=i%cols;if(col===0&&i>0)y-=imgH+gap;const x=margin+col*(imgW+gap),scale=Math.min(imgW/photo.width,imgH/photo.height),dw=photo.width*scale,dh=photo.height*scale;page.drawRectangle({x,y:y-imgH,width:imgW,height:imgH,borderColor:border,borderWidth:.7});page.drawImage(img,{x:x+(imgW-dw)/2,y:y-imgH+(imgH-dh)/2,width:dw,height:dh});if(col===cols-1||i===valid.length-1){/* row completed */}}
+    if(pics.length){
+      page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=16;
+      const urls=await Promise.all(pics.map(async a=>{try{return await signedAttachmentUrl(a)}catch{return ''}}));
+      const valid=urls.filter(Boolean),gap=8,cols=3,imgW=(pageW-margin*2-gap*2)/3,imgH=112;
+      if(!valid.length){page.drawText('Nessuna documentazione fotografica allegata',{x:margin,y:y-8,size:10,font:regular,color:muted});}
+      for(let rowStart=0;rowStart<valid.length;rowStart+=cols){
+        if(y-imgH<55){newPage();page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=16;}
+        const rowUrls=valid.slice(rowStart,rowStart+cols);
+        for(let col=0;col<rowUrls.length;col++){
+          let photo;try{photo=await compressedPhotoForPdf(rowUrls[col])}catch{continue}
+          const img=await pdf.embedJpg(photo.bytes),x=margin+col*(imgW+gap),scale=Math.min(imgW/photo.width,imgH/photo.height),dw=photo.width*scale,dh=photo.height*scale;
+          page.drawRectangle({x,y:y-imgH,width:imgW,height:imgH,borderColor:border,borderWidth:.7});
+          page.drawImage(img,{x:x+(imgW-dw)/2,y:y-imgH+(imgH-dh)/2,width:dw,height:dh});
+        }
+        y-=imgH+gap;
+      }
+    }else{
+      page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=20;
+      page.drawText('Nessuna documentazione fotografica allegata',{x:margin,y,size:10,font:regular,color:muted});
     }
     pdf.setTitle(`Report intervento ${pdfSafeText(title)}`);pdf.setAuthor('Overgreen');pdf.setCreator('Overgreen Cloud');pdf.setProducer('Overgreen Cloud');
     const bytes=await pdf.save({useObjectStreams:true,addDefaultPage:false});
-    const fileName=`report-cliente-${slug(title)}-${date||today()}.pdf`;
+    const safeFilePart=value=>pdfSafeText(value).replace(/[\/:*?"<>|]/g,' ').replace(/\s+/g,' ').trim()||'Intervento';
+    const dateForFile=String(date||today()).split('-').reverse().join('-');
+    const fileName=`Report - ${safeFilePart(clientLabel(st||row))} - ${safeFilePart(title)} - ${dateForFile}.pdf`;
     const file=new File([bytes],fileName,{type:'application/pdf'});
     const sizeKb=Math.max(1,Math.round(file.size/1024));
     if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){

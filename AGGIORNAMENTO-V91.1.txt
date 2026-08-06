@@ -1,0 +1,8 @@
+OVERGREEN CLOUD V91.1
+
+- Corretto l'errore JavaScript: Can't find variable: slug.
+- Nome PDF leggibile: Report - Cliente - Sede - Data.pdf.
+- Foto distribuite correttamente su più pagine.
+- Messaggio dedicato quando non sono presenti fotografie.
+- Aggiornata la cache PWA.
+- Nessuna migrazione SQL necessaria.

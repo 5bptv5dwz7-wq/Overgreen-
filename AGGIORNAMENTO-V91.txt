@@ -1,0 +1,10 @@
+OVERGREEN CLOUD V91
+
+- Pulsante rinominato in “Report cliente PDF”.
+- Il report viene creato come PDF nativo con pdf-lib.
+- Su iPhone/iPad si apre direttamente il menu Condividi/Salva file, senza anteprima di stampa Safari.
+- Nessun URL GitHub, intestazione/piè di pagina del browser o schermata Opzioni di stampa.
+- Foto ridimensionate e compresse ulteriormente per alleggerire il PDF.
+- Fallback desktop: download diretto del file PDF.
+- Aggiornata la cache PWA.
+- Nessun SQL necessario.

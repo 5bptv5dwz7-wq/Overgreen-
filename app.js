@@ -677,7 +677,7 @@ function pdfSafeText(value){
     .replace(/[^\x20-\x7E\xA0-\xFF\n]/g,' ')
     .replace(/[ \t]+/g,' ').trim();
 }
-async function compressedPhotoForPdf(url,maxSide=1200,quality=.68){
+async function compressedPhotoForPdf(url,maxSide=1000,quality=.58){
   const res=await fetch(url);if(!res.ok)throw new Error('Foto non disponibile');
   const blob=await res.blob(),bitmap=await createImageBitmap(blob),scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));
   const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
@@ -712,7 +712,18 @@ async function exportSingleClientReport(kind,row){
       for(let i=0;i<valid.length;i++){if(y-imgH<50){newPage();page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=16}let photo;try{photo=await compressedPhotoForPdf(valid[i])}catch{continue}const img=await pdf.embedJpg(photo.bytes),col=i%cols;if(col===0&&i>0)y-=imgH+gap;const x=margin+col*(imgW+gap),scale=Math.min(imgW/photo.width,imgH/photo.height),dw=photo.width*scale,dh=photo.height*scale;page.drawRectangle({x,y:y-imgH,width:imgW,height:imgH,borderColor:border,borderWidth:.7});page.drawImage(img,{x:x+(imgW-dw)/2,y:y-imgH+(imgH-dh)/2,width:dw,height:dh});if(col===cols-1||i===valid.length-1){/* row completed */}}
     }
     pdf.setTitle(`Report intervento ${pdfSafeText(title)}`);pdf.setAuthor('Overgreen');pdf.setCreator('Overgreen Cloud');pdf.setProducer('Overgreen Cloud');
-    const bytes=await pdf.save({useObjectStreams:true,addDefaultPage:false}),blob=new Blob([bytes],{type:'application/pdf'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`report-cliente-${slug(title)}-${date||today()}.pdf`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast(`Report pronto (${Math.max(1,Math.round(blob.size/1024))} KB)`);
+    const bytes=await pdf.save({useObjectStreams:true,addDefaultPage:false});
+    const fileName=`report-cliente-${slug(title)}-${date||today()}.pdf`;
+    const file=new File([bytes],fileName,{type:'application/pdf'});
+    const sizeKb=Math.max(1,Math.round(file.size/1024));
+    if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){
+      await navigator.share({title:`Report cliente ${pdfSafeText(title)}`,text:`Report intervento ${pdfSafeText(title)}`,files:[file]});
+      toast(`Report cliente PDF pronto (${sizeKb} KB)`);
+    }else{
+      const url=URL.createObjectURL(file),a=document.createElement('a');
+      a.href=url;a.download=fileName;a.rel='noopener';document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),60000);toast(`Report cliente PDF scaricato (${sizeKb} KB)`);
+    }
   }catch(err){alert('Impossibile creare il report cliente: '+err.message)}
 }
 
@@ -754,7 +765,7 @@ function renderDailyReport(){
     const pics=attachments.filter(a=>a.tipo==='foto_generica'&&(isOrd?a.intervention_id===r.id:a.extra_id===r.id));
     const docs=isOrd?[]:attachments.filter(a=>a.extra_id===r.id&&a.tipo!=='foto_generica');
     const title=isOrd?(st?.nome||'Punto vendita'):r.titolo,place=isOrd?(st?.indirizzo||st?.citta||''):(st?.nome||r.nome_esterno||r.indirizzo_esterno||'');
-    const c=document.createElement('article');c.className='card daily-report-card';c.innerHTML=`<div class="daily-report-head"><div><span class="report-kind">${isOrd?'INTERVENTO ORDINARIO':'LAVORO EXTRA'}</span><h3>${esc(title)}</h3><p class="muted">${esc(place)}</p></div><span class="badge-state">${esc(reportStatusLabel(r.stato))}</span></div><div class="report-meta"><span>📅 ${esc(fmt(isOrd?r.data_intervento:r.giorno_intervento))}</span><span>🕒 ${esc(fmtClosedAt(r.closed_at))}</span><span>✅ ${esc(closedByName(r))}</span><span>👤 ${esc(names.join(' · ')||'Operatore non indicato')}</span><span>📷 ${pics.length}</span>${docs.length?`<span>📄 ${docs.length}</span>`:''}</div><div class="report-note"><strong>Note</strong><p>${esc((isOrd?r.note:(r.note_lorenzo||r.descrizione))||'Nessuna nota')}</p></div><div class="report-photo-grid"></div><div class="actions report-actions"><button data-client-report>Report cliente</button>${st?'<button class="secondary" data-store>Scheda punto vendita</button>':''}${docs.map(a=>`<button class="secondary" data-doc="${a.id}">${esc(attachmentLabel(a))}</button>`).join('')}</div>`;
+    const c=document.createElement('article');c.className='card daily-report-card';c.innerHTML=`<div class="daily-report-head"><div><span class="report-kind">${isOrd?'INTERVENTO ORDINARIO':'LAVORO EXTRA'}</span><h3>${esc(title)}</h3><p class="muted">${esc(place)}</p></div><span class="badge-state">${esc(reportStatusLabel(r.stato))}</span></div><div class="report-meta"><span>📅 ${esc(fmt(isOrd?r.data_intervento:r.giorno_intervento))}</span><span>🕒 ${esc(fmtClosedAt(r.closed_at))}</span><span>✅ ${esc(closedByName(r))}</span><span>👤 ${esc(names.join(' · ')||'Operatore non indicato')}</span><span>📷 ${pics.length}</span>${docs.length?`<span>📄 ${docs.length}</span>`:''}</div><div class="report-note"><strong>Note</strong><p>${esc((isOrd?r.note:(r.note_lorenzo||r.descrizione))||'Nessuna nota')}</p></div><div class="report-photo-grid"></div><div class="actions report-actions"><button data-client-report>📄 Report cliente PDF</button>${st?'<button class="secondary" data-store>Scheda punto vendita</button>':''}${docs.map(a=>`<button class="secondary" data-doc="${a.id}">${esc(attachmentLabel(a))}</button>`).join('')}</div>`;
     c.querySelector('[data-client-report]')?.addEventListener('click',()=>exportSingleClientReport(item.kind,r));
     c.querySelector('[data-store]')?.addEventListener('click',()=>showStoreDetail(st));
     c.querySelectorAll('[data-doc]').forEach(b=>b.onclick=()=>openAttachment(attachments.find(a=>a.id===b.dataset.doc)));

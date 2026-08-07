@@ -186,14 +186,208 @@ function setView(name){
   document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');$('pageTitle').textContent={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report attività',signatures:'Fogli firme Eurospin',audit:'Log attività',settings:'Impostazioni'}[name];if(name==='dashboard')renderDashboard();if(name==='stores')renderStores();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='reports')renderDailyReport();if(name==='signatures')openSignatureSheetsView();if(name==='audit'&&admin())openAuditView();if(name!=='audit')auditViewOpen(name);if(name==='settings'){ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin())loadSupabaseUsage();}}
 
 
-function auditSectionLabel(s){return {auth:'Accessi',navigation:'Navigazione',stores:'Sedi',schedule:'Programmazione',interventions:'Interventi',extras:'Extra',attachments:'File e foto',signatures:'Fogli firme',users:'Utenti',storage:'Storage',system:'Sistema'}[s]||s||'Sistema'}
+function auditSectionLabel(s){return {auth:'Accessi',navigation:'Navigazione',stores:'Sedi e clienti',schedule:'Programmazione',interventions:'Interventi ordinari',extras:'Lavori extra',attachments:'File e foto',signatures:'Fogli firme',users:'Utenti',storage:'Documenti',system:'Sistema'}[s]||s||'Sistema'}
 function auditActionLabel(a){return {LOGIN:'Accesso',LOGOUT:'Uscita',VIEW:'Apertura pagina',INSERT:'Creazione',UPDATE:'Modifica',DELETE:'Eliminazione',UPLOAD:'Caricamento',DOWNLOAD:'Download'}[String(a||'').toUpperCase()]||a||'Evento'}
+function auditEntityLabel(t){
+  return {
+    stores:'Sede',
+    schedules:'Giornata programmata',
+    schedule_members:'Squadra della giornata',
+    schedule_items:'Lavoro programmato',
+    interventions:'Intervento ordinario',
+    intervention_workers:'Operatore intervento',
+    extras:'Lavoro extra',
+    extra_workers:'Operatore extra',
+    attachments:'File / foto',
+    signature_sheets:'Foglio firme',
+    profiles:'Utente',
+    storage_object:'Documento',
+    client_event:'App'
+  }[t]||t||'';
+}
+function auditProfileName(id){
+  if(!id)return '';
+  return profiles.find(p=>p.id===id)?.nome||'';
+}
+function auditStoreName(id){
+  if(!id)return '';
+  return stores.find(s=>s.id===id)?.nome||'';
+}
+function auditScheduleDate(id){
+  if(!id)return '';
+  const s=schedules.find(x=>x.id===id);
+  return s?.giorno?formatDate(s.giorno):'';
+}
+function auditChangedFields(r){
+  const oldData=r.old_data||{},newData=r.new_data||{};
+  if(!oldData||!newData)return [];
+  const skip=new Set(['updated_at','created_at']);
+  const labels={
+    nome:'Nome',indirizzo:'Indirizzo',citta:'Città',note:'Note',nota_generale:'Nota giornata',
+    intervallo_giorni:'Intervallo',ultimo_passaggio:'Ultimo passaggio',stato:'Stato',
+    giorno:'Data',giorno_intervento:'Data intervento',data_intervento:'Data intervento',
+    posizione:'Posizione',titolo:'Titolo',descrizione:'Descrizione',note_lorenzo:'Note',
+    closed_at:'Ora chiusura',profile_id:'Operatore',store_id:'Sede',schedule_id:'Programmazione',
+    convalidato_da:'Convalidato da',convalidato_il:'Data convalida',client_type:'Cliente'
+  };
+  const out=[];
+  for(const k of new Set([...Object.keys(oldData),...Object.keys(newData)])){
+    if(skip.has(k))continue;
+    const a=oldData[k],b=newData[k];
+    if(JSON.stringify(a)===JSON.stringify(b))continue;
+    let av=a,bv=b;
+    if(k==='profile_id'){av=auditProfileName(a)||a;bv=auditProfileName(b)||b}
+    if(k==='store_id'){av=auditStoreName(a)||a;bv=auditStoreName(b)||b}
+    if(k==='convalidato_da'){av=auditProfileName(a)||a;bv=auditProfileName(b)||b}
+    const clean=v=>v===null||v===undefined||v===''?'—':typeof v==='boolean'?(v?'Sì':'No'):String(v);
+    out.push(`${labels[k]||k}: ${clean(av)} → ${clean(bv)}`);
+  }
+  return out;
+}
+function auditHumanDescription(r){
+  const d=r.new_data||r.old_data||{};
+  const action=String(r.action||'').toUpperCase();
+  const t=r.entity_type;
+
+  if(t==='client_event')return r.description||auditActionLabel(action);
+
+  if(t==='schedules'){
+    const date=d.giorno?formatDate(d.giorno):'';
+    if(action==='INSERT')return `Creata programmazione${date?' del '+date:''}`;
+    if(action==='DELETE')return `Eliminata programmazione${date?' del '+date:''}`;
+    if(action==='UPDATE')return `Modificata programmazione${date?' del '+date:''}`;
+  }
+
+  if(t==='schedule_members'){
+    const who=auditProfileName(d.profile_id);
+    const date=auditScheduleDate(d.schedule_id);
+    if(action==='INSERT')return `${who||'Un operatore'} aggiunto alla squadra${date?' del '+date:''}`;
+    if(action==='DELETE')return `${who||'Un operatore'} rimosso dalla squadra${date?' del '+date:''}`;
+    return `Modificata la squadra${date?' del '+date:''}`;
+  }
+
+  if(t==='schedule_items'){
+    const store=auditStoreName(d.store_id);
+    const date=auditScheduleDate(d.schedule_id);
+    if(action==='INSERT')return `${store||'Punto vendita'} aggiunto alla programmazione${date?' del '+date:''}`;
+    if(action==='DELETE')return `${store||'Punto vendita'} rimosso dalla programmazione${date?' del '+date:''}`;
+    if(action==='UPDATE'){
+      const changes=auditChangedFields(r);
+      return `Modificato ${store||'un lavoro programmato'}${date?' · '+date:''}${changes.length?' · '+changes[0]:''}`;
+    }
+  }
+
+  if(t==='stores'){
+    const name=d.nome||auditStoreName(d.id)||'Sede';
+    if(action==='INSERT')return `Creata sede ${name}`;
+    if(action==='DELETE')return `Eliminata sede ${name}`;
+    if(action==='UPDATE'){
+      const changes=auditChangedFields(r);
+      return `Modificata sede ${name}${changes.length?' · '+changes.slice(0,2).join(' · '):''}`;
+    }
+  }
+
+  if(t==='interventions'){
+    const store=auditStoreName(d.store_id)||'sede';
+    if(action==='INSERT')return `Chiuso nuovo intervento ordinario · ${store}`;
+    if(action==='DELETE')return `Eliminato intervento ordinario · ${store}`;
+    if(action==='UPDATE'){
+      const oldSt=r.old_data?.stato,newSt=r.new_data?.stato;
+      if(oldSt!==newSt){
+        if(newSt==='convalidato')return `Convalidato intervento ordinario · ${store}`;
+        if(newSt==='rifiutato')return `Rifiutato intervento ordinario · ${store}`;
+        if(newSt==='da_fare')return `Riaperto intervento ordinario · ${store}`;
+        return `Stato intervento ${store}: ${oldSt||'—'} → ${newSt||'—'}`;
+      }
+      const changes=auditChangedFields(r);
+      return `Modificato intervento ordinario · ${store}${changes.length?' · '+changes.slice(0,2).join(' · '):''}`;
+    }
+  }
+
+  if(t==='intervention_workers'){
+    const who=auditProfileName(d.profile_id)||'Operatore';
+    if(action==='INSERT')return `${who} associato a un intervento`;
+    if(action==='DELETE')return `${who} rimosso da un intervento`;
+  }
+
+  if(t==='extras'){
+    const title=d.titolo||d.nome_esterno||'Lavoro extra';
+    if(action==='INSERT')return `Creato extra · ${title}`;
+    if(action==='DELETE')return `Eliminato extra · ${title}`;
+    if(action==='UPDATE'){
+      const oldSt=r.old_data?.stato,newSt=r.new_data?.stato;
+      if(oldSt!==newSt)return `Extra "${title}": stato ${oldSt||'—'} → ${newSt||'—'}`;
+      const changes=auditChangedFields(r);
+      return `Modificato extra · ${title}${changes.length?' · '+changes.slice(0,2).join(' · '):''}`;
+    }
+  }
+
+  if(t==='extra_workers'){
+    const who=auditProfileName(d.profile_id)||'Operatore';
+    if(action==='INSERT')return `${who} assegnato a un lavoro extra`;
+    if(action==='DELETE')return `${who} rimosso da un lavoro extra`;
+  }
+
+  if(t==='attachments'){
+    const name=d.nome_file||'File';
+    if(action==='INSERT'||action==='UPLOAD')return `Caricato file/foto · ${name}`;
+    if(action==='DELETE')return `Eliminato file/foto · ${name}`;
+  }
+
+  if(t==='signature_sheets'){
+    const giro=d.round?`${d.round}° giro`:'';
+    if(action==='INSERT')return `Caricato foglio firme Eurospin${giro?' · '+giro:''}`;
+    if(action==='DELETE')return `Eliminato foglio firme Eurospin${giro?' · '+giro:''}`;
+  }
+
+  if(t==='profiles'){
+    const name=d.nome||d.email||'Utente';
+    if(action==='INSERT')return `Creato utente ${name}`;
+    if(action==='DELETE')return `Eliminato utente ${name}`;
+    if(action==='UPDATE')return `Modificato utente ${name}`;
+  }
+
+  if(t==='storage_object'){
+    const raw=r.description||'';
+    const path=(d.name||raw.replace(/^(UPLOAD|DELETE|UPDATE) file\s*/i,''));
+    const short=path?path.split('/').pop():'Documento';
+    if(action==='UPLOAD'||action==='INSERT')return `Caricato documento · ${short}`;
+    if(action==='DELETE')return `Eliminato documento · ${short}`;
+    if(action==='UPDATE')return `Aggiornato documento · ${short}`;
+  }
+
+  return r.description||`${auditActionLabel(action)} · ${auditEntityLabel(t)}`;
+}
 async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:details,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V93'}})}catch(e){console.warn('audit',e)}}
 function auditViewOpen(name){if(!session?.user?.id)return;const labels={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:'Programmazione',extras:'Lavori extra',reports:'Report attività',signatures:'Fogli firme Eurospin',settings:'Impostazioni'};if(labels[name])writeClientAudit('VIEW','navigation',`Aperta pagina ${labels[name]}`,{view:name})}
 function renderAuditUsers(){const sel=$('auditUser');if(!sel)return;const cur=sel.value||'all';sel.innerHTML='<option value="all">Tutti gli utenti</option>';[...profiles].sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.nome||p.email||p.id;sel.appendChild(o)});if([...sel.options].some(o=>o.value===cur))sel.value=cur}
 async function openAuditView(){if(!admin())return setView('dashboard');renderAuditUsers();await loadAuditLogs(true)}
 async function loadAuditLogs(reset=true){if(!admin())return;const box=$('auditList');if(reset){auditPage=0;auditLogs=[];if(box)box.innerHTML='<p class="muted">Caricamento log…</p>'}const from=$('auditFrom')?.value||'',to=$('auditTo')?.value||'',user=$('auditUser')?.value||'all',section=$('auditSection')?.value||'all',search=($('auditSearch')?.value||'').trim();const size=80,offset=auditPage*size;let q=sb.from('audit_log').select('*').order('created_at',{ascending:false}).range(offset,offset+size);if(from)q=q.gte('created_at',`${from}T00:00:00`);if(to)q=q.lte('created_at',`${to}T23:59:59.999`);if(user!=='all')q=q.eq('actor_id',user);if(section!=='all')q=q.eq('section',section);if(search){const safe=search.replace(/[%_,()]/g,' ');q=q.or(`description.ilike.%${safe}%,action.ilike.%${safe}%,actor_name.ilike.%${safe}%,actor_email.ilike.%${safe}%,entity_type.ilike.%${safe}%`)}const {data,error}=await q;if(error){box.innerHTML=`<p class="error">${esc(error.message)}</p><p class="muted">Esegui MIGRAZIONE-V93.sql su Supabase.</p>`;return}let rows=data||[];auditHasMore=rows.length>size;if(auditHasMore)rows=rows.slice(0,size);auditLogs=reset?rows:[...auditLogs,...rows];renderAuditLogs()}
-function renderAuditLogs(){const box=$('auditList');if(!box)return;$('auditCount').textContent=`${auditLogs.length} ${auditLogs.length===1?'evento':'eventi'}`;box.innerHTML='';if(!auditLogs.length){box.innerHTML='<section class="panel"><strong>Nessun evento</strong><p class="muted">Nessuna attività corrisponde ai filtri.</p></section>';return}auditLogs.forEach(r=>{const c=document.createElement('article');c.className='card audit-card';const when=r.created_at?new Intl.DateTimeFormat('it-IT',{dateStyle:'short',timeStyle:'medium'}).format(new Date(r.created_at)):'';const det=r.details&&Object.keys(r.details||{}).length?JSON.stringify(r.details,null,2):'';c.innerHTML=`<div class="audit-card-head"><div><span class="audit-badge">${esc(auditSectionLabel(r.section))}</span><h3>${esc(auditActionLabel(r.action))}</h3></div><span class="muted">${esc(when)}</span></div><div class="audit-meta"><span>👤 ${esc(r.actor_name||r.actor_email||'Sistema')}</span>${r.entity_type?`<span>🏷 ${esc(r.entity_type)}</span>`:''}</div>${r.description?`<div>${esc(r.description)}</div>`:''}${det?`<details><summary>Dettagli</summary><pre class="audit-details">${esc(det)}</pre></details>`:''}`;box.appendChild(c)});$('auditLoadMore').classList.toggle('hidden',!auditHasMore)}
+function renderAuditLogs(){
+  const box=$('auditList');if(!box)return;
+  $('auditCount').textContent=`${auditLogs.length} ${auditLogs.length===1?'evento':'eventi'}`;
+  box.innerHTML='';
+  if(!auditLogs.length){box.innerHTML='<section class="panel"><strong>Nessun evento</strong><p class="muted">Nessuna attività corrisponde ai filtri.</p></section>';return}
+  auditLogs.forEach(r=>{
+    const c=document.createElement('article');c.className='card audit-card';
+    const when=r.created_at?new Intl.DateTimeFormat('it-IT',{dateStyle:'short',timeStyle:'medium'}).format(new Date(r.created_at)):'';
+    const changed=auditChangedFields(r);
+    let technical='';
+    const rawDetails={...(r.details||{})};
+    if(r.old_data)rawDetails.prima=r.old_data;
+    if(r.new_data)rawDetails.dopo=r.new_data;
+    if(Object.keys(rawDetails).length)technical=JSON.stringify(rawDetails,null,2);
+    const human=auditHumanDescription(r);
+    const entity=auditEntityLabel(r.entity_type);
+    c.innerHTML=`<div class="audit-card-head"><div><span class="audit-badge">${esc(auditSectionLabel(r.section))}</span><h3>${esc(auditActionLabel(r.action))}</h3></div><span class="muted">${esc(when)}</span></div>
+      <div class="audit-meta"><span>👤 ${esc(r.actor_name||r.actor_email||'Sistema')}</span>${entity?`<span>📌 ${esc(entity)}</span>`:''}</div>
+      <div><strong>${esc(human)}</strong></div>
+      ${changed.length>1?`<div class="muted">${changed.slice(1,4).map(x=>esc(x)).join('<br>')}</div>`:''}
+      ${technical?`<details><summary>Dettagli tecnici</summary><pre class="audit-details">${esc(technical)}</pre></details>`:''}`;
+    box.appendChild(c)
+  });
+  $('auditLoadMore').classList.toggle('hidden',!auditHasMore)
+}
 
 function signatureMonthDefault(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
 function signatureMonthLabel(year,month){return new Intl.DateTimeFormat('it-IT',{month:'long',year:'numeric'}).format(new Date(Number(year),Number(month)-1,1))}

@@ -1,0 +1,18 @@
+OVERGREEN CLOUD V93.1 — LOG PIÙ LEGGIBILE
+
+- Tradotte le tabelle tecniche in nomi comprensibili.
+- schedule_members -> Squadra della giornata.
+- schedule_items -> Lavoro programmato.
+- schedules -> Giornata programmata.
+- intervention_workers -> Operatore intervento.
+- extra_workers -> Operatore extra.
+- storage_object -> Documento.
+- Le descrizioni ora spiegano l'azione concreta:
+  es. "Giorgio rimosso dalla squadra del 07/08/2026"
+  invece di "DELETE su schedule_members".
+- Per sedi, interventi ed extra vengono mostrati nomi e modifiche principali.
+- I dati grezzi restano disponibili solo sotto "Dettagli tecnici".
+- Nessuna modifica al database.
+
+SQL: nessuno.
+File da caricare: app.js, sw.js.

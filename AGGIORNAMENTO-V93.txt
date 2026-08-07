@@ -1,0 +1,13 @@
+OVERGREEN CLOUD V93 — LOG ATTIVITÀ
+
+- Nuovo pulsante 📋 visibile solo all’amministratore.
+- Log cronologico di accessi, aperture pagine e modifiche al database.
+- Trigger Supabase automatici su sedi, programmazione, interventi, extra, allegati, fogli firme e profili.
+- Trigger anche sul bucket documenti per upload/modifica/eliminazione file.
+- Ogni modifica conserva OLD e NEW in JSON, quindi è possibile vedere prima/dopo.
+- Filtri per data, utente, sezione e ricerca.
+- Il log è leggibile solo dagli amministratori e non è modificabile/cancellabile dall’app.
+- Anche modifiche fatte direttamente via API/Supabase sulle tabelle monitorate vengono registrate; in quel caso l’attore può risultare Sistema/SQL se non esiste un utente autenticato.
+
+INSTALLAZIONE: eseguire MIGRAZIONE-V93.sql, poi caricare index.html, app.js e sw.js.
+SQL OBBLIGATORIO.

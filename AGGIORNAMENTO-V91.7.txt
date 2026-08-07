@@ -1,0 +1,16 @@
+OVERGREEN CLOUD V91.7
+
+REPORT ATTIVITÀ: CONDIVISIONE IOS COME IL SINGOLO INTERVENTO
+
+- PDF sintetico e PDF completo vengono preparati in background nella schermata Report attività.
+- Al tap sul pulsante, se il PDF è pronto, viene aperto direttamente il foglio di condivisione iOS.
+- Il file mantiene un nome leggibile (es. "Report attivita completo - 06-08-2026.pdf").
+- Eliminata la scheda intermedia "Preparazione report PDF".
+- Stesso comportamento del pulsante PDF del singolo intervento.
+- Cache PWA aggiornata a v91-7.
+
+NOTA:
+Se si preme il pulsante immediatamente appena aperta la pagina e il PDF completo non ha ancora finito di prepararsi, l'app lo completa e lo mette in cache. Dal secondo tap la condivisione è istantanea.
+
+SQL: nessuno.
+File da caricare: app.js, sw.js, AGGIORNAMENTO-V91.7.txt

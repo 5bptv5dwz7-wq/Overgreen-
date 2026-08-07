@@ -837,40 +837,67 @@ async function createDailyReportFile(mode='compact'){
   const fileName=`Report attivita ${mode==='full'?'completo':'sintetico'} - ${periodSafe}.pdf`,file=new File([bytes],fileName,{type:'application/pdf'});
   return {file,fileName,title:`Report attivita ${mode==='full'?'completo':'sintetico'}`,sizeKb:Math.max(1,Math.round(file.size/1024))};
 }
+const dailyReportPdfCache=new Map();
+const dailyReportPdfPending=new Map();
+function dailyReportPdfKey(mode='compact'){
+  const d=dailyReportData();
+  const ids=[
+    ...d.ordinary.map(r=>`o:${r.id}:${r.closed_at||''}:${r.stato||''}`),
+    ...d.extra.map(r=>`e:${r.id}:${r.closed_at||''}:${r.stato||''}`)
+  ].join('|');
+  return [
+    mode,
+    d.period?.short||d.date||'',
+    $('reportType')?.value||'all',
+    $('reportWorker')?.value||'all',
+    ids,
+    attachments.length
+  ].join('::');
+}
+async function getDailyReportPdf(mode='compact'){
+  const key=dailyReportPdfKey(mode);
+  if(dailyReportPdfCache.has(key))return dailyReportPdfCache.get(key);
+  if(dailyReportPdfPending.has(key))return dailyReportPdfPending.get(key);
+  const promise=createDailyReportFile(mode).then(data=>{
+    dailyReportPdfCache.set(key,data);
+    dailyReportPdfPending.delete(key);
+    return data;
+  }).catch(err=>{
+    dailyReportPdfPending.delete(key);
+    throw err;
+  });
+  dailyReportPdfPending.set(key,promise);
+  return promise;
+}
+function prewarmDailyReportPdfs(){
+  // Generiamo i PDF in anticipo mentre l'utente guarda il report.
+  // In questo modo, quando preme il pulsante, navigator.share viene chiamato
+  // immediatamente dal tap e iOS apre lo stesso foglio di condivisione
+  // già usato dal report del singolo intervento.
+  setTimeout(()=>{getDailyReportPdf('compact').catch(()=>{})},150);
+  setTimeout(()=>{getDailyReportPdf('full').catch(()=>{})},700);
+}
 async function exportDailyReportPdf(mode='compact'){
-  let pdfWindow=null;
   try{
-    pdfWindow=window.open('about:blank','_blank');
-    if(pdfWindow){
-      try{
-        pdfWindow.document.title='Preparazione report PDF';
-        pdfWindow.document.body.innerHTML='<div style="font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;padding:32px;text-align:center"><h2>Overgreen</h2><p>Preparazione del report PDF...</p><p>Attendi qualche secondo.</p></div>';
-      }catch(e){}
-    }
-    toast(mode==='full'?'Creo il PDF completo...':'Creo il PDF sintetico...');
-    const data=await createDailyReportFile(mode);
-    const url=URL.createObjectURL(data.file);
-
-    if(pdfWindow && !pdfWindow.closed){
-      pdfWindow.location.replace(url);
-      setTimeout(()=>URL.revokeObjectURL(url),180000);
-      toast(`PDF ${mode==='full'?'completo':'sintetico'} pronto (${data.sizeKb} KB)`);
+    const key=dailyReportPdfKey(mode);
+    const cached=dailyReportPdfCache.get(key);
+    if(cached){
+      await shareClientReportData(cached);
       return;
     }
 
-    const a=document.createElement('a');
-    a.href=url;
-    a.target='_blank';
-    a.rel='noopener';
-    a.download=data.fileName;
-    a.textContent='Apri PDF';
-    a.style.cssText='position:fixed;z-index:99999;left:20px;right:20px;bottom:24px;padding:16px;border-radius:14px;background:#0b5d35;color:white;text-align:center;font-weight:700;text-decoration:none';
-    a.addEventListener('click',()=>setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},180000),{once:true});
-    document.body.appendChild(a);
-    toast('PDF pronto: premi “Apri PDF”');
+    // Se il PDF non è ancora pronto, lo completiamo e lo teniamo in cache.
+    // Su iOS una generazione molto lunga può far scadere il gesto utente:
+    // in quel raro caso basta ripremere il pulsante e la condivisione sarà immediata.
+    toast(mode==='full'?'Preparo il PDF completo...':'Preparo il PDF sintetico...');
+    const data=await getDailyReportPdf(mode);
+    try{
+      await shareClientReportData(data);
+    }catch(e){
+      throw e;
+    }
   }catch(err){
-    try{if(pdfWindow&&!pdfWindow.closed)pdfWindow.close()}catch(e){}
-    alert('Impossibile creare il PDF: '+err.message);
+    if(err?.name!=='AbortError')alert('Impossibile creare il PDF: '+err.message);
   }
 }
 async function shareDailyReport(){
@@ -1722,7 +1749,7 @@ $('closeExtraForm').onsubmit=async e=>{
 function isRecoverableJwtError(err){const m=String(err?.message||err||'').toLowerCase();return m.includes('jwt issued at future')||m.includes('jwt expired')||m.includes('invalid refresh token')||m.includes('refresh token not found')}
 async function resetBrokenSession(){try{await sb.auth.signOut({scope:'local'})}catch{};localStorage.removeItem('sb-'+new URL(cfg.supabaseUrl).hostname.split('.')[0]+'-auth-token');sessionStorage.clear();session=null;$('app').classList.add('hidden');$('loginScreen').classList.remove('hidden');const box=$('loginError');if(box){box.textContent='La sessione era scaduta o non valida. Accedi di nuovo.';box.classList.remove('hidden')}}
 
-$('reportDate')?.addEventListener('change',renderDailyReport);$('reportStartDate')?.addEventListener('change',renderDailyReport);$('reportEndDate')?.addEventListener('change',renderDailyReport);$('reportMonth')?.addEventListener('change',renderDailyReport);document.querySelectorAll('[data-report-mode]').forEach(b=>b.addEventListener('click',()=>setReportMode(b.dataset.reportMode)));$('reportType')?.addEventListener('change',renderDailyReport);$('reportWorker')?.addEventListener('change',renderDailyReport);$('reportRefresh')?.addEventListener('click',async()=>{await loadAll();renderDailyReport();toast('Report aggiornato')});$('shareDailyReport')?.addEventListener('click',shareDailyReport);$('exportDailyReportCompact')?.addEventListener('click',()=>exportDailyReportPdf('compact'));$('exportDailyReportFull')?.addEventListener('click',()=>exportDailyReportPdf('full'));
+const refreshReportAndPdfCache=()=>{renderDailyReport();prewarmDailyReportPdfs()};$('reportDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportStartDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportEndDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportMonth')?.addEventListener('change',refreshReportAndPdfCache);document.querySelectorAll('[data-report-mode]').forEach(b=>b.addEventListener('click',()=>{setReportMode(b.dataset.reportMode);prewarmDailyReportPdfs()}));$('reportType')?.addEventListener('change',refreshReportAndPdfCache);$('reportWorker')?.addEventListener('change',refreshReportAndPdfCache);$('reportRefresh')?.addEventListener('click',async()=>{await loadAll();dailyReportPdfCache.clear();dailyReportPdfPending.clear();renderDailyReport();prewarmDailyReportPdfs();toast('Report aggiornato')});$('shareDailyReport')?.addEventListener('click',shareDailyReport);$('exportDailyReportCompact')?.addEventListener('click',()=>exportDailyReportPdf('compact'));$('exportDailyReportFull')?.addEventListener('click',()=>exportDailyReportPdf('full'));
 
 sb.auth.onAuthStateChange(async(event,s)=>{
   session=s;

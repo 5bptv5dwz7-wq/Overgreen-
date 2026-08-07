@@ -209,6 +209,15 @@ function auditProfileName(id){
   if(!id)return '';
   return profiles.find(p=>p.id===id)?.nome||'';
 }
+function auditFormatDate(value){
+  if(!value)return '';
+  try{
+    const s=String(value);
+    const d=/^\d{4}-\d{2}-\d{2}$/.test(s)?new Date(s+'T12:00:00'):new Date(s);
+    if(Number.isNaN(d.getTime()))return s;
+    return new Intl.DateTimeFormat('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}).format(d);
+  }catch(e){return String(value)}
+}
 function auditStoreName(id){
   if(!id)return '';
   return stores.find(s=>s.id===id)?.nome||'';
@@ -216,7 +225,7 @@ function auditStoreName(id){
 function auditScheduleDate(id){
   if(!id)return '';
   const s=schedules.find(x=>x.id===id);
-  return s?.giorno?formatDate(s.giorno):'';
+  return s?.giorno?auditFormatDate(s.giorno):'';
 }
 function auditChangedFields(r){
   const oldData=r.old_data||{},newData=r.new_data||{};
@@ -252,7 +261,7 @@ function auditHumanDescription(r){
   if(t==='client_event')return r.description||auditActionLabel(action);
 
   if(t==='schedules'){
-    const date=d.giorno?formatDate(d.giorno):'';
+    const date=d.giorno?auditFormatDate(d.giorno):'';
     if(action==='INSERT')return `Creata programmazione${date?' del '+date:''}`;
     if(action==='DELETE')return `Eliminata programmazione${date?' del '+date:''}`;
     if(action==='UPDATE')return `Modificata programmazione${date?' del '+date:''}`;
@@ -370,14 +379,17 @@ function renderAuditLogs(){
   if(!auditLogs.length){box.innerHTML='<section class="panel"><strong>Nessun evento</strong><p class="muted">Nessuna attività corrisponde ai filtri.</p></section>';return}
   auditLogs.forEach(r=>{
     const c=document.createElement('article');c.className='card audit-card';
-    const when=r.created_at?new Intl.DateTimeFormat('it-IT',{dateStyle:'short',timeStyle:'medium'}).format(new Date(r.created_at)):'';
-    const changed=auditChangedFields(r);
+    let when='';
+    try{when=r.created_at?new Intl.DateTimeFormat('it-IT',{dateStyle:'short',timeStyle:'medium'}).format(new Date(r.created_at)):''}catch(e){when=String(r.created_at||'')}
+    let changed=[];
+    try{changed=auditChangedFields(r)}catch(e){console.warn('audit changed fields',e)}
     let technical='';
     const rawDetails={...(r.details||{})};
     if(r.old_data)rawDetails.prima=r.old_data;
     if(r.new_data)rawDetails.dopo=r.new_data;
     if(Object.keys(rawDetails).length)technical=JSON.stringify(rawDetails,null,2);
-    const human=auditHumanDescription(r);
+    let human='';
+    try{human=auditHumanDescription(r)}catch(e){console.warn('audit description',e);human=r.description||`${auditActionLabel(r.action)} · ${auditEntityLabel(r.entity_type)}`}
     const entity=auditEntityLabel(r.entity_type);
     c.innerHTML=`<div class="audit-card-head"><div><span class="audit-badge">${esc(auditSectionLabel(r.section))}</span><h3>${esc(auditActionLabel(r.action))}</h3></div><span class="muted">${esc(when)}</span></div>
       <div class="audit-meta"><span>👤 ${esc(r.actor_name||r.actor_email||'Sistema')}</span>${entity?`<span>📌 ${esc(entity)}</span>`:''}</div>

@@ -1,0 +1,15 @@
+OVERGREEN CLOUD V93.2 — FIX LOG VUOTO
+
+Problema trovato:
+- Il contatore mostrava correttamente 19 eventi.
+- Il renderer si interrompeva sul primo evento di Programmazione perché il nuovo testo leggibile richiamava una funzione data inesistente (formatDate).
+- Per questo il contenitore veniva svuotato e non compariva nessuna card.
+
+Correzioni:
+- Aggiunto formatter data dedicato auditFormatDate().
+- Corrette le descrizioni di schedules e schedule_members.
+- Reso il rendering del log resistente: un eventuale singolo record anomalo non può più bloccare tutti gli altri eventi.
+- Cache PWA aggiornata a v93-2.
+
+SQL: nessuno.
+File da caricare: app.js, sw.js.

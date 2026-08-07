@@ -1,0 +1,16 @@
+OVERGREEN CLOUD V92 — FOGLI FIRME EUROSPIN
+
+- Nuovo pulsante ✍ nel menu principale.
+- Tutti gli utenti possono caricare foto/PDF e visualizzare tutti i fogli.
+- Ogni foglio è classificato per mese e 1°/2° giro.
+- Contatore semplice dei fogli caricati, senza obiettivo.
+- Visualizzazione di chi ha caricato e data/ora.
+- Solo amministratore: download e cancellazione.
+- Immagini compresse automaticamente prima del caricamento.
+
+INSTALLAZIONE
+1. Esegui MIGRAZIONE-V92.sql su Supabase.
+2. Carica index.html, app.js e sw.js su GitHub.
+3. Attendi il deploy e riapri la PWA.
+
+SQL: OBBLIGATORIO.

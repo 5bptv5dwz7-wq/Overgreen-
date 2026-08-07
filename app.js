@@ -838,11 +838,40 @@ async function createDailyReportFile(mode='compact'){
   return {file,fileName,title:`Report attivita ${mode==='full'?'completo':'sintetico'}`,sizeKb:Math.max(1,Math.round(file.size/1024))};
 }
 async function exportDailyReportPdf(mode='compact'){
+  let pdfWindow=null;
   try{
+    pdfWindow=window.open('about:blank','_blank');
+    if(pdfWindow){
+      try{
+        pdfWindow.document.title='Preparazione report PDF';
+        pdfWindow.document.body.innerHTML='<div style="font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;padding:32px;text-align:center"><h2>Overgreen</h2><p>Preparazione del report PDF...</p><p>Attendi qualche secondo.</p></div>';
+      }catch(e){}
+    }
     toast(mode==='full'?'Creo il PDF completo...':'Creo il PDF sintetico...');
     const data=await createDailyReportFile(mode);
-    await shareClientReportData(data);
-  }catch(err){alert('Impossibile creare il PDF: '+err.message)}
+    const url=URL.createObjectURL(data.file);
+
+    if(pdfWindow && !pdfWindow.closed){
+      pdfWindow.location.replace(url);
+      setTimeout(()=>URL.revokeObjectURL(url),180000);
+      toast(`PDF ${mode==='full'?'completo':'sintetico'} pronto (${data.sizeKb} KB)`);
+      return;
+    }
+
+    const a=document.createElement('a');
+    a.href=url;
+    a.target='_blank';
+    a.rel='noopener';
+    a.download=data.fileName;
+    a.textContent='Apri PDF';
+    a.style.cssText='position:fixed;z-index:99999;left:20px;right:20px;bottom:24px;padding:16px;border-radius:14px;background:#0b5d35;color:white;text-align:center;font-weight:700;text-decoration:none';
+    a.addEventListener('click',()=>setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},180000),{once:true});
+    document.body.appendChild(a);
+    toast('PDF pronto: premi “Apri PDF”');
+  }catch(err){
+    try{if(pdfWindow&&!pdfWindow.closed)pdfWindow.close()}catch(e){}
+    alert('Impossibile creare il PDF: '+err.message);
+  }
 }
 async function shareDailyReport(){
   const text=buildDailyReportText();

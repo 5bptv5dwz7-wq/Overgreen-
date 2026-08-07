@@ -1,0 +1,16 @@
+OVERGREEN CLOUD V94.3 — HEADER 2 RIGHE
+
+Corretto il layout del menu superiore:
+
+- Titolo e utente restano a sinistra.
+- Pulsanti disposti su 2 righe a destra.
+- 5 pulsanti per riga.
+- Niente scorrimento orizzontale.
+- Nessun pulsante tagliato.
+- Barra più compatta della versione originale ma più leggibile della V94.2.
+- Ottimizzazione specifica per iPhone e schermi stretti.
+
+SQL: nessuno.
+File da caricare:
+- index.html
+- sw.js

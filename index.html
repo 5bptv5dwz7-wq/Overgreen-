@@ -1,4 +1,4 @@
-<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#075b31"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="manifest" href="manifest.json?v=49"><link rel="apple-touch-icon" href="icon-192.png"><link rel="stylesheet" href="style.css?v=52"><title>Overgreen</title>
+<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#075b31"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="manifest" href="manifest.json?v=49"><link rel="apple-touch-icon" href="icon-192.png"><link rel="stylesheet" href="style.css?v=53"><title>Overgreen</title>
 <style>
 .signature-card{display:grid;gap:10px}
 .signature-card-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
@@ -123,6 +123,121 @@ header .nav-actions,
     min-height:42px !important;
     border-radius:11px !important;
     font-size:1.2rem !important;
+  }
+}
+</style>
+
+
+<style>
+/* V94.2 — FIX reale barra superiore: il contenitore dei pulsanti è .header-actions */
+#app > header{
+  display:grid !important;
+  grid-template-columns:minmax(115px,auto) minmax(0,1fr) !important;
+  align-items:center !important;
+  gap:10px !important;
+  padding-top:7px !important;
+  padding-bottom:7px !important;
+}
+
+#app > header > div:first-child{
+  min-width:0 !important;
+}
+
+#app > header > div:first-child .eyebrow{
+  margin-bottom:1px !important;
+}
+
+#app > header > div:first-child h1{
+  margin:0 !important;
+  line-height:1.05 !important;
+}
+
+#app > header .header-actions{
+  display:flex !important;
+  flex-direction:row !important;
+  flex-wrap:nowrap !important;
+  align-items:center !important;
+  justify-content:flex-start !important;
+  gap:6px !important;
+  min-width:0 !important;
+  width:100% !important;
+  overflow-x:auto !important;
+  overflow-y:hidden !important;
+  -webkit-overflow-scrolling:touch !important;
+  scrollbar-width:none !important;
+  padding:2px 0 !important;
+}
+
+#app > header .header-actions::-webkit-scrollbar{
+  display:none !important;
+}
+
+#app > header .header-actions > button.icon{
+  flex:0 0 40px !important;
+  width:40px !important;
+  min-width:40px !important;
+  max-width:40px !important;
+  height:40px !important;
+  min-height:40px !important;
+  max-height:40px !important;
+  padding:0 !important;
+  margin:0 !important;
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  line-height:1 !important;
+  font-size:1.12rem !important;
+  border-radius:11px !important;
+}
+
+/* Badge convalide senza alterare l'altezza del pulsante */
+#app > header .header-actions > #pendingBtn{
+  position:relative !important;
+}
+
+/* Evidenzia la sezione aperta */
+#app > header .header-actions > button.icon.active,
+#app > header .header-actions > button.icon[aria-current="page"]{
+  background:#145c35 !important;
+  border-color:#145c35 !important;
+  color:#fff !important;
+}
+
+@media (max-width:600px){
+  #app > header{
+    grid-template-columns:108px minmax(0,1fr) !important;
+    gap:7px !important;
+    padding-top:5px !important;
+    padding-bottom:5px !important;
+  }
+
+  #app > header > div:first-child h1{
+    font-size:1rem !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+  }
+
+  #app > header > div:first-child small{
+    display:block !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+  }
+
+  #app > header .header-actions{
+    gap:5px !important;
+  }
+
+  #app > header .header-actions > button.icon{
+    flex-basis:38px !important;
+    width:38px !important;
+    min-width:38px !important;
+    max-width:38px !important;
+    height:38px !important;
+    min-height:38px !important;
+    max-height:38px !important;
+    font-size:1.05rem !important;
   }
 }
 </style>
@@ -263,7 +378,7 @@ header .nav-actions,
 <dialog id="editExtraClosureDialog"><form id="editExtraClosureForm"><div class="dialog-head"><h2>Modifica chiusura extra</h2><button type="button" data-close>×</button></div><input id="editExtraClosureId" type="hidden"><label>Data e ora di chiusura<input id="editExtraClosureClosedAt" type="datetime-local"></label><label>Note finali sul lavoro<textarea id="editExtraClosureNotes" placeholder="Descrivi il lavoro eseguito, eventuali problemi o informazioni utili"></textarea></label><fieldset><legend>Foto attuali</legend><div id="editExtraClosurePhotoList" class="closure-photo-manager"></div></fieldset><label class="file-label"><span>Aggiungi nuove foto</span><small class="file-help">Puoi selezionare più immagini. Le foto esistenti restano, salvo quelle eliminate.</small><input id="editExtraClosurePhotos" type="file" accept="image/*" multiple></label><fieldset><legend>Sostituisci documenti</legend><label>File richiesta <span class="muted">(facoltativo)</span><input id="editClosureRequest" type="file" accept="image/*,application/pdf"></label><label>File Overgreen <span class="muted">(facoltativo)</span><input id="editClosureOvergreen" type="file" accept="image/*,application/pdf"></label><label>File Eurospin <span class="muted">(facoltativo)</span><input id="editClosureEurospin" type="file" accept="image/*,application/pdf"></label></fieldset><button type="submit">Salva modifiche</button></form></dialog>
 <dialog id="clientReportPreviewDialog" class="client-report-preview-dialog"><div class="client-report-preview-shell"><div class="dialog-head"><div><h2 id="clientReportPreviewTitle">Report cliente</h2><p id="clientReportPreviewInfo" class="muted"></p></div><button type="button" id="closeClientReportPreview">×</button></div><div class="client-report-preview-canvas"><iframe id="clientReportPreviewFrame" title="Anteprima report cliente PDF"></iframe></div><div class="actions client-report-preview-actions"><button type="button" class="secondary" id="closeClientReportPreviewBottom">Chiudi anteprima</button></div></div></dialog>
 <div id="toast" class="toast"></div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script><script src="config.js?v=54"></script><script src="app.js?v=57"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script><script src="config.js?v=54"></script><script src="app.js?v=58"></script>
 <script>
 document.addEventListener('click', function(e){
   const btn=e.target.closest('[data-view]');

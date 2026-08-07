@@ -1,0 +1,17 @@
+OVERGREEN CLOUD V94.2 — FIX BARRA SUPERIORE
+
+Corretto il motivo per cui la V94.1 non cambiava la barra:
+la classe reale dei pulsanti è .header-actions, mentre il fix precedente
+interveniva su selettori nav/.topbar che questa pagina non utilizza.
+
+Ora:
+- tutti i pulsanti restano su una sola riga;
+- niente ritorno a capo;
+- scorrimento orizzontale con il dito;
+- pulsanti da 38 px su iPhone;
+- titolo e pulsanti stanno sulla stessa riga;
+- barra sensibilmente più bassa;
+- nessuna modifica alle funzioni dell'app.
+
+SQL: nessuno.
+File da caricare: index.html, sw.js.

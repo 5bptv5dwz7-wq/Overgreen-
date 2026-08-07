@@ -1,0 +1,15 @@
+OVERGREEN CLOUD V94.1 — BARRA SUPERIORE COMPATTA
+
+- Tutti i pulsanti principali restano su una sola riga orizzontale.
+- La barra non va più a capo.
+- Altezza ridotta.
+- Pulsanti compatti e uniformi.
+- Scorrimento orizzontale con il dito se lo spazio non basta.
+- Pulsante della sezione attiva evidenziato.
+- Nessuna modifica funzionale al gestionale.
+- Nessuna migrazione Supabase richiesta.
+
+File da caricare:
+- index.html
+- sw.js
+- AGGIORNAMENTO-V94.1.txt

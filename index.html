@@ -1,4 +1,4 @@
-<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#075b31"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="manifest" href="manifest.json?v=49"><link rel="apple-touch-icon" href="icon-192.png"><link rel="stylesheet" href="style.css?v=50"><title>Overgreen</title>
+<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#075b31"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="manifest" href="manifest.json?v=49"><link rel="apple-touch-icon" href="icon-192.png"><link rel="stylesheet" href="style.css?v=52"><title>Overgreen</title>
 <style>
 .signature-card{display:grid;gap:10px}
 .signature-card-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
@@ -28,6 +28,105 @@
 .archive-notice{padding:12px;border-radius:12px;background:#fff7db;margin-bottom:12px}
 @media(max-width:520px){.archive-categories{grid-template-columns:1fr 1fr 1fr}.archive-category{font-size:.82rem}}
 </style>
+
+<style>
+/* V94.1 — barra principale compatta e orizzontale */
+.topbar,
+header .topbar,
+header .nav,
+header nav,
+nav[aria-label="Navigazione principale"]{
+  min-height:0 !important;
+}
+
+header .nav,
+header nav,
+.topbar .nav,
+.topbar nav{
+  display:flex !important;
+  flex-wrap:nowrap !important;
+  align-items:center !important;
+  gap:7px !important;
+  overflow-x:auto !important;
+  overflow-y:hidden !important;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+  padding-block:6px !important;
+}
+
+header .nav::-webkit-scrollbar,
+header nav::-webkit-scrollbar,
+.topbar .nav::-webkit-scrollbar,
+.topbar nav::-webkit-scrollbar{
+  display:none;
+}
+
+/* I pulsanti di navigazione non devono più andare a capo */
+header [data-view].icon,
+.topbar [data-view].icon,
+nav [data-view].icon{
+  flex:0 0 44px !important;
+  width:44px !important;
+  height:44px !important;
+  min-width:44px !important;
+  min-height:44px !important;
+  padding:0 !important;
+  margin:0 !important;
+  border-radius:12px !important;
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  font-size:1.25rem !important;
+  line-height:1 !important;
+  white-space:nowrap !important;
+}
+
+/* Stato attivo */
+header [data-view].icon.active,
+.topbar [data-view].icon.active,
+nav [data-view].icon.active,
+header [data-view].icon[aria-current="page"],
+.topbar [data-view].icon[aria-current="page"],
+nav [data-view].icon[aria-current="page"]{
+  background:#145c35 !important;
+  color:#fff !important;
+  border-color:#145c35 !important;
+}
+
+/* Evita che l'area dei pulsanti aumenti in altezza */
+header .actions,
+.topbar .actions,
+header .nav-actions,
+.topbar .nav-actions{
+  display:flex !important;
+  flex-wrap:nowrap !important;
+  align-items:center !important;
+  gap:7px !important;
+}
+
+/* iPhone: barra ancora più compatta */
+@media (max-width: 600px){
+  header .nav,
+  header nav,
+  .topbar .nav,
+  .topbar nav{
+    gap:6px !important;
+    padding-block:5px !important;
+  }
+  header [data-view].icon,
+  .topbar [data-view].icon,
+  nav [data-view].icon{
+    flex-basis:42px !important;
+    width:42px !important;
+    min-width:42px !important;
+    height:42px !important;
+    min-height:42px !important;
+    border-radius:11px !important;
+    font-size:1.2rem !important;
+  }
+}
+</style>
+
 </head><body>
 <section id="loginScreen" class="auth-screen"><div class="auth-card"><div class="logo">OG</div><p class="eyebrow">OVERGREEN</p><h1>Gestione punti vendita</h1><p class="muted">Accedi con email e password.</p><form id="loginForm"><label>Email<input id="loginEmail" type="email" autocomplete="username" required></label><label>Password<input id="loginPassword" type="password" autocomplete="current-password" required></label><label class="remember-row"><input id="rememberAccess" type="checkbox" checked><span>Ricorda l'accesso su questo dispositivo</span></label><button type="submit" class="full">Accedi</button><p id="loginError" class="error hidden"></p></form></div></section>
 <div id="app" class="hidden"><header><div><p class="eyebrow">OVERGREEN</p><h1 id="pageTitle">Sedi e clienti</h1><small id="userLabel" class="muted"></small></div><div class="header-actions"><button class="icon" data-view="dashboard" title="Dashboard">⌂</button><button class="icon" data-view="stores" title="Sedi e clienti">🏪</button><button class="icon" data-view="schedule" title="Programmazione">📅</button><button class="icon" data-view="extras" title="Extra">E</button><button class="icon admin-only" data-view="reports" title="Report giornaliero">R</button><button class="icon" data-view="signatures" title="Fogli firme Eurospin">✍</button><button class="icon" data-view="archive" title="Archivio aziendale">📁</button><button class="icon admin-only" data-view="audit" title="Log attività">📋</button><button id="pendingBtn" class="icon admin-only" title="Convalide">✓<span id="pendingBadge" class="badge hidden">0</span></button><button class="icon" data-view="settings" title="Impostazioni">⚙</button><button id="helpBtn" class="icon help-icon" title="Istruzioni di questa schermata">?</button></div></header>
@@ -164,4 +263,24 @@
 <dialog id="editExtraClosureDialog"><form id="editExtraClosureForm"><div class="dialog-head"><h2>Modifica chiusura extra</h2><button type="button" data-close>×</button></div><input id="editExtraClosureId" type="hidden"><label>Data e ora di chiusura<input id="editExtraClosureClosedAt" type="datetime-local"></label><label>Note finali sul lavoro<textarea id="editExtraClosureNotes" placeholder="Descrivi il lavoro eseguito, eventuali problemi o informazioni utili"></textarea></label><fieldset><legend>Foto attuali</legend><div id="editExtraClosurePhotoList" class="closure-photo-manager"></div></fieldset><label class="file-label"><span>Aggiungi nuove foto</span><small class="file-help">Puoi selezionare più immagini. Le foto esistenti restano, salvo quelle eliminate.</small><input id="editExtraClosurePhotos" type="file" accept="image/*" multiple></label><fieldset><legend>Sostituisci documenti</legend><label>File richiesta <span class="muted">(facoltativo)</span><input id="editClosureRequest" type="file" accept="image/*,application/pdf"></label><label>File Overgreen <span class="muted">(facoltativo)</span><input id="editClosureOvergreen" type="file" accept="image/*,application/pdf"></label><label>File Eurospin <span class="muted">(facoltativo)</span><input id="editClosureEurospin" type="file" accept="image/*,application/pdf"></label></fieldset><button type="submit">Salva modifiche</button></form></dialog>
 <dialog id="clientReportPreviewDialog" class="client-report-preview-dialog"><div class="client-report-preview-shell"><div class="dialog-head"><div><h2 id="clientReportPreviewTitle">Report cliente</h2><p id="clientReportPreviewInfo" class="muted"></p></div><button type="button" id="closeClientReportPreview">×</button></div><div class="client-report-preview-canvas"><iframe id="clientReportPreviewFrame" title="Anteprima report cliente PDF"></iframe></div><div class="actions client-report-preview-actions"><button type="button" class="secondary" id="closeClientReportPreviewBottom">Chiudi anteprima</button></div></div></dialog>
 <div id="toast" class="toast"></div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script><script src="config.js?v=54"></script><script src="app.js?v=56"></script></body></html>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script><script src="config.js?v=54"></script><script src="app.js?v=57"></script>
+<script>
+document.addEventListener('click', function(e){
+  const btn=e.target.closest('[data-view]');
+  if(!btn) return;
+  document.querySelectorAll('[data-view]').forEach(b=>{
+    b.classList.toggle('active', b===btn);
+    if(b===btn) b.setAttribute('aria-current','page');
+    else b.removeAttribute('aria-current');
+  });
+});
+document.addEventListener('DOMContentLoaded', function(){
+  const firstVisible=[...document.querySelectorAll('[data-view]')].find(b=>!b.classList.contains('hidden'));
+  if(firstVisible && !document.querySelector('[data-view].active')){
+    firstVisible.classList.add('active');
+    firstVisible.setAttribute('aria-current','page');
+  }
+});
+</script>
+
+</body></html>

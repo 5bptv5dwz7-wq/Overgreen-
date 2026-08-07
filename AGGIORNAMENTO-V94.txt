@@ -1,0 +1,35 @@
+OVERGREEN CLOUD V94 — ARCHIVIO AZIENDALE
+
+NUOVO PULSANTE 📁 ARCHIVIO nel menu principale.
+
+Tre categorie:
+- 📝 Modulistica
+- 🚐 Mezzi
+- 🏢 Dati aziendali
+
+DIPENDENTI
+- Visualizzano tutti i documenti.
+- Scaricano/condividono i documenti.
+- Possono cercare per nome o descrizione.
+- Vedono il badge "Da consultare" sui documenti marcati obbligatori.
+- Aprendo/scaricando un documento obbligatorio viene registrato come consultato.
+
+AMMINISTRATORE
+- Carica documenti.
+- Rinomina e modifica descrizione.
+- Sostituisce il file mantenendo il documento e incrementando la versione.
+- Decide se un documento è "da consultare".
+- Elimina documenti.
+- Vede anche le letture tramite database/log.
+
+NOTE
+- Le immagini caricate nell'archivio vengono compresse prima dell'upload.
+- PDF, Word ed Excel restano invariati.
+- Nessuna modalità offline.
+
+INSTALLAZIONE
+1. Esegui MIGRAZIONE-V94.sql in Supabase.
+2. Carica index.html, app.js e sw.js su GitHub.
+3. Attendi il deploy e riapri la PWA.
+
+SQL: OBBLIGATORIO.

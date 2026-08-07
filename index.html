@@ -12,9 +12,25 @@
 <style>
 .audit-card{display:grid;gap:8px}.audit-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.audit-card h3{margin:2px 0}.audit-meta{display:flex;flex-wrap:wrap;gap:7px 12px}.audit-details{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.8rem}.audit-badge{display:inline-flex;align-items:center;border-radius:999px;padding:5px 9px;background:#eef5f0;color:#16472d;font-weight:700;font-size:.78rem}
 </style>
+
+<style>
+.archive-categories{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 16px}
+.archive-category{display:flex;flex-direction:column;gap:5px;align-items:center;justify-content:center;min-height:76px;padding:10px;border:1px solid #dfe6e1;border-radius:14px;background:#fff;color:#183126}
+.archive-category.active{border-color:#1f7046;background:#edf7f1;color:#145536}
+.archive-category span{font-size:1.35rem}
+.archive-doc{display:grid;gap:9px}
+.archive-doc-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.archive-doc h3{margin:2px 0}
+.archive-doc-actions{display:flex;flex-wrap:wrap;gap:8px}
+.archive-doc-actions button{flex:1 1 125px}
+.archive-new{display:inline-flex;padding:4px 8px;border-radius:999px;background:#fff3cd;color:#705600;font-size:.78rem;font-weight:700}
+.archive-read{display:inline-flex;padding:4px 8px;border-radius:999px;background:#eef5f0;color:#24553b;font-size:.78rem;font-weight:700}
+.archive-notice{padding:12px;border-radius:12px;background:#fff7db;margin-bottom:12px}
+@media(max-width:520px){.archive-categories{grid-template-columns:1fr 1fr 1fr}.archive-category{font-size:.82rem}}
+</style>
 </head><body>
 <section id="loginScreen" class="auth-screen"><div class="auth-card"><div class="logo">OG</div><p class="eyebrow">OVERGREEN</p><h1>Gestione punti vendita</h1><p class="muted">Accedi con email e password.</p><form id="loginForm"><label>Email<input id="loginEmail" type="email" autocomplete="username" required></label><label>Password<input id="loginPassword" type="password" autocomplete="current-password" required></label><label class="remember-row"><input id="rememberAccess" type="checkbox" checked><span>Ricorda l'accesso su questo dispositivo</span></label><button type="submit" class="full">Accedi</button><p id="loginError" class="error hidden"></p></form></div></section>
-<div id="app" class="hidden"><header><div><p class="eyebrow">OVERGREEN</p><h1 id="pageTitle">Sedi e clienti</h1><small id="userLabel" class="muted"></small></div><div class="header-actions"><button class="icon" data-view="dashboard" title="Dashboard">⌂</button><button class="icon" data-view="stores" title="Sedi e clienti">🏪</button><button class="icon" data-view="schedule" title="Programmazione">📅</button><button class="icon" data-view="extras" title="Extra">E</button><button class="icon admin-only" data-view="reports" title="Report giornaliero">R</button><button class="icon" data-view="signatures" title="Fogli firme Eurospin">✍</button><button class="icon admin-only" data-view="audit" title="Log attività">📋</button><button id="pendingBtn" class="icon admin-only" title="Convalide">✓<span id="pendingBadge" class="badge hidden">0</span></button><button class="icon" data-view="settings" title="Impostazioni">⚙</button><button id="helpBtn" class="icon help-icon" title="Istruzioni di questa schermata">?</button></div></header>
+<div id="app" class="hidden"><header><div><p class="eyebrow">OVERGREEN</p><h1 id="pageTitle">Sedi e clienti</h1><small id="userLabel" class="muted"></small></div><div class="header-actions"><button class="icon" data-view="dashboard" title="Dashboard">⌂</button><button class="icon" data-view="stores" title="Sedi e clienti">🏪</button><button class="icon" data-view="schedule" title="Programmazione">📅</button><button class="icon" data-view="extras" title="Extra">E</button><button class="icon admin-only" data-view="reports" title="Report giornaliero">R</button><button class="icon" data-view="signatures" title="Fogli firme Eurospin">✍</button><button class="icon" data-view="archive" title="Archivio aziendale">📁</button><button class="icon admin-only" data-view="audit" title="Log attività">📋</button><button id="pendingBtn" class="icon admin-only" title="Convalide">✓<span id="pendingBadge" class="badge hidden">0</span></button><button class="icon" data-view="settings" title="Impostazioni">⚙</button><button id="helpBtn" class="icon help-icon" title="Istruzioni di questa schermata">?</button></div></header>
 <main>
 <section id="dashboardView" class="view hidden"><div class="dashboard-grid"><button class="dash-card" data-dash="today"><strong id="dashToday">0</strong><span>Da fare oggi</span></button><button class="dash-card warning" data-dash="pending"><strong id="dashPending">0</strong><span>Da convalidare</span></button><button class="dash-card success" data-dash="done"><strong id="dashDone">0</strong><span>Completati oggi</span></button><button class="dash-card danger" data-dash="due"><strong id="dashDue">0</strong><span>Punti scaduti</span></button><button class="dash-card scheduled" data-dash="scheduled"><strong id="dashScheduled">0</strong><span>Programmati</span></button><button class="dash-card urgent" data-dash="urgent"><strong id="dashUrgent">0</strong><span>Punti vendita urgenti</span></button><button class="dash-card extra-open" data-dash="openextras"><strong id="dashOpenExtras">0</strong><span>Extra aperti</span></button></div><section class="panel"><h2>Ricerca globale</h2><input id="globalSearch" type="search" placeholder="Cerca punto vendita, extra o dipendente…"><div id="globalResults" class="cards compact"></div></section><section class="panel"><div class="panel-head"><h2>Prossimi lavori</h2><button id="dashboardRefresh" class="secondary">Aggiorna</button></div><div id="dashboardNext" class="cards compact"></div></section></section>
 <section id="storesView" class="view"><div class="client-filter-bar"><button class="active" data-client-filter="all">Tutti</button><button data-client-filter="eurospin">🛒 Eurospin</button><button data-client-filter="intesa">🏦 Intesa</button><button data-client-filter="privato">🏠 Privati</button></div><section class="summary"><button data-filter="all"><strong id="totalCount">0</strong><span>Totali</span></button><button class="danger" data-filter="due"><strong id="dueCount">0</strong><span>Scaduti</span></button><button class="warning" data-filter="warning"><strong id="warningCount">0</strong><span>In scadenza</span></button><button class="success" data-filter="today"><strong id="todayCount">0</strong><span>Fatti oggi</span></button></section><div class="toolbar"><input id="searchInput" type="search" placeholder="Cerca sede o cliente…"><select id="sortSelect"><option value="urgent">Più urgenti</option><option value="alpha">Alfabetico</option></select></div><div class="store-admin-actions admin-only"><button id="addStoreBtn" class="full">＋ Aggiungi sede</button><button id="bulkIntervalBtn" class="full secondary">↻ Modifica intervallo categoria</button></div><div id="storesList" class="cards"></div></section>
@@ -45,6 +61,70 @@
   </section>
 </section>
 
+
+<section id="archiveView" class="view hidden">
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">DOCUMENTI</p>
+        <h2>Archivio aziendale</h2>
+        <p class="muted">Modulistica, documenti dei mezzi e dati aziendali.</p>
+      </div>
+      <button id="archiveRefresh" type="button" class="secondary">Aggiorna</button>
+    </div>
+
+    <div class="archive-categories">
+      <button type="button" class="archive-category active" data-archive-category="modulistica"><span>📝</span><strong>Modulistica</strong></button>
+      <button type="button" class="archive-category" data-archive-category="mezzi"><span>🚐</span><strong>Mezzi</strong></button>
+      <button type="button" class="archive-category" data-archive-category="dati_aziendali"><span>🏢</span><strong>Dati aziendali</strong></button>
+    </div>
+
+    <label>Cerca documento
+      <input id="archiveSearch" type="search" placeholder="Es. rapportino, Ducato, DURC...">
+    </label>
+
+    <div id="archiveAdminPanel" class="admin-only">
+      <hr>
+      <h3>Carica documento</h3>
+      <form id="archiveUploadForm">
+        <div class="planner-grid">
+          <label>Categoria
+            <select id="archiveUploadCategory" required>
+              <option value="modulistica">Modulistica</option>
+              <option value="mezzi">Mezzi</option>
+              <option value="dati_aziendali">Dati aziendali</option>
+            </select>
+          </label>
+          <label>Nome documento
+            <input id="archiveTitle" type="text" maxlength="140" placeholder="Es. Rapportino intervento" required>
+          </label>
+        </div>
+        <label>Descrizione / nota
+          <input id="archiveDescription" type="text" maxlength="300" placeholder="Facoltativa">
+        </label>
+        <label>File
+          <input id="archiveFile" type="file" accept=".pdf,image/*,.doc,.docx,.xls,.xlsx" required>
+        </label>
+        <label class="check-row">
+          <input id="archiveMandatory" type="checkbox">
+          <span>Documento da consultare almeno una volta</span>
+        </label>
+        <button id="archiveUploadBtn" class="full" type="submit">＋ Carica documento</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2 id="archiveCategoryTitle">📝 Modulistica</h2>
+        <p id="archiveCount" class="muted">0 documenti</p>
+      </div>
+    </div>
+    <div id="archiveUnreadNotice" class="hidden"></div>
+    <div id="archiveList" class="cards"></div>
+  </section>
+</section>
 <section id="auditView" class="view hidden">
   <section class="panel">
     <div class="panel-head">
@@ -84,4 +164,4 @@
 <dialog id="editExtraClosureDialog"><form id="editExtraClosureForm"><div class="dialog-head"><h2>Modifica chiusura extra</h2><button type="button" data-close>×</button></div><input id="editExtraClosureId" type="hidden"><label>Data e ora di chiusura<input id="editExtraClosureClosedAt" type="datetime-local"></label><label>Note finali sul lavoro<textarea id="editExtraClosureNotes" placeholder="Descrivi il lavoro eseguito, eventuali problemi o informazioni utili"></textarea></label><fieldset><legend>Foto attuali</legend><div id="editExtraClosurePhotoList" class="closure-photo-manager"></div></fieldset><label class="file-label"><span>Aggiungi nuove foto</span><small class="file-help">Puoi selezionare più immagini. Le foto esistenti restano, salvo quelle eliminate.</small><input id="editExtraClosurePhotos" type="file" accept="image/*" multiple></label><fieldset><legend>Sostituisci documenti</legend><label>File richiesta <span class="muted">(facoltativo)</span><input id="editClosureRequest" type="file" accept="image/*,application/pdf"></label><label>File Overgreen <span class="muted">(facoltativo)</span><input id="editClosureOvergreen" type="file" accept="image/*,application/pdf"></label><label>File Eurospin <span class="muted">(facoltativo)</span><input id="editClosureEurospin" type="file" accept="image/*,application/pdf"></label></fieldset><button type="submit">Salva modifiche</button></form></dialog>
 <dialog id="clientReportPreviewDialog" class="client-report-preview-dialog"><div class="client-report-preview-shell"><div class="dialog-head"><div><h2 id="clientReportPreviewTitle">Report cliente</h2><p id="clientReportPreviewInfo" class="muted"></p></div><button type="button" id="closeClientReportPreview">×</button></div><div class="client-report-preview-canvas"><iframe id="clientReportPreviewFrame" title="Anteprima report cliente PDF"></iframe></div><div class="actions client-report-preview-actions"><button type="button" class="secondary" id="closeClientReportPreviewBottom">Chiudi anteprima</button></div></div></dialog>
 <div id="toast" class="toast"></div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script><script src="config.js?v=54"></script><script src="app.js?v=55"></script></body></html>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script><script src="config.js?v=54"></script><script src="app.js?v=56"></script></body></html>

@@ -1,0 +1,12 @@
+OVERGREEN CLOUD V96
+
+- Chiusura normale invariata.
+- Nuovo pulsante: "Salva giornata e continua un altro giorno".
+- L'intervento resta un unico record anche se dura più giorni.
+- Quando la stessa sede viene programmata nuovamente, il pulsante mostra "Continua intervento".
+- Le note e le foto delle giornate successive vengono aggiunte allo stesso intervento.
+- Il passaggio ordinario viene considerato concluso solo con "Invia intervento".
+- Per i dipendenti, la convalida viene richiesta alla chiusura definitiva, non durante le giornate intermedie.
+- Lo storico mostra l'intervallo di date per gli interventi multigiorno.
+
+Prima di pubblicare eseguire MIGRAZIONE-V96-INTERVENTI-MULTIGIORNO.sql in Supabase.

@@ -1,0 +1,11 @@
+OVERGREEN CLOUD V95
+
+Nuova funzione: "Da fare al prossimo passaggio"
+- In chiusura intervento ordinario è possibile attivare un promemoria separato dalle note finali.
+- Il promemoria viene salvato sull'intervento per mantenere lo storico.
+- Se chiude un dipendente, il promemoria viene trasferito alla sede solo dopo la convalida dell'amministratore.
+- Nella programmazione successiva compare un riquadro arancione molto evidente "DA FARE IN QUESTO PASSAGGIO".
+- Aprendo "Eseguito" sul passaggio successivo, il promemoria compare in alto prima delle note.
+- Quando quel passaggio viene chiuso, il promemoria precedente si considera consumato: viene sostituito da un eventuale nuovo promemoria oppure cancellato.
+
+IMPORTANTE: prima di pubblicare la V95 eseguire in Supabase il file MIGRAZIONE-V95-PROMEMORIA.sql.

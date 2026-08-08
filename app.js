@@ -236,7 +236,7 @@ async function previewCompanyDocument(doc){
   try{
     const url=await companyDocumentUrl(doc);
     await markCompanyDocumentRead(doc);
-    auditLog('preview','archive','company_document',doc.id,`Aperto documento: ${doc.title}`,{category:doc.category});
+    writeClientAudit('VIEW','archive',`Aperto documento: ${doc.title}`,{entity_type:'company_document',entity_id:doc.id,category:doc.category});
     window.open(url,'_blank','noopener');
   }catch(e){alert('Impossibile aprire il documento: '+e.message)}
 }
@@ -246,7 +246,7 @@ async function downloadCompanyDocument(doc){
     const res=await fetch(url);if(!res.ok)throw new Error('Download non riuscito');
     const blob=await res.blob(),file=new File([blob],doc.file_name||doc.title,{type:doc.mime_type||blob.type||'application/octet-stream'});
     await markCompanyDocumentRead(doc);
-    auditLog('download','archive','company_document',doc.id,`Scaricato documento: ${doc.title}`,{category:doc.category});
+    writeClientAudit('DOWNLOAD','archive',`Scaricato documento: ${doc.title}`,{entity_type:'company_document',entity_id:doc.id,category:doc.category});
     if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]})))await navigator.share({title:doc.title,files:[file]});
     else{const u=URL.createObjectURL(file),a=document.createElement('a');a.href=u;a.download=file.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000)}
   }catch(e){if(e?.name!=='AbortError')alert('Impossibile scaricare il documento: '+e.message)}
@@ -265,7 +265,7 @@ async function uploadCompanyDocument(file,title,description,category,mandatory){
   }).select().single();
   if(error){await sb.storage.from('documenti').remove([path]);throw error}
   companyDocuments.unshift(data);
-  auditLog('upload','archive','company_document',data.id,`Caricato documento: ${title}`,{category,mandatory:!!mandatory});
+  writeClientAudit('UPLOAD','archive',`Caricato documento: ${title}`,{entity_type:'company_document',entity_id:data.id,category,mandatory:!!mandatory});
   return data;
 }
 async function renameCompanyDocument(doc){
@@ -276,7 +276,7 @@ async function renameCompanyDocument(doc){
   const {data,error}=await sb.from('company_documents').update({title:clean,description:description.trim()||null}).eq('id',doc.id).select().single();
   if(error)return alert('Modifica non riuscita: '+error.message);
   companyDocuments=companyDocuments.map(x=>x.id===doc.id?data:x);
-  auditLog('update','archive','company_document',doc.id,`Rinominato documento: ${clean}`,{prima:doc.title,dopo:clean});
+  writeClientAudit('UPDATE','archive',`Rinominato documento: ${clean}`,{entity_type:'company_document',entity_id:doc.id,prima:doc.title,dopo:clean});
   renderCompanyArchive();
 }
 async function toggleMandatoryCompanyDocument(doc){
@@ -285,7 +285,7 @@ async function toggleMandatoryCompanyDocument(doc){
   const {data,error}=await sb.from('company_documents').update({mandatory}).eq('id',doc.id).select().single();
   if(error)return alert('Modifica non riuscita: '+error.message);
   companyDocuments=companyDocuments.map(x=>x.id===doc.id?data:x);
-  auditLog('update','archive','company_document',doc.id,`${mandatory?'Reso obbligatorio':'Rimosso obbligo'}: ${doc.title}`);
+  writeClientAudit('UPDATE','archive',`${mandatory?'Reso obbligatorio':'Rimosso obbligo'}: ${doc.title}`,{entity_type:'company_document',entity_id:doc.id,mandatory});
   renderCompanyArchive();
 }
 async function replaceCompanyDocument(doc,file){
@@ -303,7 +303,7 @@ async function replaceCompanyDocument(doc,file){
     await sb.from('company_document_reads').delete().eq('document_id',doc.id);
     companyDocumentReads=companyDocumentReads.filter(r=>r.document_id!==doc.id);
     companyDocuments=companyDocuments.map(x=>x.id===doc.id?data:x);
-    auditLog('update','archive','company_document',doc.id,`Sostituito documento: ${doc.title}`,{version:data.version});
+    writeClientAudit('UPDATE','archive',`Sostituito documento: ${doc.title}`,{entity_type:'company_document',entity_id:doc.id,version:data.version});
     renderCompanyArchive();toast('Documento sostituito')
   }catch(e){alert('Sostituzione non riuscita: '+e.message)}
 }
@@ -314,7 +314,7 @@ async function deleteCompanyDocument(doc){
     const d=await sb.from('company_documents').delete().eq('id',doc.id);if(d.error)throw d.error;
     companyDocuments=companyDocuments.filter(x=>x.id!==doc.id);
     companyDocumentReads=companyDocumentReads.filter(r=>r.document_id!==doc.id);
-    auditLog('delete','archive','company_document',doc.id,`Eliminato documento: ${doc.title}`,{category:doc.category});
+    writeClientAudit('DELETE','archive',`Eliminato documento: ${doc.title}`,{entity_type:'company_document',entity_id:doc.id,category:doc.category});
     renderCompanyArchive();toast('Documento eliminato')
   }catch(e){alert('Eliminazione non riuscita: '+e.message)}
 }
@@ -542,7 +542,7 @@ function auditHumanDescription(r){
   return r.description||`${auditActionLabel(action)} · ${auditEntityLabel(t)}`;
 }
 async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:details,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V93'}})}catch(e){console.warn('audit',e)}}
-function auditViewOpen(name){if(!session?.user?.id)return;const labels={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:'Programmazione',extras:'Lavori extra',reports:'Report attività',signatures:'Fogli firme Eurospin',settings:'Impostazioni'};if(labels[name])writeClientAudit('VIEW','navigation',`Aperta pagina ${labels[name]}`,{view:name})}
+function auditViewOpen(name){if(!session?.user?.id)return;const labels={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:'Programmazione',extras:'Lavori extra',reports:'Report attività',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',audit:'Log attività',settings:'Impostazioni'};if(labels[name])writeClientAudit('VIEW','navigation',`Aperta pagina ${labels[name]}`,{view:name})}
 function renderAuditUsers(){const sel=$('auditUser');if(!sel)return;const cur=sel.value||'all';sel.innerHTML='<option value="all">Tutti gli utenti</option>';[...profiles].sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.nome||p.email||p.id;sel.appendChild(o)});if([...sel.options].some(o=>o.value===cur))sel.value=cur}
 async function openAuditView(){if(!admin())return setView('dashboard');renderAuditUsers();await loadAuditLogs(true)}
 async function loadAuditLogs(reset=true){if(!admin())return;const box=$('auditList');if(reset){auditPage=0;auditLogs=[];if(box)box.innerHTML='<p class="muted">Caricamento log…</p>'}const from=$('auditFrom')?.value||'',to=$('auditTo')?.value||'',user=$('auditUser')?.value||'all',section=$('auditSection')?.value||'all',search=($('auditSearch')?.value||'').trim();const size=80,offset=auditPage*size;let q=sb.from('audit_log').select('*').order('created_at',{ascending:false}).range(offset,offset+size);if(from)q=q.gte('created_at',`${from}T00:00:00`);if(to)q=q.lte('created_at',`${to}T23:59:59.999`);if(user!=='all')q=q.eq('actor_id',user);if(section!=='all')q=q.eq('section',section);if(search){const safe=search.replace(/[%_,()]/g,' ');q=q.or(`description.ilike.%${safe}%,action.ilike.%${safe}%,actor_name.ilike.%${safe}%,actor_email.ilike.%${safe}%,entity_type.ilike.%${safe}%`)}const {data,error}=await q;if(error){box.innerHTML=`<p class="error">${esc(error.message)}</p><p class="muted">Esegui MIGRAZIONE-V93.sql su Supabase.</p>`;return}let rows=data||[];auditHasMore=rows.length>size;if(auditHasMore)rows=rows.slice(0,size);auditLogs=reset?rows:[...auditLogs,...rows];renderAuditLogs()}

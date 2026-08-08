@@ -1,0 +1,19 @@
+OVERGREEN CLOUD V94.4 — FIX CARICAMENTO ARCHIVIO
+
+Problema:
+- Il modulo Archivio chiamava auditLog(), ma nell'app il logger reale si chiama writeClientAudit().
+- Il documento veniva caricato su Supabase e subito dopo JavaScript andava in errore con:
+  "Can't find variable: auditLog".
+- Per questo compariva "Caricamento non riuscito" anche se la fase di upload poteva essere già partita.
+
+Correzione:
+- Tutte le azioni Archivio ora usano writeClientAudit().
+- Log di apertura, download, upload, rinomina, sostituzione, obbligatorietà ed eliminazione.
+- Aggiunto Archivio aziendale anche al log di navigazione.
+- Aggiornato app.js?v=60 e cache PWA v94-4.
+
+SQL: nessuno.
+File da caricare:
+- index.html
+- app.js
+- sw.js

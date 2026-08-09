@@ -541,7 +541,7 @@ function auditHumanDescription(r){
 
   return r.description||`${auditActionLabel(action)} · ${auditEntityLabel(t)}`;
 }
-async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:details,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V96'}})}catch(e){console.warn('audit',e)}}
+async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:details,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V97'}})}catch(e){console.warn('audit',e)}}
 function auditViewOpen(name){if(!session?.user?.id)return;const labels={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:'Programmazione',extras:'Lavori extra',reports:'Report attività',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',audit:'Log attività',settings:'Impostazioni'};if(labels[name])writeClientAudit('VIEW','navigation',`Aperta pagina ${labels[name]}`,{view:name})}
 function renderAuditUsers(){const sel=$('auditUser');if(!sel)return;const cur=sel.value||'all';sel.innerHTML='<option value="all">Tutti gli utenti</option>';[...profiles].sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.nome||p.email||p.id;sel.appendChild(o)});if([...sel.options].some(o=>o.value===cur))sel.value=cur}
 async function openAuditView(){if(!admin())return setView('dashboard');renderAuditUsers();await loadAuditLogs(true)}
@@ -649,6 +649,12 @@ function assignedExtraIds(){return new Set(extraWorkers.filter(w=>w.profile_id==
 function openExtraJobs(){return extras.filter(e=>e.stato!=='completato')}
 function linkedExtrasForScheduleItem(itemId){return extras.filter(e=>e.schedule_item_id===itemId&&e.stato!=='completato')}
 function openMultiDayIntervention(storeId){return interventions.find(i=>i.store_id===storeId&&i.multi_day_open===true)}
+async function fetchOpenMultiDayIntervention(storeId){
+  const {data,error}=await sb.from('interventions').select('*').eq('store_id',storeId).eq('multi_day_open',true).order('data_intervento',{ascending:false}).limit(2);
+  if(error)throw error;
+  if((data||[]).length>1)console.warn('Più interventi multigiorno aperti per la stessa sede:',storeId,data.map(x=>x.id));
+  return data?.[0]||null;
+}
 function interventionEndDate(i){return i.data_fine||i.data_intervento}
 function interventionDateLabel(i){const a=i.data_intervento,b=interventionEndDate(i);return a&&b&&a!==b?`${fmt(a)} → ${fmt(b)}`:fmt(a)}
 async function linkOrdinaryExtras(scheduleId,scheduleDate,memberIds,items){
@@ -1740,7 +1746,7 @@ function renderSchedules(){
       r.dataset.routeAddress=routeAddressForStore(st);
       r.dataset.scheduleItemId=item.id;
       const stato=effectiveState==='in_attesa'?'In attesa di convalida':'Da eseguire',linked=linkedExtrasForScheduleItem(item.id);
-      r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${displayIndex+1}</div><div class="schedule-item-copy">${scheduleClientBadge(st)}<strong data-store-detail>${esc(st?.nome||'Sede')}</strong><small>${esc(st?.citta||st?.indirizzo||'')} · ${stato}</small></div>${admin()?'<button type="button" class="drag-handle" data-drag-handle title="Tieni premuto e trascina" aria-label="Trascina per cambiare ordine">☰</button>':''}</div>${String(st?.next_visit_note||'').trim()?`<div class="schedule-next-visit"><strong>⚠️ Da fare in questo passaggio</strong><p>${esc(st.next_visit_note)}</p></div>`:''}${linked.length?`<div class="linked-extra-reminder compact-linked"><strong>Extra collegati (${linked.length})</strong>${linked.map(e=>`<span class="linked-extra-category ${extraCategoryClass(e)}"><b>${esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}</span>`).join('')}</div>`:''}<div class="actions schedule-item-actions"><button class="secondary" data-map>Maps</button>${effectiveState==='da_fare'?`<button data-done>${openMultiDayIntervention(st?.id)?'Continua intervento':'Eseguito'}</button>`:''}${admin()&&effectiveState==='da_fare'?'<button class="danger-btn" data-delete-scheduled>Elimina</button>':''}</div>`;
+      r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${displayIndex+1}</div><div class="schedule-item-copy">${scheduleClientBadge(st)}<strong data-store-detail>${esc(st?.nome||'Sede')}</strong><small>${esc(st?.citta||st?.indirizzo||'')} · ${stato}</small></div>${admin()?'<button type="button" class="drag-handle" data-drag-handle title="Tieni premuto e trascina" aria-label="Trascina per cambiare ordine">☰</button>':''}</div>${effectiveState==='da_fare'&&String(st?.next_visit_note||'').trim()?`<div class="schedule-next-visit"><strong>⚠️ Da fare in questo passaggio</strong><p>${esc(st.next_visit_note)}</p></div>`:''}${linked.length?`<div class="linked-extra-reminder compact-linked"><strong>Extra collegati (${linked.length})</strong>${linked.map(e=>`<span class="linked-extra-category ${extraCategoryClass(e)}"><b>${esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}</span>`).join('')}</div>`:''}<div class="actions schedule-item-actions"><button class="secondary" data-map>Maps</button>${effectiveState==='da_fare'?`<button data-done>${openMultiDayIntervention(st?.id)?'Continua intervento':'Eseguito'}</button>`:''}${admin()&&effectiveState==='da_fare'?'<button class="danger-btn" data-delete-scheduled>Elimina</button>':''}</div>`;
       r.querySelector('[data-store-detail]').onclick=()=>showStoreDetail(st);r.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);
       r.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,item.id));r.querySelector('[data-delete-scheduled]')?.addEventListener('click',()=>deleteScheduleItem(item,st));c.appendChild(r)
     }}
@@ -2097,7 +2103,7 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
     if(!workers.length)throw new Error('Seleziona chi ha eseguito.');
     const files=[...donePhotoFiles],storeId=$('doneStoreId').value,scheduleItemId=$('doneScheduleItemId').value||null;
     const linkedToClose=scheduleItemId?linkedExtrasForScheduleItem(scheduleItemId):[];
-    const existingOpen=openMultiDayIntervention(storeId);
+    const existingOpen=await fetchOpenMultiDayIntervention(storeId);
     if(scheduleItemId&&!existingOpen){
       const localDuplicate=interventions.some(i=>i.schedule_item_id===scheduleItemId&&['in_attesa','convalidato'].includes(i.stato)&&!i.multi_day_open);
       if(localDuplicate)throw new Error('Questo passaggio è già stato chiuso o è in attesa di convalida.');
@@ -2115,6 +2121,16 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
       const ids=[...(existingOpen.schedule_item_ids||[])];if(scheduleItemId&&!ids.includes(scheduleItemId))ids.push(scheduleItemId);
       const update={data_fine:day,note:mergedNotes||null,next_visit_note:nextVisitNote||null,multi_day_open:continueAnotherDay,schedule_item_ids:ids,closed_by:continueAnotherDay?null:profile.id,closed_at:continueAnotherDay?null:new Date().toISOString(),stato:continueAnotherDay?existingOpen.stato:(admin()?'convalidato':'in_attesa'),convalidato_da:continueAnotherDay?existingOpen.convalidato_da:(admin()?profile.id:null),convalidato_il:continueAnotherDay?existingOpen.convalidato_il:(admin()?new Date().toISOString():null)};
       const r=await sb.from('interventions').update(update).eq('id',existingOpen.id).select().single();if(r.error)throw r.error;data=r.data;
+      if(!continueAnotherDay){
+        const {data:stillOpen,error:verifyError}=await sb.from('interventions').select('id').eq('store_id',storeId).eq('multi_day_open',true);
+        if(verifyError)throw verifyError;
+        if(stillOpen?.length){
+          const otherIds=stillOpen.map(x=>x.id);
+          const fix=await sb.from('interventions').update({multi_day_open:false,closed_by:profile.id,closed_at:new Date().toISOString()}).in('id',otherIds);
+          if(fix.error)throw fix.error;
+          otherIds.forEach(id=>{const j=interventions.findIndex(x=>x.id===id);if(j>=0)interventions[j]={...interventions[j],multi_day_open:false}});
+        }
+      }
       const existingWorkerIds=new Set(interventionWorkers.filter(w=>w.intervention_id===data.id).map(w=>w.profile_id));const missing=workers.filter(id=>!existingWorkerIds.has(id));if(missing.length){const ir=await sb.from('intervention_workers').insert(missing.map(profile_id=>({intervention_id:data.id,profile_id})));if(ir.error)throw ir.error}
       const idx=interventions.findIndex(x=>x.id===data.id);if(idx>=0)interventions[idx]=data;
     }else{

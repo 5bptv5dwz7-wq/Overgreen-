@@ -1021,9 +1021,26 @@ function buildStoreShareText(s){
 async function shareStoreExternally(s){
   if(!admin())return;
   const text=buildStoreShareText(s),title=`${clientLabel(s)} · ${s?.nome||'Sede'}`;
+  // Se sulla sede c'è un ticket Intesa incluso in un ordinario, condividiamo
+  // anche il PDF originale del ticket come allegato (oltre al testo/Maps).
+  const ticketExtras=extras.filter(e=>e.store_id===s?.id&&isIntesaOrdinaryTicket(e)&&!extraDone(e));
+  const ticketAttachments=ticketExtras
+    .map(e=>attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta'))
+    .filter(Boolean);
+  const files=[];
+  for(const a of ticketAttachments){
+    try{
+      const url=await signedAttachmentUrl(a),res=await fetch(url);
+      if(!res.ok)throw new Error('Download PDF ticket non riuscito');
+      const blob=await res.blob();
+      files.push(new File([blob],a.nome_file||'Ticket Intesa.pdf',{type:a.mime_type||blob.type||'application/pdf'}));
+    }catch(err){console.warn('PDF ticket non allegato',err)}
+  }
   try{
-    if(navigator.share){await navigator.share({title,text});return;}
-    await navigator.clipboard.writeText(text);toast('Dati sede copiati');
+    const payload={title,text};
+    if(files.length&&navigator.canShare?.({files}))payload.files=files;
+    if(navigator.share){await navigator.share(payload);return;}
+    await navigator.clipboard.writeText(text);toast(files.length?'Dati copiati · il browser non supporta allegati':'Dati sede copiati');
   }catch(err){
     if(err?.name==='AbortError')return;
     try{await navigator.clipboard.writeText(text);toast('Dati sede copiati')}catch{alert(text)}

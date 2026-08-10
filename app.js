@@ -808,7 +808,7 @@ function renderDashboard(){
           c.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);
           const shareBtn=c.querySelector('[data-share]');
           if(shareBtn){
-            prepareOrdinaryShareButton(shareBtn,linked);
+            prepareOrdinaryShareButton(shareBtn,linked,row.item.id);
             shareBtn.addEventListener('click',async()=>{
               if(shareBtn.dataset.shareMode==='prepare'){
                 await prepareOrdinaryShare(shareBtn,st,row.item.id,linked);
@@ -1074,6 +1074,7 @@ async function shareStoreExternally(s){
 
 const shareAttachmentFileCache=new Map();
 const shareAttachmentPending=new Map();
+const combinedOrdinaryShareCache=new Map();
 
 function shareAttachmentKey(a){return a?.id||a?.storage_path||''}
 
@@ -1087,11 +1088,7 @@ async function preloadShareAttachment(a){
     const res=await fetch(url);
     if(!res.ok)throw new Error('Download PDF non riuscito');
     const blob=await res.blob();
-    const file=new File(
-      [blob],
-      a.nome_file||'Richiesta extra.pdf',
-      {type:a.mime_type||blob.type||'application/pdf'}
-    );
+    const file=new File([blob],a.nome_file||'Richiesta extra.pdf',{type:'application/pdf'});
     shareAttachmentFileCache.set(key,file);
     shareAttachmentPending.delete(key);
     return file;
@@ -1109,7 +1106,12 @@ function linkedRequestAttachments(linked){
     .filter(Boolean);
 }
 
-function prepareOrdinaryShareButton(button,linked){
+function combinedOrdinaryShareKey(scheduleItemId,linked){
+  const ids=linkedRequestAttachments(linked).map(shareAttachmentKey).sort().join('|');
+  return `${scheduleItemId||'none'}::${ids}`;
+}
+
+function prepareOrdinaryShareButton(button,linked,scheduleItemId){
   if(!button)return;
   const pdfs=linkedRequestAttachments(linked);
   if(!pdfs.length){
@@ -1119,10 +1121,10 @@ function prepareOrdinaryShareButton(button,linked){
     button.dataset.shareMode='share';
     return;
   }
-  const allReady=pdfs.every(a=>shareAttachmentFileCache.has(shareAttachmentKey(a)));
+  const key=combinedOrdinaryShareKey(scheduleItemId,linked);
   button.disabled=false;
-  if(allReady){
-    button.textContent='Condividi PDF';
+  if(combinedOrdinaryShareCache.has(key)){
+    button.textContent='Condividi';
     button.dataset.shareReady='1';
     button.dataset.shareMode='share';
   }else{
@@ -1136,34 +1138,104 @@ function buildOrdinaryShareText(s,scheduleItemId){
   const linked=scheduleItemId?linkedExtrasForScheduleItem(scheduleItemId):[];
   const lines=[buildStoreShareText(s)];
   if(linked.length){
-    lines.push('','🔗 Extra collegati a questo intervento:');
+    lines.push('','EXTRA COLLEGATI A QUESTO INTERVENTO');
     for(const e of linked){
-      lines.push(`• ${e.titolo||'Extra'}${e.numero_target?` · Target ${e.numero_target}`:''}`);
+      lines.push(`- ${e.titolo||'Extra'}${e.numero_target?` · Target ${e.numero_target}`:''}`);
       if(String(e.descrizione||'').trim())lines.push(`  ${String(e.descrizione).trim()}`);
     }
   }
   return lines.join('\n');
 }
 
+function pdfSafeText(value){
+  return String(value??'')
+    .replace(/[^\x20-\x7EÀ-ÿ\n\r\t]/g,' ')
+    .replace(/\s+\n/g,'\n')
+    .replace(/[ \t]+/g,' ')
+    .trim();
+}
+
+function wrapPdfText(text,font,size,maxWidth){
+  const lines=[];
+  for(const rawLine of String(text||'').split(/\r?\n/)){
+    if(!rawLine.trim()){lines.push('');continue}
+    const words=rawLine.trim().split(/\s+/);
+    let line='';
+    for(const word of words){
+      const test=line?`${line} ${word}`:word;
+      if(font.widthOfTextAtSize(test,size)<=maxWidth)line=test;
+      else{
+        if(line)lines.push(line);
+        line=word;
+      }
+    }
+    if(line)lines.push(line);
+  }
+  return lines;
+}
+
+async function buildCombinedOrdinaryShareFile(s,scheduleItemId,linked){
+  if(!window.PDFLib)throw new Error('Libreria PDF non disponibile. Aggiorna la pagina e riprova.');
+  const {PDFDocument,StandardFonts,rgb}=PDFLib;
+  const output=await PDFDocument.create();
+  const font=await output.embedFont(StandardFonts.Helvetica);
+  const bold=await output.embedFont(StandardFonts.HelveticaBold);
+
+  // Prima pagina: tutte le informazioni necessarie al dipendente.
+  let page=output.addPage([595.28,841.89]);
+  const margin=46,maxWidth=595.28-margin*2;
+  let y=790;
+  page.drawText('OVERGREEN',{x:margin,y,size:19,font:bold,color:rgb(0.05,0.28,0.16)});
+  y-=34;
+  page.drawText(pdfSafeText(`${clientLabel(s)} - ${s?.nome||'Sede'}`),{x:margin,y,size:16,font:bold});
+  y-=28;
+
+  const text=pdfSafeText(buildOrdinaryShareText(s,scheduleItemId));
+  const lines=wrapPdfText(text,font,10.5,maxWidth);
+  for(const line of lines){
+    if(y<55){
+      page=output.addPage([595.28,841.89]);
+      y=790;
+    }
+    if(line){
+      page.drawText(line,{x:margin,y,size:10.5,font,color:rgb(0.08,0.08,0.08)});
+      y-=15;
+    }else{
+      y-=8;
+    }
+  }
+
+  // Accodiamo i PDF originali degli extra/ticket, senza modificarli.
+  const pdfAttachments=linkedRequestAttachments(linked);
+  for(const a of pdfAttachments){
+    const file=await preloadShareAttachment(a);
+    const bytes=await file.arrayBuffer();
+    const source=await PDFDocument.load(bytes,{ignoreEncryption:true});
+    const copied=await output.copyPages(source,source.getPageIndices());
+    copied.forEach(p=>output.addPage(p));
+  }
+
+  const bytes=await output.save();
+  const safeName=String(s?.nome||'Sede').replace(/[\\/:*?"<>|]+/g,'-').trim()||'Sede';
+  return new File([bytes],`Overgreen - ${safeName} - intervento.pdf`,{type:'application/pdf'});
+}
+
 async function prepareOrdinaryShare(button,s,scheduleItemId,linked){
   const pdfs=linkedRequestAttachments(linked);
   if(!pdfs.length){
-    prepareOrdinaryShareButton(button,linked);
+    prepareOrdinaryShareButton(button,linked,scheduleItemId);
     return true;
   }
   button.disabled=true;
-  button.textContent='Scarico PDF…';
+  button.textContent='Preparo PDF…';
   try{
-    await Promise.all(pdfs.map(preloadShareAttachment));
-    const ready=pdfs.every(a=>shareAttachmentFileCache.has(shareAttachmentKey(a)));
-    if(!ready)throw new Error('Uno o più PDF non sono stati scaricati');
-    const text=buildOrdinaryShareText(s,scheduleItemId);
-    try{await navigator.clipboard?.writeText(text)}catch(err){console.warn('Testo non copiato negli appunti',err)}
+    const combined=await buildCombinedOrdinaryShareFile(s,scheduleItemId,linked);
+    combinedOrdinaryShareCache.set(combinedOrdinaryShareKey(scheduleItemId,linked),combined);
     button.disabled=false;
-    button.textContent='Condividi PDF';
+    button.textContent='Condividi';
     button.dataset.shareReady='1';
     button.dataset.shareMode='share';
-    toast(pdfs.length===1?'PDF pronto · testo copiato negli appunti':`${pdfs.length} PDF pronti · testo copiato negli appunti`);
+    toast('Condivisione pronta');
     return true;
   }catch(err){
     button.disabled=false;
@@ -1181,25 +1253,21 @@ function shareOrdinaryExternally(s,scheduleItemId){
   const text=buildOrdinaryShareText(s,scheduleItemId);
   const title=`${clientLabel(s)} · ${s?.nome||'Sede'}`;
   const pdfs=linkedRequestAttachments(linked);
-  const files=pdfs.map(a=>shareAttachmentFileCache.get(shareAttachmentKey(a))).filter(Boolean);
 
   try{
     if(navigator.share){
-      if(files.length){
-        // Safari/iOS: per massima affidabilità condividiamo esclusivamente
-        // i file già in memoria. Il testo completo è stato copiato negli appunti
-        // durante "Prepara condivisione".
-        if(navigator.canShare&& !navigator.canShare({files})){
-          alert('Questo iPhone non consente la condivisione diretta di questo PDF. Il testo dell’intervento è già negli appunti.');
+      if(pdfs.length){
+        const file=combinedOrdinaryShareCache.get(combinedOrdinaryShareKey(scheduleItemId,linked));
+        if(!file){
+          toast('Prima premi Prepara condivisione');
           return;
         }
-        const promise=navigator.share({files});
-        promise?.catch(err=>{
-          if(err?.name!=='AbortError'){
-            console.error('Condivisione PDF non riuscita',err);
-            alert('Condivisione PDF non riuscita: '+(err?.message||String(err)));
-          }
-        });
+        if(navigator.canShare&&!navigator.canShare({files:[file]})){
+          alert('Questo dispositivo non consente la condivisione diretta del PDF.');
+          return;
+        }
+        const promise=navigator.share({files:[file]});
+        promise?.catch(err=>{if(err?.name!=='AbortError')alert('Condivisione non riuscita: '+(err?.message||String(err)))});
         return;
       }
       const promise=navigator.share({title,text});
@@ -1212,7 +1280,6 @@ function shareOrdinaryExternally(s,scheduleItemId){
     alert('Condivisione non riuscita: '+(err?.message||String(err)));
   }
 }
-
 
 function renderShareStorePicker(){
   if(!admin())return;

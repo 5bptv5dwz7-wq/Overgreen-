@@ -811,7 +811,7 @@ function renderDashboard(){
             prepareOrdinaryShareButton(shareBtn,linked);
             shareBtn.addEventListener('click',async()=>{
               if(shareBtn.dataset.shareMode==='prepare'){
-                await prepareOrdinaryShare(shareBtn,linked);
+                await prepareOrdinaryShare(shareBtn,st,row.item.id,linked);
                 return;
               }
               shareOrdinaryExternally(st,row.item.id);
@@ -1122,7 +1122,7 @@ function prepareOrdinaryShareButton(button,linked){
   const allReady=pdfs.every(a=>shareAttachmentFileCache.has(shareAttachmentKey(a)));
   button.disabled=false;
   if(allReady){
-    button.textContent='Condividi';
+    button.textContent='Condividi PDF';
     button.dataset.shareReady='1';
     button.dataset.shareMode='share';
   }else{
@@ -1132,7 +1132,20 @@ function prepareOrdinaryShareButton(button,linked){
   }
 }
 
-async function prepareOrdinaryShare(button,linked){
+function buildOrdinaryShareText(s,scheduleItemId){
+  const linked=scheduleItemId?linkedExtrasForScheduleItem(scheduleItemId):[];
+  const lines=[buildStoreShareText(s)];
+  if(linked.length){
+    lines.push('','🔗 Extra collegati a questo intervento:');
+    for(const e of linked){
+      lines.push(`• ${e.titolo||'Extra'}${e.numero_target?` · Target ${e.numero_target}`:''}`);
+      if(String(e.descrizione||'').trim())lines.push(`  ${String(e.descrizione).trim()}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+async function prepareOrdinaryShare(button,s,scheduleItemId,linked){
   const pdfs=linkedRequestAttachments(linked);
   if(!pdfs.length){
     prepareOrdinaryShareButton(button,linked);
@@ -1141,17 +1154,17 @@ async function prepareOrdinaryShare(button,linked){
   button.disabled=true;
   button.textContent='Scarico PDF…';
   try{
-    const results=await Promise.allSettled(pdfs.map(preloadShareAttachment));
+    await Promise.all(pdfs.map(preloadShareAttachment));
     const ready=pdfs.every(a=>shareAttachmentFileCache.has(shareAttachmentKey(a)));
-    if(ready){
-      button.disabled=false;
-      button.textContent='Condividi';
-      button.dataset.shareReady='1';
-      button.dataset.shareMode='share';
-      toast(pdfs.length===1?'PDF pronto · ora premi Condividi':`${pdfs.length} PDF pronti · ora premi Condividi`);
-      return true;
-    }
-    throw new Error('Uno o più PDF non sono stati scaricati');
+    if(!ready)throw new Error('Uno o più PDF non sono stati scaricati');
+    const text=buildOrdinaryShareText(s,scheduleItemId);
+    try{await navigator.clipboard?.writeText(text)}catch(err){console.warn('Testo non copiato negli appunti',err)}
+    button.disabled=false;
+    button.textContent='Condividi PDF';
+    button.dataset.shareReady='1';
+    button.dataset.shareMode='share';
+    toast(pdfs.length===1?'PDF pronto · testo copiato negli appunti':`${pdfs.length} PDF pronti · testo copiato negli appunti`);
+    return true;
   }catch(err){
     button.disabled=false;
     button.textContent='Riprova preparazione';
@@ -1165,43 +1178,38 @@ async function prepareOrdinaryShare(button,linked){
 function shareOrdinaryExternally(s,scheduleItemId){
   if(!admin())return;
   const linked=scheduleItemId?linkedExtrasForScheduleItem(scheduleItemId):[];
-  const lines=[buildStoreShareText(s)];
-  if(linked.length){
-    lines.push('','🔗 Extra collegati a questo intervento:');
-    for(const e of linked){
-      lines.push(`• ${e.titolo||'Extra'}${e.numero_target?` · Target ${e.numero_target}`:''}`);
-      if(String(e.descrizione||'').trim())lines.push(`  ${String(e.descrizione).trim()}`);
-    }
-  }
-  const text=lines.join('\n'),title=`${clientLabel(s)} · ${s?.nome||'Sede'}`;
+  const text=buildOrdinaryShareText(s,scheduleItemId);
+  const title=`${clientLabel(s)} · ${s?.nome||'Sede'}`;
   const pdfs=linkedRequestAttachments(linked);
   const files=pdfs.map(a=>shareAttachmentFileCache.get(shareAttachmentKey(a))).filter(Boolean);
 
-  // Se esiste un PDF ma non è ancora pronto, non aspettiamo qui:
-  // un await farebbe perdere a Safari/iOS il gesto utente necessario a navigator.share.
-  if(pdfs.length&&files.length!==pdfs.length){
-    pdfs.filter(a=>!shareAttachmentFileCache.has(shareAttachmentKey(a))).forEach(a=>preloadShareAttachment(a).catch(()=>{}));
-    toast('PDF in preparazione · ripremi Condividi tra un attimo');
-    return;
-  }
-
   try{
     if(navigator.share){
-      const payload={title,text};
-      if(files.length&&(!navigator.canShare||navigator.canShare({files})))payload.files=files;
-      const p=navigator.share(payload);
-      if(p?.catch)p.catch(err=>{
-        if(err?.name!=='AbortError'){
-          console.warn('Condivisione non riuscita',err);
-          navigator.clipboard?.writeText(text).then(()=>toast('Condivisione non disponibile · testo copiato')).catch(()=>alert(text));
+      if(files.length){
+        // Safari/iOS: per massima affidabilità condividiamo esclusivamente
+        // i file già in memoria. Il testo completo è stato copiato negli appunti
+        // durante "Prepara condivisione".
+        if(navigator.canShare&& !navigator.canShare({files})){
+          alert('Questo iPhone non consente la condivisione diretta di questo PDF. Il testo dell’intervento è già negli appunti.');
+          return;
         }
-      });
+        const promise=navigator.share({files});
+        promise?.catch(err=>{
+          if(err?.name!=='AbortError'){
+            console.error('Condivisione PDF non riuscita',err);
+            alert('Condivisione PDF non riuscita: '+(err?.message||String(err)));
+          }
+        });
+        return;
+      }
+      const promise=navigator.share({title,text});
+      promise?.catch(err=>{if(err?.name!=='AbortError')alert('Condivisione non riuscita: '+(err?.message||String(err)))});
       return;
     }
     navigator.clipboard?.writeText(text).then(()=>toast('Dati intervento copiati')).catch(()=>alert(text));
   }catch(err){
     if(err?.name==='AbortError')return;
-    navigator.clipboard?.writeText(text).then(()=>toast('Dati intervento copiati')).catch(()=>alert(text));
+    alert('Condivisione non riuscita: '+(err?.message||String(err)));
   }
 }
 

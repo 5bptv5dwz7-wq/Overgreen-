@@ -806,7 +806,17 @@ function renderDashboard(){
           c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span>${clientBadge(st)}<strong>${esc(st?.nome||'Punto vendita')}</strong>${(st?.indirizzo||st?.citta)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${done?'Completato':pending?'In attesa di convalida':'Da eseguire'}</small>${ordinaryNotes.length?`<div class="dashboard-job-notes"><strong>Note</strong>${ordinaryNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>{const pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');return `<div class="embedded-extra ${extraCategoryClass(e)} ${extraDone(e)?'is-done':'is-open'}" data-open-linked-extra="${e.id}" role="button" tabindex="0"><span>${extraDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span>${e.numero_target?`<small class="target-number">Target: ${esc(e.numero_target)}</small>`:''}<small>${extraDone(e)?'Completato':'Da fare insieme al passaggio'} · Tocca per aprire</small>${e.descrizione?`<p class="embedded-extra-description">${esc(e.descrizione)}</p>`:''}${pdf?`<button type="button" class="secondary compact-btn" data-open-linked-pdf="${e.id}">📄 Apri PDF</button>`:''}</div></div>`}).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${admin()?'<button class="secondary" data-share>Condividi</button>':''}${done?(admin()?'<button class="reopen-intervention-btn" data-reopen>↩ Riapri intervento</button>':'<button class="secondary" disabled>✓ Completato</button>'):pending?'<button class="secondary" disabled>⏳ In attesa</button>':'<button data-done>✓ Eseguito</button>'}</div>`;
           c.dataset.routeAddress=routeAddressForStore(st);
           c.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);
-          c.querySelector('[data-share]')?.addEventListener('click',()=>shareOrdinaryExternally(st,row.item.id));
+          const shareBtn=c.querySelector('[data-share]');
+          if(shareBtn){
+            prepareOrdinaryShareButton(shareBtn,linked);
+            shareBtn.addEventListener('click',async()=>{
+              if(shareBtn.dataset.shareMode==='prepare'){
+                await prepareOrdinaryShare(shareBtn,linked);
+                return;
+              }
+              shareOrdinaryExternally(st,row.item.id);
+            });
+          }
           c.querySelectorAll('[data-open-linked-extra]').forEach(el=>{
             const open=()=>openExtraById(el.dataset.openLinkedExtra);
             el.addEventListener('click',ev=>{if(ev.target.closest('[data-open-linked-pdf]'))return;open()});
@@ -1062,7 +1072,97 @@ async function shareStoreExternally(s){
   }
 }
 
-async function shareOrdinaryExternally(s,scheduleItemId){
+const shareAttachmentFileCache=new Map();
+const shareAttachmentPending=new Map();
+
+function shareAttachmentKey(a){return a?.id||a?.storage_path||''}
+
+async function preloadShareAttachment(a){
+  if(!a)return null;
+  const key=shareAttachmentKey(a);
+  if(shareAttachmentFileCache.has(key))return shareAttachmentFileCache.get(key);
+  if(shareAttachmentPending.has(key))return shareAttachmentPending.get(key);
+  const pending=(async()=>{
+    const url=await signedAttachmentUrl(a);
+    const res=await fetch(url);
+    if(!res.ok)throw new Error('Download PDF non riuscito');
+    const blob=await res.blob();
+    const file=new File(
+      [blob],
+      a.nome_file||'Richiesta extra.pdf',
+      {type:a.mime_type||blob.type||'application/pdf'}
+    );
+    shareAttachmentFileCache.set(key,file);
+    shareAttachmentPending.delete(key);
+    return file;
+  })().catch(err=>{
+    shareAttachmentPending.delete(key);
+    throw err;
+  });
+  shareAttachmentPending.set(key,pending);
+  return pending;
+}
+
+function linkedRequestAttachments(linked){
+  return (linked||[])
+    .map(e=>attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta'))
+    .filter(Boolean);
+}
+
+function prepareOrdinaryShareButton(button,linked){
+  if(!button)return;
+  const pdfs=linkedRequestAttachments(linked);
+  if(!pdfs.length){
+    button.disabled=false;
+    button.textContent='Condividi';
+    button.dataset.shareReady='1';
+    button.dataset.shareMode='share';
+    return;
+  }
+  const allReady=pdfs.every(a=>shareAttachmentFileCache.has(shareAttachmentKey(a)));
+  button.disabled=false;
+  if(allReady){
+    button.textContent='Condividi';
+    button.dataset.shareReady='1';
+    button.dataset.shareMode='share';
+  }else{
+    button.textContent='Prepara condivisione';
+    button.dataset.shareReady='0';
+    button.dataset.shareMode='prepare';
+  }
+}
+
+async function prepareOrdinaryShare(button,linked){
+  const pdfs=linkedRequestAttachments(linked);
+  if(!pdfs.length){
+    prepareOrdinaryShareButton(button,linked);
+    return true;
+  }
+  button.disabled=true;
+  button.textContent='Scarico PDF…';
+  try{
+    const results=await Promise.allSettled(pdfs.map(preloadShareAttachment));
+    const ready=pdfs.every(a=>shareAttachmentFileCache.has(shareAttachmentKey(a)));
+    if(ready){
+      button.disabled=false;
+      button.textContent='Condividi';
+      button.dataset.shareReady='1';
+      button.dataset.shareMode='share';
+      toast(pdfs.length===1?'PDF pronto · ora premi Condividi':`${pdfs.length} PDF pronti · ora premi Condividi`);
+      return true;
+    }
+    throw new Error('Uno o più PDF non sono stati scaricati');
+  }catch(err){
+    button.disabled=false;
+    button.textContent='Riprova preparazione';
+    button.dataset.shareReady='0';
+    button.dataset.shareMode='prepare';
+    alert('Impossibile preparare la condivisione: '+(err?.message||String(err)));
+    return false;
+  }
+}
+
+function shareOrdinaryExternally(s,scheduleItemId){
   if(!admin())return;
   const linked=scheduleItemId?linkedExtrasForScheduleItem(scheduleItemId):[];
   const lines=[buildStoreShareText(s)];
@@ -1074,31 +1174,34 @@ async function shareOrdinaryExternally(s,scheduleItemId){
     }
   }
   const text=lines.join('\n'),title=`${clientLabel(s)} · ${s?.nome||'Sede'}`;
-  const pdfAttachments=linked
-    .map(e=>attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta'))
-    .filter(Boolean);
-  const files=[];
-  for(const a of pdfAttachments){
-    try{
-      const url=await signedAttachmentUrl(a),res=await fetch(url);
-      if(!res.ok)throw new Error('Download PDF non riuscito');
-      const blob=await res.blob();
-      files.push(new File([blob],a.nome_file||'Richiesta extra.pdf',{type:a.mime_type||blob.type||'application/pdf'}));
-    }catch(err){console.warn('PDF extra non allegato alla condivisione',err)}
+  const pdfs=linkedRequestAttachments(linked);
+  const files=pdfs.map(a=>shareAttachmentFileCache.get(shareAttachmentKey(a))).filter(Boolean);
+
+  // Se esiste un PDF ma non è ancora pronto, non aspettiamo qui:
+  // un await farebbe perdere a Safari/iOS il gesto utente necessario a navigator.share.
+  if(pdfs.length&&files.length!==pdfs.length){
+    pdfs.filter(a=>!shareAttachmentFileCache.has(shareAttachmentKey(a))).forEach(a=>preloadShareAttachment(a).catch(()=>{}));
+    toast('PDF in preparazione · ripremi Condividi tra un attimo');
+    return;
   }
+
   try{
     if(navigator.share){
-      // Su iOS il foglio di condivisione può fallire se uno degli allegati
-      // non è supportato: proviamo prima con i file, poi ricadiamo sul solo testo.
-      if(files.length&&(!navigator.canShare||navigator.canShare({files}))){
-        try{await navigator.share({title,text,files});return}catch(err){if(err?.name==='AbortError')return;console.warn('Condivisione con PDF non riuscita, riprovo senza allegati',err)}
-      }
-      await navigator.share({title,text});return;
+      const payload={title,text};
+      if(files.length&&(!navigator.canShare||navigator.canShare({files})))payload.files=files;
+      const p=navigator.share(payload);
+      if(p?.catch)p.catch(err=>{
+        if(err?.name!=='AbortError'){
+          console.warn('Condivisione non riuscita',err);
+          navigator.clipboard?.writeText(text).then(()=>toast('Condivisione non disponibile · testo copiato')).catch(()=>alert(text));
+        }
+      });
+      return;
     }
-    await navigator.clipboard.writeText(text);toast('Dati intervento copiati');
+    navigator.clipboard?.writeText(text).then(()=>toast('Dati intervento copiati')).catch(()=>alert(text));
   }catch(err){
     if(err?.name==='AbortError')return;
-    try{await navigator.clipboard.writeText(text);toast('Dati intervento copiati')}catch{alert(text)}
+    navigator.clipboard?.writeText(text).then(()=>toast('Dati intervento copiati')).catch(()=>alert(text));
   }
 }
 

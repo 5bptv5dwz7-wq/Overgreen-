@@ -1865,13 +1865,14 @@ async function generateExtraClosurePdf(e,button){
 
 function extraCard(e){
   const st=stores.find(s=>s.id===e.store_id),pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta'),reportEurospin=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),reportOvergreen=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen'),pics=attachments.filter(a=>a.extra_id===e.id&&a.tipo==='foto_generica');
-  const showClosure=['in_attesa','completato'].includes(e.stato),c=document.createElement('article');
+  const showClosure=['in_attesa','completato'].includes(e.stato),partialOpen=e.stato==='da_integrare',showProgress=showClosure||partialOpen,c=document.createElement('article');
   const assignedNames=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean);
   const isAssignedToMe=extraWorkers.some(w=>w.extra_id===e.id&&w.profile_id===profile.id);
   const assignmentLabel=`Assegnato a: ${assignedNames.join(' + ')||'Da assegnare'}`;
+  const stateLabel=partialOpen?'Parziale · da continuare':e.stato.replaceAll('_',' ');
   c.className=`card extra-card ${extraCategoryClass(e)} ${e.stato}`;
   c.dataset.extraCardId=e.id;
-  c.innerHTML=`<div class="extra-card-heading"><div>${clientBadge(e)}<h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3></div><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span></div><p><strong>${esc(e.titolo)}</strong></p>${e.numero_target?`<p class="target-number"><strong>Numero target:</strong> ${esc(e.numero_target)}</p>`:''}${e.descrizione?`<p>${esc(e.descrizione)}</p>`:''}${deadlineLabel(e)}<div class="extra-date-summary"><p><strong>Richiesta:</strong> ${fmt(extraRequestDate(e))}</p><span class="elapsed-days">⏱ ${esc(elapsedDaysLabel(e))}</span><p><strong>Esecuzione:</strong> ${e.giorno_intervento?fmt(e.giorno_intervento):'Da programmare'}</p></div>${e.con_ordinario?'<p class="linked-ordinary-label">🔗 Da fare insieme al passaggio ordinario</p>':''}<p class="muted">${esc(e.stato.replaceAll('_',' '))}</p><p class="assignment-label"><strong>${esc(assignmentLabel)}</strong></p>${showClosure?`<div class="extra-closure-details"><div class="closure-stamp">🕒 Chiuso: ${esc(closureText(e))}</div><strong>Note finali</strong><div class="history-note ${e.note_lorenzo?'':'muted'}">${esc(e.note_lorenzo||'Nessuna nota inserita')}</div><div class="pending-photo-head"><strong>Foto del lavoro</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-extra-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div>`:''}<div class="actions">${pdf?'<button class="secondary" data-pdf>Apri PDF richiesta</button>':''}${showClosure&&reportEurospin?'<button class="secondary" data-report-eurospin>File Eurospin</button>':''}${showClosure&&reportOvergreen?'<button class="secondary" data-report-overgreen>File Overgreen</button>':''}${showClosure&&!reportEurospin?'<span class="muted">File Eurospin non presente</span>':''}${showClosure&&!reportOvergreen?'<span class="muted">File Overgreen non presente</span>':''}${e.stato==='completato'?'<button data-generate-closure>Genera chiusura</button>':''}${admin()&&e.stato==='completato'?'<button class="secondary" data-edit-closure>Modifica chiusura</button>':''}${['programmato','ricevuto','da_integrare'].includes(e.stato)&&(admin()||isAssignedToMe)?'<button data-close-extra>Chiudi lavoro</button>':''}${admin()&&e.stato==='in_attesa'?'<button data-approve-extra>Convalida</button>':''}${admin()?'<button class="secondary" data-edit-extra>Modifica</button><button class="danger-btn" data-delete-extra>Elimina</button>':''}</div>`;
+  c.innerHTML=`<div class="extra-card-heading"><div>${clientBadge(e)}<h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3></div><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span></div><p><strong>${esc(e.titolo)}</strong></p>${e.numero_target?`<p class="target-number"><strong>Numero target:</strong> ${esc(e.numero_target)}</p>`:''}${e.descrizione?`<p>${esc(e.descrizione)}</p>`:''}${deadlineLabel(e)}<div class="extra-date-summary"><p><strong>Richiesta:</strong> ${fmt(extraRequestDate(e))}</p><span class="elapsed-days">⏱ ${esc(elapsedDaysLabel(e))}</span><p><strong>Esecuzione:</strong> ${e.giorno_intervento?fmt(e.giorno_intervento):'Da programmare'}</p></div>${e.con_ordinario?'<p class="linked-ordinary-label">🔗 Da fare insieme al passaggio ordinario</p>':''}${partialOpen?'<span class="extra-partial-badge">↪ Parziale · da continuare</span>':`<p class="muted">${esc(stateLabel)}</p>`}<p class="assignment-label"><strong>${esc(assignmentLabel)}</strong></p>${showProgress?`<div class="extra-closure-details">${showClosure?`<div class="closure-stamp">🕒 Chiuso: ${esc(closureText(e))}</div><strong>Note finali</strong>`:'<strong>Avanzamento parziale</strong>'}<div class="history-note ${e.note_lorenzo?'':'muted'}">${esc(e.note_lorenzo||(partialOpen?'Nessuna nota parziale inserita':'Nessuna nota inserita'))}</div><div class="pending-photo-head"><strong>Foto del lavoro</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-extra-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div>`:''}<div class="actions">${pdf?'<button class="secondary" data-pdf>Apri PDF richiesta</button>':''}${showClosure&&reportEurospin?'<button class="secondary" data-report-eurospin>File Eurospin</button>':''}${showProgress&&reportOvergreen?'<button class="secondary" data-report-overgreen>File Overgreen</button>':''}${showClosure&&!reportEurospin?'<span class="muted">File Eurospin non presente</span>':''}${showClosure&&!reportOvergreen?'<span class="muted">File Overgreen non presente</span>':''}${e.stato==='completato'?'<button data-generate-closure>Genera chiusura</button>':''}${admin()&&e.stato==='completato'?'<button class="secondary" data-edit-closure>Modifica chiusura</button>':''}${['programmato','ricevuto','da_integrare'].includes(e.stato)&&(admin()||isAssignedToMe)?`<button data-close-extra>${partialOpen?'Continua / chiudi lavoro':'Chiudi lavoro'}</button>`:''}${admin()&&e.stato==='in_attesa'?'<button data-approve-extra>Convalida</button>':''}${admin()?'<button class="secondary" data-edit-extra>Modifica</button><button class="danger-btn" data-delete-extra>Elimina</button>':''}</div>`;
   c.querySelector('[data-pdf]')?.addEventListener('click',()=>openAttachment(pdf));
   c.querySelector('[data-report-eurospin]')?.addEventListener('click',()=>openAttachment(reportEurospin));
   c.querySelector('[data-report-overgreen]')?.addEventListener('click',()=>openAttachment(reportOvergreen));
@@ -1881,7 +1882,7 @@ function extraCard(e){
   c.querySelector('[data-approve-extra]')?.addEventListener('click',()=>approveExtra(e));
   c.querySelector('[data-edit-extra]')?.addEventListener('click',()=>openExtraEdit(e));
   c.querySelector('[data-delete-extra]')?.addEventListener('click',()=>deleteExtra(e));
-  if(showClosure&&pics.length)hydrateExtraPhotos(c,pics);
+  if(showProgress&&pics.length)hydrateExtraPhotos(c,pics);
   return c;
 }
 
@@ -2189,17 +2190,31 @@ function openExtraClosureDialog(extra,fromOrdinary=false){
   if(!extra)return;
   $('closeExtraForm').reset();
   closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
-  $('closeExtraId').value=extra.id;$('closeExtraForm').dataset.profile=closureProfile(extra);const euro=closureProfile(extra)==='eurospin';$('closeEurospinFields').classList.toggle('hidden',!euro);$('closeIntesaFields').classList.toggle('hidden',closureProfile(extra)!=='intesa');$('reportEurospin').required=euro;$('reportOvergreen').required=euro;$('closeExtraTicket').required=closureProfile(extra)==='intesa';
+  $('closeExtraId').value=extra.id;
+  $('closeExtraForm').dataset.profile=closureProfile(extra);
+  const euro=closureProfile(extra)==='eurospin',intesa=closureProfile(extra)==='intesa';
+  $('closeEurospinFields').classList.toggle('hidden',!euro);
+  $('closeIntesaFields').classList.toggle('hidden',!intesa);
+  // I requisiti della chiusura definitiva vengono verificati via JS: nel parziale
+  // il file Eurospin non deve essere obbligatorio né caricato.
+  $('reportEurospin').required=false;$('reportOvergreen').required=false;$('closeExtraTicket').required=false;
+  $('closeExtraNotes').value=extra.note_lorenzo||'';
+  const existingOvergreen=attachments.find(a=>a.extra_id===extra.id&&a.tipo==='rapportino_overgreen');
+  const overInfo=$('closeExtraExistingOvergreen');
+  if(overInfo){overInfo.classList.toggle('hidden',!existingOvergreen);overInfo.textContent=existingOvergreen?`✓ File Overgreen già presente: ${existingOvergreen.nome_file||'documento caricato'}`:''}
+  const partialStatus=$('closeExtraPartialStatus');
+  if(partialStatus){const isPartial=extra.stato==='da_integrare';partialStatus.classList.toggle('hidden',!isPartial);partialStatus.innerHTML=isPartial?`<strong>↪ Extra già salvato come parziale</strong><p>Puoi aggiungere altre foto o un nuovo file Overgreen e lasciarlo ancora aperto, oppure eseguire ora la chiusura definitiva.</p>`:''}
   const st=stores.find(s=>s.id===extra.store_id);
   const title=$('closeExtraTitle');
-  if(title)title.textContent=fromOrdinary?`Completa extra · ${extra.titolo}`:'Chiudi extra';
+  if(title)title.textContent=fromOrdinary?`Completa extra · ${extra.titolo}`:(extra.stato==='da_integrare'?'Continua extra':'Chiudi extra');
   const info=$('closeExtraLinkedInfo');
   if(info){
     info.classList.toggle('hidden',!fromOrdinary);
-    info.innerHTML=fromOrdinary?`<strong>Extra collegato al passaggio ordinario</strong><span>${esc(st?.nome||extra.nome_esterno||'')} · ${esc(extra.titolo)}</span><small>Carica tutti i documenti richiesti, esattamente come nella chiusura singola dell’extra.</small>`:'';
+    info.innerHTML=fromOrdinary?`<strong>Extra collegato al passaggio ordinario</strong><span>${esc(st?.nome||extra.nome_esterno||'')} · ${esc(extra.titolo)}</span><small>Se oggi non è concluso puoi salvarlo come parziale: resterà aperto e potrai proseguirlo in seguito.</small>`:'';
   }
   openDialog('closeExtraDialog');
 }
+
 function openNextCombinedExtraClosure(){
   const next=combinedExtraClosureQueue.shift();
   if(!next)return;
@@ -2235,6 +2250,52 @@ $('closeExtraPhotos').onchange=e=>{addCloseExtraPhotos(e.target.files);e.target.
 $('closeExtraCameraPhoto').onchange=e=>{addCloseExtraPhotos(e.target.files);e.target.value=''};
 $('clearCloseExtraPhotos').onclick=()=>{closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection()};
 
+async function saveExtraPartial(){
+  const btn=$('closeExtraPartialBtn');if(!btn)return;
+  const oldText=btn.textContent;btn.disabled=true;btn.textContent='Salvo parziale…';
+  const uploadedPaths=[];
+  try{
+    const id=$('closeExtraId').value,extra=extras.find(x=>x.id===id),profileMode=$('closeExtraForm').dataset.profile||'eurospin';
+    if(!extra)throw new Error('Extra non trovato. Aggiorna i dati e riprova.');
+    const notes=$('closeExtraNotes').value.trim()||null,photos=[...closeExtraPhotoFiles];
+    const overgreenFile=profileMode==='eurospin'?$('reportOvergreen').files[0]:null;
+    if(profileMode==='eurospin'&&$('reportEurospin').files[0])throw new Error('Nel parziale non caricare il rapportino Eurospin: va inserito solo alla chiusura definitiva.');
+
+    if(overgreenFile){
+      btn.textContent='Carico file Overgreen…';
+      const file=overgreenFile.type?.startsWith('image/')?await compressImage(overgreenFile):overgreenFile;
+      const safe=(file.name||overgreenFile.name||'overgreen.pdf').replace(/[^a-zA-Z0-9._-]/g,'-');
+      const path=`extra/${id}/rapportino_overgreen-${Date.now()}-${safe}`;
+      await uploadFile(path,file);uploadedPaths.push(path);
+      const previous=attachments.filter(a=>a.extra_id===id&&a.tipo==='rapportino_overgreen');
+      const added=await addAttachment({tipo:'rapportino_overgreen',extra_id:id,storage_path:path,nome_file:file.name||overgreenFile.name,mime_type:file.type||overgreenFile.type,dimensione_bytes:file.size,caricato_da:profile.id});
+      if(!added)throw new Error('Registrazione del file Overgreen non riuscita.');
+      for(const old of previous){await sb.storage.from('documenti').remove([old.storage_path]);await sb.from('attachments').delete().eq('id',old.id)}
+    }
+
+    for(let n=0;n<photos.length;n++){
+      btn.textContent=`Carico foto ${n+1}/${photos.length}…`;
+      const compressed=await compressImage(photos[n]);
+      const safe=(compressed.name||photos[n].name||`foto-${n+1}.jpg`).replace(/[^a-zA-Z0-9._-]/g,'-');
+      const path=`extra/${id}/foto-${Date.now()}-${Math.random().toString(36).slice(2)}-${safe}`;
+      await uploadFile(path,compressed);uploadedPaths.push(path);
+      const added=await addAttachment({tipo:'foto_generica',extra_id:id,storage_path:path,nome_file:compressed.name||photos[n].name,mime_type:compressed.type||'image/jpeg',dimensione_bytes:compressed.size,caricato_da:profile.id});
+      if(!added)throw new Error('Registrazione foto non riuscita.');
+    }
+
+    const {error}=await sb.from('extras').update({stato:'da_integrare',note_lorenzo:notes,closed_by:null,closed_at:null}).eq('id',id);
+    if(error)throw error;
+    $('closeExtraDialog').close();$('closeExtraForm').reset();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
+    toast(`Parziale salvato · extra ancora aperto${photos.length?' · '+photos.length+' foto':''}${overgreenFile?' · file Overgreen':''}`);
+    await loadAll();
+    if(combinedExtraClosureQueue.length)setTimeout(()=>openNextCombinedExtraClosure(),250);
+  }catch(err){
+    if(uploadedPaths.length)try{await sb.storage.from('documenti').remove(uploadedPaths)}catch(cleanErr){console.warn('Pulizia upload incompleta',cleanErr)}
+    alert(err.message||String(err));
+  }finally{btn.disabled=false;btn.textContent=oldText}
+}
+$('closeExtraPartialBtn')?.addEventListener('click',saveExtraPartial);
+
 $('closeExtraForm').onsubmit=async e=>{
   e.preventDefault();
   const btn=e.submitter,oldText=btn.textContent;
@@ -2245,8 +2306,13 @@ $('closeExtraForm').onsubmit=async e=>{
     let notes=$('closeExtraNotes').value.trim()||null;
     if(ticket)notes=`Ticket/ordine: ${ticket}${notes?'\n'+notes:''}`;
     const photos=[...closeExtraPhotoFiles];
-    const reports=profileMode==='eurospin'?[['rapportino_eurospin',$('reportEurospin').files[0]],['rapportino_overgreen',$('reportOvergreen').files[0]]]:profileMode==='intesa'&&$('closeExtraGenericDoc').files[0]?[['verbale_cliente',$('closeExtraGenericDoc').files[0]]]:[];
-    if(profileMode==='eurospin'&&reports.some(([,file])=>!file))throw new Error('Servono entrambi i rapportini Eurospin.');
+    const existingEurospin=attachments.some(a=>a.extra_id===id&&a.tipo==='rapportino_eurospin');
+    const existingOvergreen=attachments.some(a=>a.extra_id===id&&a.tipo==='rapportino_overgreen');
+    const newEurospin=profileMode==='eurospin'?$('reportEurospin').files[0]:null;
+    const newOvergreen=profileMode==='eurospin'?$('reportOvergreen').files[0]:null;
+    const reports=profileMode==='eurospin'?[['rapportino_eurospin',newEurospin],['rapportino_overgreen',newOvergreen]].filter(([,file])=>!!file):profileMode==='intesa'&&$('closeExtraGenericDoc').files[0]?[['verbale_cliente',$('closeExtraGenericDoc').files[0]]]:[];
+    if(profileMode==='eurospin'&&!newEurospin&&!existingEurospin)throw new Error('Per la chiusura definitiva serve il rapportino Eurospin.');
+    if(profileMode==='eurospin'&&!newOvergreen&&!existingOvergreen)throw new Error('Per la chiusura definitiva serve anche il file Overgreen. Se lo hai già caricato in un parziale non devi ricaricarlo.');
     if(profileMode==='intesa'&&!ticket)throw new Error('Inserisci il numero ticket o ordine.');
     if(profileMode==='intesa'&&!photos.length)throw new Error('Per Intesa serve almeno una foto.');
 

@@ -802,8 +802,8 @@ function renderDashboard(){
           c.className=`dashboard-line-job ordinary ${done?'is-done':'is-open'}`;
           const pending=itemPending(row.item);
           const ordinaryNotes=[row.schedule?.nota_generale,st?.note].filter(v=>String(v||'').trim());
-          c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span>${clientBadge(st)}<strong>${esc(st?.nome||'Punto vendita')}</strong>${(st?.indirizzo||st?.citta)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${done?'Completato':pending?'In attesa di convalida':'Da eseguire'}</small>${ordinaryNotes.length?`<div class="dashboard-job-notes"><strong>Note</strong>${ordinaryNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>`<div class="embedded-extra ${extraCategoryClass(e)} ${extraDone(e)?'is-done':'is-open'}"><span>${extraDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span>${e.numero_target?`<small class="target-number">Target: ${esc(e.numero_target)}</small>`:''}<small>${extraDone(e)?'Completato':'Da fare insieme al passaggio'}</small>${e.descrizione?`<p class="embedded-extra-description">${esc(e.descrizione)}</p>`:''}</div></div>`).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${done?(admin()?'<button class="reopen-intervention-btn" data-reopen>↩ Riapri intervento</button>':'<button class="secondary" disabled>✓ Completato</button>'):pending?'<button class="secondary" disabled>⏳ In attesa</button>':'<button data-done>✓ Eseguito</button>'}</div>`;
-          c.dataset.routeAddress=routeAddressForStore(st);c.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,row.item.id));c.querySelector('[data-reopen]')?.addEventListener('click',()=>reopenOrdinaryIntervention(row.item,st));list.appendChild(c)
+          c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span>${clientBadge(st)}<strong>${esc(st?.nome||'Punto vendita')}</strong>${(st?.indirizzo||st?.citta)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${done?'Completato':pending?'In attesa di convalida':'Da eseguire'}</small>${ordinaryNotes.length?`<div class="dashboard-job-notes"><strong>Note</strong>${ordinaryNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>`<div class="embedded-extra ${extraCategoryClass(e)} ${extraDone(e)?'is-done':'is-open'}"><span>${extraDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span>${e.numero_target?`<small class="target-number">Target: ${esc(e.numero_target)}</small>`:''}<small>${extraDone(e)?'Completato':'Da fare insieme al passaggio'}</small>${e.descrizione?`<p class="embedded-extra-description">${esc(e.descrizione)}</p>`:''}</div></div>`).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${admin()?'<button class="secondary" data-share>Condividi</button>':''}${done?(admin()?'<button class="reopen-intervention-btn" data-reopen>↩ Riapri intervento</button>':'<button class="secondary" disabled>✓ Completato</button>'):pending?'<button class="secondary" disabled>⏳ In attesa</button>':'<button data-done>✓ Eseguito</button>'}</div>`;
+          c.dataset.routeAddress=routeAddressForStore(st);c.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);c.querySelector('[data-share]')?.addEventListener('click',()=>shareStoreExternally(st));c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,row.item.id));c.querySelector('[data-reopen]')?.addEventListener('click',()=>reopenOrdinaryIntervention(row.item,st));list.appendChild(c)
         }else{
           const e=job.extra,st=stores.find(s=>s.id===e.store_id),done=extraDone(e),urgent=e.urgente===true||e.priorita==='urgente'||elapsedDaysFrom(extraRequestDate(e))>=7,c=document.createElement('article');
           c.className=`dashboard-line-job standalone-extra ${extraCategoryClass(e)} ${done?'is-done':urgent?'is-urgent':'is-open'}`;
@@ -985,6 +985,70 @@ function openGoogleMaps(address,name='',city=''){
   const query=encodeURIComponent(destination);
   // Il link universale apre Google Maps se installato, altrimenti la versione web.
   window.location.href=`https://www.google.com/maps/search/?api=1&query=${query}`;
+}
+
+function storeMapsShareUrl(s){
+  const destination=[s?.indirizzo,s?.citta].map(v=>String(v||'').trim()).filter(Boolean).join(', ')||`${clientLabel(s)} ${s?.nome||''}`.trim();
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destination)}`;
+}
+function storeSiteTypeLabel(s){
+  const type=String(s?.site_type||'punto_vendita');
+  return type==='filiale'?'Filiale':type==='punto_vendita'?'Punto vendita':type.replaceAll('_',' ');
+}
+function buildStoreShareText(s){
+  const lines=[
+    `📍 ${clientLabel(s)} · ${storeSiteTypeLabel(s)}`,
+    `🏪 ${s?.nome||'Sede'}`
+  ];
+  const address=[s?.indirizzo,s?.citta].filter(Boolean).join(', ');
+  if(address)lines.push(`Indirizzo: ${address}`);
+  if(String(s?.note||'').trim())lines.push('',`📝 Note: ${String(s.note).trim()}`);
+  if(String(s?.next_visit_note||'').trim())lines.push('',`⚠️ Da fare al prossimo passaggio: ${String(s.next_visit_note).trim()}`);
+  const openExtras=extras.filter(e=>e.store_id===s?.id&&!extraDone(e));
+  if(openExtras.length){
+    lines.push('','🔧 Extra aperti:');
+    for(const e of openExtras){
+      let row=`• ${extraCategoryLabel(e)} · ${e.titolo||'Extra'}`;
+      if(e.numero_target)row+=` · Target ${e.numero_target}`;
+      lines.push(row);
+      if(String(e.descrizione||'').trim())lines.push(`  ${String(e.descrizione).trim()}`);
+    }
+  }
+  lines.push('',`🗺 Maps: ${storeMapsShareUrl(s)}`);
+  return lines.join('\n');
+}
+async function shareStoreExternally(s){
+  if(!admin())return;
+  const text=buildStoreShareText(s),title=`${clientLabel(s)} · ${s?.nome||'Sede'}`;
+  try{
+    if(navigator.share){await navigator.share({title,text});return;}
+    await navigator.clipboard.writeText(text);toast('Dati sede copiati');
+  }catch(err){
+    if(err?.name==='AbortError')return;
+    try{await navigator.clipboard.writeText(text);toast('Dati sede copiati')}catch{alert(text)}
+  }
+}
+
+function renderShareStorePicker(){
+  if(!admin())return;
+  const box=$('shareStoreList');if(!box)return;
+  const q=($('shareStoreSearch')?.value||'').trim().toLowerCase();
+  const list=[...stores].filter(s=>`${clientLabel(s)} ${s.site_type||''} ${s.nome||''} ${s.indirizzo||''} ${s.citta||''}`.toLowerCase().includes(q)).sort((a,b)=>String(a.nome||'').localeCompare(String(b.nome||''),'it'));
+  box.innerHTML='';
+  if(!list.length){box.innerHTML='<p class="muted">Nessuna sede trovata.</p>';return;}
+  for(const s of list){
+    const row=document.createElement('article');row.className='card';
+    row.innerHTML=`<div class="card-top"><div>${clientBadge(s)}<h3>${esc(s.nome||'Sede')}</h3><p class="muted">${esc([s.indirizzo,s.citta].filter(Boolean).join(', '))}</p></div></div><div class="actions"><button class="secondary" data-map>Maps</button><button data-share>📤 Condividi</button></div>`;
+    row.querySelector('[data-map]').onclick=()=>openGoogleMaps(s.indirizzo,clientLabel(s)+' '+(s.nome||''),s.citta);
+    row.querySelector('[data-share]').onclick=()=>shareStoreExternally(s);
+    box.appendChild(row);
+  }
+}
+function openShareStorePicker(){
+  if(!admin())return;
+  if($('shareStoreSearch'))$('shareStoreSearch').value='';
+  renderShareStorePicker();
+  openDialog('shareStoreDialog');
 }
 // Alias mantenuto per compatibilità con eventuali richiami meno recenti.
 const openAppleMaps=openGoogleMaps;
@@ -1417,8 +1481,8 @@ function renderStores(){
  let list=clientStores.filter(s=>`${s.nome} ${s.citta||''} ${s.indirizzo||''} ${clientLabel(s)}`.toLowerCase().includes(q));
  if(storeFilter!=='all')list=list.filter(s=>storeFilter==='today'?s.ultimo_passaggio===today():storeFilter==='urgent'?isUrgentStore(s):status(s)===storeFilter);
  list.sort((a,b)=>sort==='alpha'?a.nome.localeCompare(b.nome,'it'):(days(b.ultimo_passaggio)??9999)-(days(a.ultimo_passaggio)??9999));
- $('storesList').innerHTML='';for(const s of list){const n=days(s.ultimo_passaggio),pending=interventions.some(i=>i.store_id===s.id&&i.stato==='in_attesa'),storeState=status(s),programmed=storeState==='scheduled';const c=document.createElement('article');c.className=`card store-card ${storeState}`;c.innerHTML=`<div class="status-bar"></div><div><div class="card-top"><div><h3 data-detail>${esc(s.nome)}</h3><p class="muted">${esc(s.citta||s.indirizzo||'')}</p></div><div class="days">${n===null?'—':n+' gg'}</div></div>${programmed?'<p class="programmed-label">📅 In programma</p>':''}${pending?'<p class="pending">⏳ In attesa di convalida</p>':''}<p class="muted">Ultimo passaggio: ${fmt(s.ultimo_passaggio)}</p><div class="actions"><button class="secondary" data-map>Maps</button><button data-history>Storico</button>${!pending?'<button data-done>Eseguito</button>':''}${admin()?'<button class="secondary" data-edit>Modifica</button>':''}</div></div>`;
- c.querySelector('[data-detail]').onclick=()=>showStoreDetail(s);c.querySelector('[data-map]').onclick=()=>openGoogleMaps(s.indirizzo,clientLabel(s)+' '+s.nome,s.citta);c.querySelector('[data-history]').onclick=()=>showHistory(s);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(s));c.querySelector('[data-edit]')?.addEventListener('click',()=>openStore(s));$('storesList').appendChild(c)}
+ $('storesList').innerHTML='';for(const s of list){const n=days(s.ultimo_passaggio),pending=interventions.some(i=>i.store_id===s.id&&i.stato==='in_attesa'),storeState=status(s),programmed=storeState==='scheduled';const c=document.createElement('article');c.className=`card store-card ${storeState}`;c.innerHTML=`<div class="status-bar"></div><div><div class="card-top"><div><h3 data-detail>${esc(s.nome)}</h3><p class="muted">${esc(s.citta||s.indirizzo||'')}</p></div><div class="days">${n===null?'—':n+' gg'}</div></div>${programmed?'<p class="programmed-label">📅 In programma</p>':''}${pending?'<p class="pending">⏳ In attesa di convalida</p>':''}<p class="muted">Ultimo passaggio: ${fmt(s.ultimo_passaggio)}</p><div class="actions"><button class="secondary" data-map>Maps</button><button data-history>Storico</button>${!pending?'<button data-done>Eseguito</button>':''}${admin()?'<button class="secondary" data-share>Condividi</button><button class="secondary" data-edit>Modifica</button>':''}</div></div>`;
+ c.querySelector('[data-detail]').onclick=()=>showStoreDetail(s);c.querySelector('[data-map]').onclick=()=>openGoogleMaps(s.indirizzo,clientLabel(s)+' '+s.nome,s.citta);c.querySelector('[data-history]').onclick=()=>showHistory(s);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(s));c.querySelector('[data-share]')?.addEventListener('click',()=>shareStoreExternally(s));c.querySelector('[data-edit]')?.addEventListener('click',()=>openStore(s));$('storesList').appendChild(c)}
  $('totalCount').textContent=clientStores.length;
  $('dueCount').textContent=clientStores.filter(s=>status(s)==='due').length;
  $('warningCount').textContent=clientStores.filter(s=>status(s)==='warning').length;
@@ -2475,3 +2539,5 @@ document.addEventListener('DOMContentLoaded',()=>{
   $('clientReportPreviewDialog')?.addEventListener('cancel',e=>{e.preventDefault();closeClientReportPreview()});
   $('clientReportPreviewDialog')?.addEventListener('close',()=>{if(clientReportPreviewUrl){URL.revokeObjectURL(clientReportPreviewUrl);clientReportPreviewUrl=''}window.currentClientReportFile=null});
 });
+
+$('dashboardShareStore')?.addEventListener('click',openShareStorePicker);$('shareStoreSearch')?.addEventListener('input',renderShareStorePicker);

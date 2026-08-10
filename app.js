@@ -2224,8 +2224,70 @@ $('archiveUploadForm')?.addEventListener('submit',async e=>{
 });
 
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeDialog(b));$('helpBtn').onclick=openHelp;document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));document.querySelectorAll('[data-client-filter]').forEach(b=>b.onclick=()=>{storeClientFilter=b.dataset.clientFilter;document.querySelectorAll('[data-client-filter]').forEach(x=>x.classList.toggle('active',x===b));renderStores()});document.querySelectorAll('[data-extra-client]').forEach(b=>b.onclick=()=>{extraClientFilter=b.dataset.extraClient;document.querySelectorAll('[data-extra-client]').forEach(x=>x.classList.toggle('active',x===b));renderExtras()});document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{storeFilter=b.dataset.filter;renderStores()});
-$('globalSearch').oninput=renderGlobalSearch;$('dashboardRefresh').onclick=loadAll;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){scheduleDateFilter='all';$('scheduleDateFilter').value='all';setView('schedule')}else if(b.dataset.dash==='today'){scheduleDateFilter='today';$('scheduleDateFilter').value='today';setView('schedule')}else if(b.dataset.dash==='openextras')setView('extras');else if(b.dataset.dash==='todayextras'){$('extraSearchInput').value=today();setView('extras');renderExtras()}else setView('stores')});$('scheduleClientFilter').onchange=e=>{scheduleClientFilter=e.target.value;renderSchedules()};$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('bulkIntervalBtn').onclick=openBulkIntervalDialog;$('bulkIntervalClient').onchange=updateBulkIntervalPreview;$('bulkIntervalSiteType').onchange=updateBulkIntervalPreview;$('bulkIntervalDays').oninput=updateBulkIntervalPreview;$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('schedulePickerClient').onchange=renderSchedulePicker;document.querySelectorAll('[data-quick-date]').forEach(b=>b.onclick=()=>{$('scheduleDate').value=b.dataset.quickDate==='today'?today():tomorrow()});$('addScheduleSearch').oninput=renderAddSchedulePicker;$('newExtraBtn').onclick=()=>{$('extraForm').reset();$('extraRequestDate').value=today();$('extraDate').value='';$('extraDeadline').value='';$('extraClient').value='eurospin';$('extraClosureProfile').value='eurospin';renderExtraStoreOptions();openDialog('extraDialog')};
-$('extraClient').onchange=()=>{$('extraClosureProfile').value=$('extraClient').value};$('extraEditClient').onchange=()=>{$('extraEditClosureProfile').value=$('extraEditClient').value};$('extraClosureProfile').onchange=()=>{if($('extraClosureProfile').value==='intesa_ordinario'){$('extraClient').value='intesa';$('extraDestination').value='store';$('extraWithOrdinary').checked=true;$('extraDestination').dispatchEvent(new Event('change'))}};$('extraEditClosureProfile').onchange=()=>{if($('extraEditClosureProfile').value==='intesa_ordinario'){$('extraEditClient').value='intesa';$('extraEditDestination').value='store';$('extraEditWithOrdinary').checked=true;toggleExtraEditDestination()}};$('extraSearchInput').oninput=renderExtras;$('extraCategoryFilter').onchange=renderExtras;$('clearExtraSearch').onclick=()=>{$('extraSearchInput').value='';renderExtras();$('extraSearchInput').focus()};
+$('globalSearch').oninput=renderGlobalSearch;$('dashboardRefresh').onclick=loadAll;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){scheduleDateFilter='all';$('scheduleDateFilter').value='all';setView('schedule')}else if(b.dataset.dash==='today'){scheduleDateFilter='today';$('scheduleDateFilter').value='today';setView('schedule')}else if(b.dataset.dash==='openextras')setView('extras');else if(b.dataset.dash==='todayextras'){$('extraSearchInput').value=today();setView('extras');renderExtras()}else setView('stores')});$('scheduleClientFilter').onchange=e=>{scheduleClientFilter=e.target.value;renderSchedules()};$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('bulkIntervalBtn').onclick=openBulkIntervalDialog;$('bulkIntervalClient').onchange=updateBulkIntervalPreview;$('bulkIntervalSiteType').onchange=updateBulkIntervalPreview;$('bulkIntervalDays').oninput=updateBulkIntervalPreview;$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('schedulePickerClient').onchange=renderSchedulePicker;document.querySelectorAll('[data-quick-date]').forEach(b=>b.onclick=()=>{$('scheduleDate').value=b.dataset.quickDate==='today'?today():tomorrow()});$('addScheduleSearch').oninput=renderAddSchedulePicker;$('newExtraBtn').onclick=()=>{$('extraForm').reset();$('extraRequestDate').value=today();$('extraDate').value='';$('extraDeadline').value='';$('extraClient').value='eurospin';$('extraClosureProfile').value='eurospin';if($('extraIntesaOrdinaryMode'))$('extraIntesaOrdinaryMode').checked=false;syncIntesaOrdinaryCreateUi();renderExtraStoreOptions();openDialog('extraDialog')};
+function syncIntesaOrdinaryCreateUi(){
+  const isIntesa=$('extraClient')?.value==='intesa';
+  $('extraIntesaOrdinaryModeWrap')?.classList.toggle('hidden',!isIntesa);
+  if(!isIntesa&&$('extraIntesaOrdinaryMode'))$('extraIntesaOrdinaryMode').checked=false;
+}
+function syncIntesaOrdinaryEditUi(){
+  const isIntesa=$('extraEditClient')?.value==='intesa';
+  $('extraEditIntesaOrdinaryModeWrap')?.classList.toggle('hidden',!isIntesa);
+  if($('extraEditIntesaOrdinaryMode'))$('extraEditIntesaOrdinaryMode').checked=isIntesa&&$('extraEditClosureProfile')?.value==='intesa_ordinario';
+}
+$('extraClient').onchange=()=>{
+  const client=$('extraClient').value;
+  $('extraClosureProfile').value=client;
+  syncIntesaOrdinaryCreateUi();
+};
+$('extraEditClient').onchange=()=>{
+  const client=$('extraEditClient').value;
+  $('extraEditClosureProfile').value=client;
+  syncIntesaOrdinaryEditUi();
+};
+$('extraIntesaOrdinaryMode')?.addEventListener('change',()=>{
+  if($('extraIntesaOrdinaryMode').checked){
+    $('extraClient').value='intesa';
+    $('extraClosureProfile').value='intesa_ordinario';
+    $('extraDestination').value='store';
+    $('extraWithOrdinary').checked=true;
+    $('extraDestination').dispatchEvent(new Event('change'));
+  }else if($('extraClient').value==='intesa'){
+    $('extraClosureProfile').value='intesa';
+  }
+});
+$('extraEditIntesaOrdinaryMode')?.addEventListener('change',()=>{
+  if($('extraEditIntesaOrdinaryMode').checked){
+    $('extraEditClient').value='intesa';
+    $('extraEditClosureProfile').value='intesa_ordinario';
+    $('extraEditDestination').value='store';
+    $('extraEditWithOrdinary').checked=true;
+    toggleExtraEditDestination();
+  }else if($('extraEditClient').value==='intesa'){
+    $('extraEditClosureProfile').value='intesa';
+  }
+});
+$('extraClosureProfile').onchange=()=>{
+  if($('extraClosureProfile').value==='intesa_ordinario'){
+    $('extraClient').value='intesa';
+    $('extraDestination').value='store';
+    $('extraWithOrdinary').checked=true;
+    if($('extraIntesaOrdinaryMode'))$('extraIntesaOrdinaryMode').checked=true;
+    syncIntesaOrdinaryCreateUi();
+    $('extraDestination').dispatchEvent(new Event('change'));
+  }else if($('extraIntesaOrdinaryMode')){
+    $('extraIntesaOrdinaryMode').checked=false;
+  }
+};
+$('extraEditClosureProfile').onchange=()=>{
+  if($('extraEditClosureProfile').value==='intesa_ordinario'){
+    $('extraEditClient').value='intesa';
+    $('extraEditDestination').value='store';
+    $('extraEditWithOrdinary').checked=true;
+    toggleExtraEditDestination();
+  }
+  syncIntesaOrdinaryEditUi();
+};$('extraSearchInput').oninput=renderExtras;$('extraCategoryFilter').onchange=renderExtras;$('clearExtraSearch').onclick=()=>{$('extraSearchInput').value='';renderExtras();$('extraSearchInput').focus()};
 function addDonePhotos(fileList){
   const incoming=[...fileList].filter(f=>f.type.startsWith('image/'));
   for(const file of incoming){

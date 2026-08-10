@@ -657,6 +657,7 @@ async function loadAll(){
 function assignedExtraIds(){return new Set(extraWorkers.filter(w=>w.profile_id===profile?.id).map(w=>w.extra_id))}
 function openExtraJobs(){return extras.filter(e=>e.stato!=='completato')}
 function linkedExtrasForScheduleItem(itemId){return extras.filter(e=>e.schedule_item_id===itemId&&e.stato!=='completato')}
+function extraIsDone(e){return e?.stato==='completato'}
 function openMultiDayIntervention(storeId){return interventions.find(i=>i.store_id===storeId&&i.multi_day_open===true)}
 async function fetchOpenMultiDayIntervention(storeId){
   const {data,error}=await sb.from('interventions').select('*').eq('store_id',storeId).eq('multi_day_open',true).order('data_intervento',{ascending:false}).limit(2);
@@ -729,11 +730,10 @@ function renderDashboard(){
   const itemDate=i=>scheduleForItem(i)?.giorno||'';
   const itemDone=i=>effectiveScheduleState(i)==='completato';
   const itemPending=i=>effectiveScheduleState(i)==='in_attesa';
-  const extraDone=e=>completedExtraStates.includes(e.stato);
   const todaysItems=scheduleItems.filter(i=>itemVisible(i)&&itemDate(i)===todayStr&&!itemDone(i));
   const todaysExtras=extras.filter(e=>isExtraVisible(e)&&e.giorno_intervento===todayStr&&activeExtraStates.includes(e.stato));
   const todaysDoneItems=scheduleItems.filter(i=>itemVisible(i)&&itemDate(i)===todayStr&&itemDone(i));
-  const todaysDoneExtras=extras.filter(e=>isExtraVisible(e)&&e.giorno_intervento===todayStr&&extraDone(e));
+  const todaysDoneExtras=extras.filter(e=>isExtraVisible(e)&&e.giorno_intervento===todayStr&&extraIsDone(e));
   $('dashToday').textContent=todaysItems.length+todaysExtras.length;
   $('dashPending').textContent=admin()?interventions.filter(i=>i.stato==='in_attesa'&&!i.multi_day_open).length+extras.filter(e=>e.stato==='in_attesa').length:interventions.filter(i=>i.stato==='in_attesa'&&!i.multi_day_open&&i.inserito_da===profile.id).length+extras.filter(e=>e.stato==='in_attesa'&&myExtraIds.has(e.id)).length;
   $('dashDone').textContent=todaysDoneItems.length+todaysDoneExtras.length;
@@ -772,9 +772,9 @@ function renderDashboard(){
     const d=new Date(startDate);d.setDate(d.getDate()+offset);const date=d.toISOString().slice(0,10);
     const ordinary=scheduleItems.filter(i=>itemVisible(i)&&itemDate(i)===date).map(i=>({item:i,schedule:scheduleForItem(i)})).sort((a,b)=>(a.item.posizione||0)-(b.item.posizione||0));
     const linkedIds=new Set(ordinary.flatMap(x=>linkedExtrasForScheduleItem(x.item.id).map(e=>e.id)));
-    const dayExtras=extras.filter(e=>isExtraVisible(e)&&e.giorno_intervento===date&&!linkedIds.has(e.id)&&(activeExtraStates.includes(e.stato)||extraDone(e))).sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||'')));
+    const dayExtras=extras.filter(e=>isExtraVisible(e)&&e.giorno_intervento===date&&!linkedIds.has(e.id)&&(activeExtraStates.includes(e.stato)||extraIsDone(e))).sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||'')));
     const allJobsCount=ordinary.length+dayExtras.length;
-    const completedCount=ordinary.filter(x=>itemDone(x.item)).length+dayExtras.filter(extraDone).length;
+    const completedCount=ordinary.filter(x=>itemDone(x.item)).length+dayExtras.filter(extraIsDone).length;
     const percent=allJobsCount?Math.round(completedCount/allJobsCount*100):0;
     const details=document.createElement('details');details.className='dashboard-day';details.open=offset===0;
     const dayName=new Intl.DateTimeFormat('it-IT',{weekday:'long'}).format(d);
@@ -803,7 +803,7 @@ function renderDashboard(){
           c.className=`dashboard-line-job ordinary ${done?'is-done':'is-open'}`;
           const pending=itemPending(row.item);
           const ordinaryNotes=[row.schedule?.nota_generale,st?.note].filter(v=>String(v||'').trim());
-          c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span>${clientBadge(st)}<strong>${esc(st?.nome||'Punto vendita')}</strong>${(st?.indirizzo||st?.citta)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${done?'Completato':pending?'In attesa di convalida':'Da eseguire'}</small>${ordinaryNotes.length?`<div class="dashboard-job-notes"><strong>Note</strong>${ordinaryNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>{const pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');return `<div class="embedded-extra ${extraCategoryClass(e)} ${extraDone(e)?'is-done':'is-open'}" data-open-linked-extra="${e.id}" role="button" tabindex="0"><span>${extraDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span>${e.numero_target?`<small class="target-number">Target: ${esc(e.numero_target)}</small>`:''}<small>${extraDone(e)?'Completato':'Da fare insieme al passaggio'} · Tocca per aprire</small>${e.descrizione?`<p class="embedded-extra-description">${esc(e.descrizione)}</p>`:''}${pdf?`<button type="button" class="secondary compact-btn" data-open-linked-pdf="${e.id}">📄 Apri PDF</button>`:''}</div></div>`}).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${admin()?'<button class="secondary" data-share>Condividi</button>':''}${done?(admin()?'<button class="reopen-intervention-btn" data-reopen>↩ Riapri intervento</button>':'<button class="secondary" disabled>✓ Completato</button>'):pending?'<button class="secondary" disabled>⏳ In attesa</button>':'<button data-done>✓ Eseguito</button>'}</div>`;
+          c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span>${clientBadge(st)}<strong>${esc(st?.nome||'Punto vendita')}</strong>${(st?.indirizzo||st?.citta)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${done?'Completato':pending?'In attesa di convalida':'Da eseguire'}</small>${ordinaryNotes.length?`<div class="dashboard-job-notes"><strong>Note</strong>${ordinaryNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>{const pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');return `<div class="embedded-extra ${extraCategoryClass(e)} ${extraIsDone(e)?'is-done':'is-open'}" data-open-linked-extra="${e.id}" role="button" tabindex="0"><span>${extraIsDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span>${e.numero_target?`<small class="target-number">Target: ${esc(e.numero_target)}</small>`:''}<small>${extraIsDone(e)?'Completato':'Da fare insieme al passaggio'} · Tocca per aprire</small>${e.descrizione?`<p class="embedded-extra-description">${esc(e.descrizione)}</p>`:''}${pdf?`<button type="button" class="secondary compact-btn" data-open-linked-pdf="${e.id}">📄 Apri PDF</button>`:''}</div></div>`}).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${admin()?'<button class="secondary" data-share>Condividi</button>':''}${done?(admin()?'<button class="reopen-intervention-btn" data-reopen>↩ Riapri intervento</button>':'<button class="secondary" disabled>✓ Completato</button>'):pending?'<button class="secondary" disabled>⏳ In attesa</button>':'<button data-done>✓ Eseguito</button>'}</div>`;
           c.dataset.routeAddress=routeAddressForStore(st);
           c.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);
           const shareBtn=c.querySelector('[data-share]');
@@ -831,7 +831,7 @@ function renderDashboard(){
           c.querySelector('[data-reopen]')?.addEventListener('click',()=>reopenOrdinaryIntervention(row.item,st));
           list.appendChild(c)
         }else{
-          const e=job.extra,st=stores.find(s=>s.id===e.store_id),done=extraDone(e),urgent=e.urgente===true||e.priorita==='urgente'||elapsedDaysFrom(extraRequestDate(e))>=7,c=document.createElement('article');
+          const e=job.extra,st=stores.find(s=>s.id===e.store_id),done=extraIsDone(e),urgent=e.urgente===true||e.priorita==='urgente'||elapsedDaysFrom(extraRequestDate(e))>=7,c=document.createElement('article');
           c.className=`dashboard-line-job standalone-extra ${extraCategoryClass(e)} ${done?'is-done':urgent?'is-urgent':'is-open'}`;
           const extraNotes=[e.descrizione,e.note_lorenzo].filter(v=>String(v||'').trim());
           c.innerHTML=`<div class="job-main"><span class="job-kind">EXTRA</span>${clientBadge(e)}<span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span><strong>${esc(st?.nome||e.nome_esterno||'Extra')}</strong>${(st?.indirizzo||st?.citta||e.indirizzo_esterno)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo||e.indirizzo_esterno,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${esc(e.titolo)} · ${done?'Completato':urgent?'Urgente':'Da eseguire'}</small>${extraNotes.length?`<div class="dashboard-job-notes"><strong>${done?'Descrizione / note':'Descrizione'}</strong>${extraNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}</div><div class="actions"><button data-open-extra>Apri extra</button></div>`;c.dataset.routeAddress=routeAddressForExtra(e,st);c.querySelector('[data-open-extra]').onclick=()=>openExtraById(e.id);list.appendChild(c)
@@ -1030,7 +1030,7 @@ function buildStoreShareText(s){
   if(address)lines.push(`Indirizzo: ${address}`);
   if(String(s?.note||'').trim())lines.push('',`📝 Note: ${String(s.note).trim()}`);
   if(String(s?.next_visit_note||'').trim())lines.push('',`⚠️ Da fare al prossimo passaggio: ${String(s.next_visit_note).trim()}`);
-  const openExtras=extras.filter(e=>e.store_id===s?.id&&!extraDone(e));
+  const openExtras=extras.filter(e=>e.store_id===s?.id&&!extraIsDone(e));
   if(openExtras.length){
     lines.push('','🔧 Extra aperti:');
     for(const e of openExtras){
@@ -1048,7 +1048,7 @@ async function shareStoreExternally(s){
   const text=buildStoreShareText(s),title=`${clientLabel(s)} · ${s?.nome||'Sede'}`;
   // Se sulla sede c'è un ticket Intesa incluso in un ordinario, condividiamo
   // anche il PDF originale del ticket come allegato (oltre al testo/Maps).
-  const ticketExtras=extras.filter(e=>e.store_id===s?.id&&isIntesaOrdinaryTicket(e)&&!extraDone(e));
+  const ticketExtras=extras.filter(e=>e.store_id===s?.id&&isIntesaOrdinaryTicket(e)&&!extraIsDone(e));
   const ticketAttachments=ticketExtras
     .map(e=>attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta'))
     .filter(Boolean);

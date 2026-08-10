@@ -1965,16 +1965,29 @@ async function moveScheduleItem(item,direction){
 
 async function persistScheduleOrder(scheduleId,orderedItems){
   if(!admin()||!scheduleId||!Array.isArray(orderedItems)||!orderedItems.length)return;
-  for(let index=0;index<orderedItems.length;index++){
-    const item=orderedItems[index],wanted=index+1;
+
+  const valid=orderedItems.filter(item=>item?.schedule_id===scheduleId);
+  if(!valid.length)return;
+
+  // Salviamo esplicitamente ogni posizione sul database.
+  // Non ci affidiamo al solo ordine del DOM.
+  for(let index=0;index<valid.length;index++){
+    const item=valid[index],wanted=index+1;
     if(Number(item.posizione)===wanted)continue;
-    const {error}=await sb.from('schedule_items').update({posizione:wanted}).eq('id',item.id);
+    const {error}=await sb
+      .from('schedule_items')
+      .update({posizione:wanted})
+      .eq('id',item.id)
+      .eq('schedule_id',scheduleId);
     if(error)throw error;
     item.posizione=wanted;
   }
 }
 function enableScheduleDrag(container,schedule){
   if(!admin()||!container||!schedule)return;
+  // Se è attivo un filtro cliente vediamo solo una parte del giro:
+  // riordinare quella porzione produrrebbe posizioni ambigue sul giro completo.
+  if(scheduleClientFilter!=='all')return;
   let dragging=null,placeholder=null,startY=0,startTop=0,pointerId=null,moved=false;
   const rows=()=>[...container.querySelectorAll('.schedule-item[data-schedule-item-id]')];
   const cleanup=()=>{
@@ -2007,13 +2020,40 @@ function enableScheduleDrag(container,schedule){
     const finish=async ev=>{
       if(!dragging||ev.pointerId!==pointerId)return;
       ev.preventDefault();
-      const row=dragging;container.insertBefore(row,placeholder);cleanup();
-      if(!moved)return;
+
+      // IMPORTANTE: cleanup() azzera "moved".
+      // Salviamo prima lo stato del trascinamento, altrimenti il drop
+      // viene sempre interpretato come un semplice tap e non viene persistito.
+      const didMove=moved;
+      const row=dragging;
+      if(placeholder)container.insertBefore(row,placeholder);
+      cleanup();
+      if(!didMove)return;
+
       const orderedRows=rows();
-      const orderedItems=orderedRows.map(r=>scheduleItems.find(i=>i.id===r.dataset.scheduleItemId)).filter(Boolean);
-      orderedRows.forEach((r,i)=>{const n=r.querySelector('.schedule-order-number');if(n)n.textContent=String(i+1)});
-      try{await persistScheduleOrder(schedule.id,orderedItems);toast('Ordine del giro aggiornato');await loadAll()}
-      catch(error){alert('Non riesco a salvare il nuovo ordine: '+error.message);await loadAll()}
+      const orderedItems=orderedRows
+        .map(r=>scheduleItems.find(i=>i.id===r.dataset.scheduleItemId))
+        .filter(Boolean);
+
+      // Aggiorna subito i numeri visibili 1, 2, 3...
+      orderedRows.forEach((r,i)=>{
+        const n=r.querySelector('.schedule-order-number');
+        if(n)n.textContent=String(i+1);
+      });
+
+      try{
+        await persistScheduleOrder(schedule.id,orderedItems);
+
+        // Allinea anche l'array locale: cambiando pagina l'ordine resta già
+        // corretto senza dover aspettare un nuovo caricamento dal server.
+        orderedItems.forEach((item,i)=>item.posizione=i+1);
+
+        toast('Ordine del giro salvato');
+        renderDashboard();
+      }catch(error){
+        alert('Non riesco a salvare il nuovo ordine: '+(error?.message||String(error)));
+        await loadAll();
+      }
     };
     handle.addEventListener('pointerup',finish);handle.addEventListener('pointercancel',finish);
   });
@@ -2084,7 +2124,7 @@ function renderSchedules(){
       r.dataset.routeAddress=routeAddressForStore(st);
       r.dataset.scheduleItemId=item.id;
       const stato=effectiveState==='in_attesa'?'In attesa di convalida':'Da eseguire',linked=linkedExtrasForScheduleItem(item.id);
-      r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${displayIndex+1}</div><div class="schedule-item-copy">${scheduleClientBadge(st)}<strong data-store-detail>${esc(st?.nome||'Sede')}</strong><small>${esc(st?.citta||st?.indirizzo||'')} · ${stato}</small></div>${admin()?'<button type="button" class="drag-handle" data-drag-handle title="Tieni premuto e trascina" aria-label="Trascina per cambiare ordine">☰</button>':''}</div>${effectiveState==='da_fare'&&String(st?.next_visit_note||'').trim()?`<div class="schedule-next-visit"><strong>⚠️ Da fare in questo passaggio</strong><p>${esc(st.next_visit_note)}</p></div>`:''}${linked.length?`<div class="linked-extra-reminder compact-linked"><strong>Extra collegati (${linked.length})</strong>${linked.map(e=>`<span class="linked-extra-category ${extraCategoryClass(e)}"><b>${esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}</span>`).join('')}</div>`:''}<div class="actions schedule-item-actions"><button class="secondary" data-map>Maps</button>${effectiveState==='da_fare'?`<button data-done>${openMultiDayIntervention(st?.id)?'Continua intervento':'Eseguito'}</button>`:''}${admin()&&effectiveState==='da_fare'?'<button class="danger-btn" data-delete-scheduled>Elimina</button>':''}</div>`;
+      r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${displayIndex+1}</div><div class="schedule-item-copy">${scheduleClientBadge(st)}<strong data-store-detail>${esc(st?.nome||'Sede')}</strong><small>${esc(st?.citta||st?.indirizzo||'')} · ${stato}</small></div>${admin()&&scheduleClientFilter==='all'?'<button type="button" class="drag-handle" data-drag-handle title="Tieni premuto e trascina" aria-label="Trascina per cambiare ordine">☰</button>':''}</div>${effectiveState==='da_fare'&&String(st?.next_visit_note||'').trim()?`<div class="schedule-next-visit"><strong>⚠️ Da fare in questo passaggio</strong><p>${esc(st.next_visit_note)}</p></div>`:''}${linked.length?`<div class="linked-extra-reminder compact-linked"><strong>Extra collegati (${linked.length})</strong>${linked.map(e=>`<span class="linked-extra-category ${extraCategoryClass(e)}"><b>${esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}</span>`).join('')}</div>`:''}<div class="actions schedule-item-actions"><button class="secondary" data-map>Maps</button>${effectiveState==='da_fare'?`<button data-done>${openMultiDayIntervention(st?.id)?'Continua intervento':'Eseguito'}</button>`:''}${admin()&&effectiveState==='da_fare'?'<button class="danger-btn" data-delete-scheduled>Elimina</button>':''}</div>`;
       r.querySelector('[data-store-detail]').onclick=()=>showStoreDetail(st);r.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);
       r.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,item.id));r.querySelector('[data-delete-scheduled]')?.addEventListener('click',()=>deleteScheduleItem(item,st));c.appendChild(r)
     }}

@@ -803,8 +803,23 @@ function renderDashboard(){
           c.className=`dashboard-line-job ordinary ${done?'is-done':'is-open'}`;
           const pending=itemPending(row.item);
           const ordinaryNotes=[row.schedule?.nota_generale,st?.note].filter(v=>String(v||'').trim());
-          c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span>${clientBadge(st)}<strong>${esc(st?.nome||'Punto vendita')}</strong>${(st?.indirizzo||st?.citta)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${done?'Completato':pending?'In attesa di convalida':'Da eseguire'}</small>${ordinaryNotes.length?`<div class="dashboard-job-notes"><strong>Note</strong>${ordinaryNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>`<div class="embedded-extra ${extraCategoryClass(e)} ${extraDone(e)?'is-done':'is-open'}"><span>${extraDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span>${e.numero_target?`<small class="target-number">Target: ${esc(e.numero_target)}</small>`:''}<small>${extraDone(e)?'Completato':'Da fare insieme al passaggio'}</small>${e.descrizione?`<p class="embedded-extra-description">${esc(e.descrizione)}</p>`:''}</div></div>`).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${admin()?'<button class="secondary" data-share>Condividi</button>':''}${done?(admin()?'<button class="reopen-intervention-btn" data-reopen>↩ Riapri intervento</button>':'<button class="secondary" disabled>✓ Completato</button>'):pending?'<button class="secondary" disabled>⏳ In attesa</button>':'<button data-done>✓ Eseguito</button>'}</div>`;
-          c.dataset.routeAddress=routeAddressForStore(st);c.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);c.querySelector('[data-share]')?.addEventListener('click',()=>shareStoreExternally(st));c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,row.item.id));c.querySelector('[data-reopen]')?.addEventListener('click',()=>reopenOrdinaryIntervention(row.item,st));list.appendChild(c)
+          c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span>${clientBadge(st)}<strong>${esc(st?.nome||'Punto vendita')}</strong>${(st?.indirizzo||st?.citta)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${done?'Completato':pending?'In attesa di convalida':'Da eseguire'}</small>${ordinaryNotes.length?`<div class="dashboard-job-notes"><strong>Note</strong>${ordinaryNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>{const pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');return `<div class="embedded-extra ${extraCategoryClass(e)} ${extraDone(e)?'is-done':'is-open'}" data-open-linked-extra="${e.id}" role="button" tabindex="0"><span>${extraDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span>${e.numero_target?`<small class="target-number">Target: ${esc(e.numero_target)}</small>`:''}<small>${extraDone(e)?'Completato':'Da fare insieme al passaggio'} · Tocca per aprire</small>${e.descrizione?`<p class="embedded-extra-description">${esc(e.descrizione)}</p>`:''}${pdf?`<button type="button" class="secondary compact-btn" data-open-linked-pdf="${e.id}">📄 Apri PDF</button>`:''}</div></div>`}).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${admin()?'<button class="secondary" data-share>Condividi</button>':''}${done?(admin()?'<button class="reopen-intervention-btn" data-reopen>↩ Riapri intervento</button>':'<button class="secondary" disabled>✓ Completato</button>'):pending?'<button class="secondary" disabled>⏳ In attesa</button>':'<button data-done>✓ Eseguito</button>'}</div>`;
+          c.dataset.routeAddress=routeAddressForStore(st);
+          c.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);
+          c.querySelector('[data-share]')?.addEventListener('click',()=>shareOrdinaryExternally(st,row.item.id));
+          c.querySelectorAll('[data-open-linked-extra]').forEach(el=>{
+            const open=()=>openExtraById(el.dataset.openLinkedExtra);
+            el.addEventListener('click',ev=>{if(ev.target.closest('[data-open-linked-pdf]'))return;open()});
+            el.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();open()}});
+          });
+          c.querySelectorAll('[data-open-linked-pdf]').forEach(btn=>btn.addEventListener('click',ev=>{
+            ev.preventDefault();ev.stopPropagation();
+            const ex=linked.find(e=>e.id===btn.dataset.openLinkedPdf),pdf=attachments.find(a=>a.extra_id===ex?.id&&a.tipo==='pdf_richiesta');
+            if(pdf)openAttachment(pdf);
+          }));
+          c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,row.item.id));
+          c.querySelector('[data-reopen]')?.addEventListener('click',()=>reopenOrdinaryIntervention(row.item,st));
+          list.appendChild(c)
         }else{
           const e=job.extra,st=stores.find(s=>s.id===e.store_id),done=extraDone(e),urgent=e.urgente===true||e.priorita==='urgente'||elapsedDaysFrom(extraRequestDate(e))>=7,c=document.createElement('article');
           c.className=`dashboard-line-job standalone-extra ${extraCategoryClass(e)} ${done?'is-done':urgent?'is-urgent':'is-open'}`;
@@ -1046,6 +1061,47 @@ async function shareStoreExternally(s){
     try{await navigator.clipboard.writeText(text);toast('Dati sede copiati')}catch{alert(text)}
   }
 }
+
+async function shareOrdinaryExternally(s,scheduleItemId){
+  if(!admin())return;
+  const linked=scheduleItemId?linkedExtrasForScheduleItem(scheduleItemId):[];
+  const lines=[buildStoreShareText(s)];
+  if(linked.length){
+    lines.push('','🔗 Extra collegati a questo intervento:');
+    for(const e of linked){
+      lines.push(`• ${e.titolo||'Extra'}${e.numero_target?` · Target ${e.numero_target}`:''}`);
+      if(String(e.descrizione||'').trim())lines.push(`  ${String(e.descrizione).trim()}`);
+    }
+  }
+  const text=lines.join('\n'),title=`${clientLabel(s)} · ${s?.nome||'Sede'}`;
+  const pdfAttachments=linked
+    .map(e=>attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta'))
+    .filter(Boolean);
+  const files=[];
+  for(const a of pdfAttachments){
+    try{
+      const url=await signedAttachmentUrl(a),res=await fetch(url);
+      if(!res.ok)throw new Error('Download PDF non riuscito');
+      const blob=await res.blob();
+      files.push(new File([blob],a.nome_file||'Richiesta extra.pdf',{type:a.mime_type||blob.type||'application/pdf'}));
+    }catch(err){console.warn('PDF extra non allegato alla condivisione',err)}
+  }
+  try{
+    if(navigator.share){
+      // Su iOS il foglio di condivisione può fallire se uno degli allegati
+      // non è supportato: proviamo prima con i file, poi ricadiamo sul solo testo.
+      if(files.length&&(!navigator.canShare||navigator.canShare({files}))){
+        try{await navigator.share({title,text,files});return}catch(err){if(err?.name==='AbortError')return;console.warn('Condivisione con PDF non riuscita, riprovo senza allegati',err)}
+      }
+      await navigator.share({title,text});return;
+    }
+    await navigator.clipboard.writeText(text);toast('Dati intervento copiati');
+  }catch(err){
+    if(err?.name==='AbortError')return;
+    try{await navigator.clipboard.writeText(text);toast('Dati intervento copiati')}catch{alert(text)}
+  }
+}
+
 
 function renderShareStorePicker(){
   if(!admin())return;

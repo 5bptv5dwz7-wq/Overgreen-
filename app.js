@@ -2780,11 +2780,50 @@ async function readEurospinRequestPdf(file){
   // Accettiamo le varianti n°, n., nr e numero per tollerare piccole differenze di modello.
   const targetMatch=text.match(/Richiesta\s+intervento\s+(?:n[°º.]?|nr\.?|numero)\s*[:\-]?\s*(\d{4,12})/i);
   const dateMatch=text.match(/Richiesta\s+intervento\s+(?:n[°º.]?|nr\.?|numero)\s*[:\-]?\s*\d{4,12}\s+del\s+(\d{1,2}[./-]\d{1,2}[./-]\d{4})/i);
+  const pvMatch=text.match(/Punto\s+Vendita\s*:\s*SPESA\s+INTELLIGENTE\s+S\.p\.A\.\s+(.+?)(?=\s+Tel\.|\s+Fax\b|\s+buongiorno\b|\s+La\s+fattura\b)/i);
+  const pvRaw=String(pvMatch?.[1]||'').replace(/\s+/g,' ').trim();
   return {
     target:targetMatch?.[1]||null,
     requestDate:eurospinPdfDateToIso(dateMatch?.[1]||''),
+    pointOfSaleText:pvRaw||null,
     text
   };
+}
+function normalizeMatchText(value){
+  return String(value||'')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase()
+    .replace(/\b(spesa intelligente|s\.?p\.?a\.?|punto vendita|pv)\b/g,' ')
+    .replace(/[^a-z0-9]+/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+function scoreEurospinStoreMatch(store,pdfText){
+  const hay=normalizeMatchText(pdfText);
+  if(!hay)return 0;
+  const name=normalizeMatchText(store?.nome);
+  const city=normalizeMatchText(store?.citta);
+  const address=normalizeMatchText(store?.indirizzo);
+  let score=0;
+  if(name&&hay.includes(name))score+=6;
+  if(city&&hay.includes(city))score+=4;
+  if(address&&hay.includes(address))score+=7;
+  const nameTokens=name.split(' ').filter(x=>x.length>=4);
+  const cityTokens=city.split(' ').filter(x=>x.length>=4);
+  const addressTokens=address.split(' ').filter(x=>x.length>=4);
+  score+=nameTokens.filter(t=>hay.includes(t)).length*2;
+  score+=cityTokens.filter(t=>hay.includes(t)).length*2;
+  score+=addressTokens.filter(t=>hay.includes(t)).length;
+  return score;
+}
+function findEurospinStoreFromPdf(pdfText){
+  const candidates=stores
+    .filter(s=>(s.client_type||'eurospin')==='eurospin')
+    .map(s=>({store:s,score:scoreEurospinStoreMatch(s,pdfText)}))
+    .sort((a,b)=>b.score-a.score);
+  if(!candidates.length||candidates[0].score<5)return null;
+  if(candidates[1]&&candidates[1].score===candidates[0].score)return null;
+  return candidates[0].store;
 }
 async function autoFillEurospinFromPdf(file){
   const status=$('extraPdfAutoReadStatus');
@@ -2804,16 +2843,29 @@ async function autoFillEurospinFromPdf(file){
     }
     if(found.requestDate){
       $('extraRequestDate').value=found.requestDate;
-      filled.push(`data ${fmtDate(found.requestDate)}`);
+      filled.push(`data ${fmt(found.requestDate)}`);
     }
+
+    const matchedStore=findEurospinStoreFromPdf(found.pointOfSaleText||found.text);
+    if(matchedStore){
+      $('extraDestination').value='store';
+      renderExtraStoreOptions(matchedStore.id);
+      $('extraStore').value=matchedStore.id;
+      syncExtraDestinationUi();
+      filled.push(`PV ${matchedStore.nome}`);
+    }
+
     if(filled.length){
       status.textContent=`✓ Rilevato automaticamente: ${filled.join(' · ')}`;
+      if(!matchedStore&&found.pointOfSaleText){
+        status.textContent+=` · PV letto dal PDF ma non trovato con certezza nell'anagrafica`;
+      }
     }else{
-      status.textContent='⚠️ Codice target non rilevato: inseriscilo manualmente.';
+      status.textContent='⚠️ Dati non rilevati automaticamente: compilali manualmente.';
     }
   }catch(err){
     console.warn('Lettura automatica PDF Eurospin non riuscita',err);
-    status.textContent='⚠️ Non riesco a leggere automaticamente questo PDF. Puoi compilare il target manualmente.';
+    status.textContent='⚠️ Non riesco a leggere automaticamente questo PDF. Puoi compilare i dati manualmente.';
   }
 }
 $('extraPdf')?.addEventListener('change',()=>{

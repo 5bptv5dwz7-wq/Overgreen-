@@ -2439,19 +2439,31 @@ function renderExtras(){
   if(search&&!visible.length){const p=document.createElement('p');p.className='extra-no-results';p.textContent=`Nessun extra trovato per “${$('extraSearchInput').value.trim()}”.`;root.prepend(p)}
 }
 function openExtraEdit(e){
+  if($('extraEditStoreSearch'))$('extraEditStoreSearch').value='';
   $('extraEditId').value=e.id;$('extraEditClient').value=clientType(e);syncExtraClosureOptions($('extraEditClosureProfile'),clientType(e),closureProfile(e));$('extraEditDeadline').value=isoToLocalInput(e.deadline_at);$('extraEditWithOrdinary').checked=!!e.con_ordinario;$('extraEditTitle').value=e.titolo||'';$('extraEditTargetNumber').value=e.numero_target||'';$('extraEditCategory').value=extraCategory(e)||'';$('extraEditDescription').value=e.descrizione||'';$('extraEditRequestDate').value=extraRequestDate(e)||today();$('extraEditDate').value=e.giorno_intervento||'';
   const external=!e.store_id;$('extraEditDestination').value=external?'external':'store';renderExtraEditStoreOptions(e.store_id);$('extraEditExternalName').value=e.nome_esterno||'';$('extraEditExternalAddress').value=e.indirizzo_esterno||'';toggleExtraEditDestination();
   $('extraEditWorkers').innerHTML=profiles.filter(p=>p.attivo).map(p=>`<label><input type="checkbox" value="${p.id}"><span>${esc(p.nome)}</span></label>`).join('');
   const ids=new Set(extraWorkers.filter(w=>w.extra_id===e.id).map(w=>w.profile_id));$('extraEditWorkers').querySelectorAll('input').forEach(x=>x.checked=ids.has(x.value));$('extraEditPdf').value='';syncOrdinaryIncludedEditUi();openDialog('extraEditDialog');
 }
-function renderExtraEditStoreOptions(selected){
-  const client=$('extraEditClient')?.value||'eurospin',cfg=extraStoreUiConfig(client),list=storesForExtraClient(client),sel=$('extraEditStore');
+function renderExtraEditStoreOptions(selected=null){
+  const client=$('extraEditClient')?.value||'eurospin',cfg=extraStoreUiConfig(client),all=storesForExtraClient(client),sel=$('extraEditStore');
   if(!sel)return;
+  const currentSelected=selected||sel.value||null;
+  const query=$('extraEditStoreSearch')?.value||'';
+  const list=filterExtraStores(all,query);
   $('extraEditStoreLabel')&&($('extraEditStoreLabel').textContent=cfg.single);
+  $('extraEditStoreSearchLabel')&&($('extraEditStoreSearchLabel').textContent=`Cerca ${cfg.single.toLowerCase()}`);
   const destStore=$('extraEditDestination')?.querySelector('option[value="store"]');if(destStore)destStore.textContent=cfg.storeOption;
   $('extraEditWithOrdinaryHelp')&&($('extraEditWithOrdinaryHelp').textContent=cfg.help);
-  sel.innerHTML=list.map(s=>`<option value="${s.id}" ${s.id===selected?'selected':''}>${esc(s.nome)}${s.citta?` · ${esc(s.citta)}`:''}</option>`).join('');
-  const empty=$('extraEditStoreEmpty');if(empty){empty.textContent=`Nessuna ${cfg.single.toLowerCase()} disponibile per ${clientLabel({client_type:client})}.`;empty.classList.toggle('hidden',!!list.length)}
+  sel.innerHTML=list.map(s=>`<option value="${s.id}" ${s.id===currentSelected?'selected':''}>${esc(s.nome)}${s.citta?` · ${esc(s.citta)}`:''}</option>`).join('');
+  if(currentSelected&&list.some(s=>s.id===currentSelected))sel.value=currentSelected;
+  const empty=$('extraEditStoreEmpty');
+  if(empty){
+    empty.textContent=query
+      ?`Nessun risultato per “${query}”.`
+      :`Nessuna ${cfg.single.toLowerCase()} disponibile per ${clientLabel({client_type:client})}.`;
+    empty.classList.toggle('hidden',!!list.length);
+  }
   sel.disabled=!list.length;
 }
 function toggleExtraEditDestination(){const ext=$('extraEditDestination').value==='external';$('extraEditStoreWrap').classList.toggle('hidden',ext);$('extraEditExternalWrap').classList.toggle('hidden',!ext)}
@@ -2515,7 +2527,7 @@ $('archiveUploadForm')?.addEventListener('submit',async e=>{
 });
 
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeDialog(b));$('helpBtn').onclick=openHelp;document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));document.querySelectorAll('[data-client-filter]').forEach(b=>b.onclick=()=>{storeClientFilter=b.dataset.clientFilter;document.querySelectorAll('[data-client-filter]').forEach(x=>x.classList.toggle('active',x===b));renderStores()});document.querySelectorAll('[data-extra-client]').forEach(b=>b.onclick=()=>{extraClientFilter=b.dataset.extraClient;document.querySelectorAll('[data-extra-client]').forEach(x=>x.classList.toggle('active',x===b));renderExtras()});document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{storeFilter=b.dataset.filter;renderStores()});
-$('globalSearch').oninput=renderGlobalSearch;$('dashboardRefresh').onclick=loadAll;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){scheduleDateFilter='all';$('scheduleDateFilter').value='all';setView('schedule')}else if(b.dataset.dash==='today'){scheduleDateFilter='today';$('scheduleDateFilter').value='today';setView('schedule')}else if(b.dataset.dash==='openextras')setView('extras');else if(b.dataset.dash==='todayextras'){$('extraSearchInput').value=today();setView('extras');renderExtras()}else setView('stores')});$('scheduleClientFilter').onchange=e=>{scheduleClientFilter=e.target.value;renderSchedules()};$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('bulkIntervalBtn').onclick=openBulkIntervalDialog;$('bulkIntervalClient').onchange=updateBulkIntervalPreview;$('bulkIntervalSiteType').onchange=updateBulkIntervalPreview;$('bulkIntervalDays').oninput=updateBulkIntervalPreview;$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('schedulePickerClient').onchange=renderSchedulePicker;document.querySelectorAll('[data-quick-date]').forEach(b=>b.onclick=()=>{$('scheduleDate').value=b.dataset.quickDate==='today'?today():tomorrow()});$('addScheduleSearch').oninput=renderAddSchedulePicker;$('newExtraBtn').onclick=()=>{$('extraForm').reset();$('extraRequestDate').value=today();$('extraDate').value='';$('extraDeadline').value='';$('extraClient').value='eurospin';syncExtraClosureOptions($('extraClosureProfile'),'eurospin','eurospin');syncExtraNumberLabel();if($('extraIntesaOrdinaryMode'))$('extraIntesaOrdinaryMode').checked=false;if($('extraEurospinOrdinaryMode'))$('extraEurospinOrdinaryMode').checked=false;if($('extraPdfAutoReadStatus')){$('extraPdfAutoReadStatus').textContent='';$('extraPdfAutoReadStatus').classList.add('hidden')}clearDuplicateTargetWarning();syncOrdinaryIncludedCreateUi();renderExtraStoreOptions();syncExtraDestinationUi();openDialog('extraDialog')};
+$('globalSearch').oninput=renderGlobalSearch;$('dashboardRefresh').onclick=loadAll;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){scheduleDateFilter='all';$('scheduleDateFilter').value='all';setView('schedule')}else if(b.dataset.dash==='today'){scheduleDateFilter='today';$('scheduleDateFilter').value='today';setView('schedule')}else if(b.dataset.dash==='openextras')setView('extras');else if(b.dataset.dash==='todayextras'){$('extraSearchInput').value=today();setView('extras');renderExtras()}else setView('stores')});$('scheduleClientFilter').onchange=e=>{scheduleClientFilter=e.target.value;renderSchedules()};$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('bulkIntervalBtn').onclick=openBulkIntervalDialog;$('bulkIntervalClient').onchange=updateBulkIntervalPreview;$('bulkIntervalSiteType').onchange=updateBulkIntervalPreview;$('bulkIntervalDays').oninput=updateBulkIntervalPreview;$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('schedulePickerClient').onchange=renderSchedulePicker;document.querySelectorAll('[data-quick-date]').forEach(b=>b.onclick=()=>{$('scheduleDate').value=b.dataset.quickDate==='today'?today():tomorrow()});$('addScheduleSearch').oninput=renderAddSchedulePicker;$('newExtraBtn').onclick=()=>{$('extraForm').reset();$('extraRequestDate').value=today();$('extraDate').value='';$('extraDeadline').value='';$('extraClient').value='eurospin';syncExtraClosureOptions($('extraClosureProfile'),'eurospin','eurospin');syncExtraNumberLabel();if($('extraIntesaOrdinaryMode'))$('extraIntesaOrdinaryMode').checked=false;if($('extraEurospinOrdinaryMode'))$('extraEurospinOrdinaryMode').checked=false;if($('extraPdfAutoReadStatus')){$('extraPdfAutoReadStatus').textContent='';$('extraPdfAutoReadStatus').classList.add('hidden')}clearDuplicateTargetWarning();if($('extraStoreSearch'))$('extraStoreSearch').value='';syncOrdinaryIncludedCreateUi();renderExtraStoreOptions();syncExtraDestinationUi();openDialog('extraDialog')};
 function syncOrdinaryIncludedCreateUi(){
   const client=$('extraClient')?.value||'eurospin';
   const isIntesa=client==='intesa',isEurospin=client==='eurospin';
@@ -2534,6 +2546,7 @@ function syncOrdinaryIncludedEditUi(){
 }
 $('extraClient').onchange=()=>{
   const client=$('extraClient').value;
+  if($('extraStoreSearch'))$('extraStoreSearch').value='';
   syncExtraClosureOptions($('extraClosureProfile'),client,client);
   syncExtraNumberLabel();
   syncOrdinaryIncludedCreateUi();
@@ -2542,6 +2555,7 @@ $('extraClient').onchange=()=>{
 };
 $('extraEditClient').onchange=()=>{
   const client=$('extraEditClient').value;
+  if($('extraEditStoreSearch'))$('extraEditStoreSearch').value='';
   syncExtraClosureOptions($('extraEditClosureProfile'),client,client);
   syncOrdinaryIncludedEditUi();
   renderExtraEditStoreOptions();
@@ -2728,7 +2742,25 @@ function extraStoreUiConfig(client){
   return {single:'Punto vendita',plural:'punti vendita Eurospin',storeOption:'Punto vendita',help:'Verrà associato automaticamente quando programmi l’intervento ordinario del punto vendita.'};
 }
 function storesForExtraClient(client){
-  return stores.filter(s=>(s.client_type||'eurospin')===client);
+  return stores
+    .filter(s=>(s.client_type||'eurospin')===client)
+    .slice()
+    .sort((a,b)=>{
+      const byName=String(a?.nome||'').localeCompare(String(b?.nome||''),'it',{sensitivity:'base',numeric:true});
+      if(byName)return byName;
+      return String(a?.citta||'').localeCompare(String(b?.citta||''),'it',{sensitivity:'base',numeric:true});
+    });
+}
+function filterExtraStores(list,query){
+  const q=normalizeMatchText(query);
+  if(!q)return list;
+  const starts=[],contains=[];
+  for(const s of list){
+    const name=normalizeMatchText(s?.nome),city=normalizeMatchText(s?.citta),address=normalizeMatchText(s?.indirizzo);
+    if(name.startsWith(q)||city.startsWith(q))starts.push(s);
+    else if(name.includes(q)||city.includes(q)||address.includes(q))contains.push(s);
+  }
+  return [...starts,...contains];
 }
 function syncExtraClosureOptions(select,client,selected){
   if(!select)return;
@@ -2741,13 +2773,24 @@ function syncExtraClosureOptions(select,client,selected){
   select.value=options.some(o=>o.value===selected)?selected:options[0].value;
 }
 function renderExtraStoreOptions(selected=null){
-  const client=$('extraClient')?.value||'eurospin',cfg=extraStoreUiConfig(client),list=storesForExtraClient(client),sel=$('extraStore');
+  const client=$('extraClient')?.value||'eurospin',cfg=extraStoreUiConfig(client),all=storesForExtraClient(client),sel=$('extraStore');
   if(!sel)return;
+  const currentSelected=selected||sel.value||null;
+  const query=$('extraStoreSearch')?.value||'';
+  const list=filterExtraStores(all,query);
   $('extraStoreLabel')&&($('extraStoreLabel').textContent=cfg.single);
+  $('extraStoreSearchLabel')&&($('extraStoreSearchLabel').textContent=`Cerca ${cfg.single.toLowerCase()}`);
   const destStore=$('extraDestination')?.querySelector('option[value="store"]');if(destStore)destStore.textContent=cfg.storeOption;
   $('extraWithOrdinaryHelp')&&($('extraWithOrdinaryHelp').textContent=cfg.help);
-  sel.innerHTML=list.map(s=>`<option value="${s.id}" ${s.id===selected?'selected':''}>${esc(s.nome)}${s.citta?` · ${esc(s.citta)}`:''}</option>`).join('');
-  const empty=$('extraStoreEmpty');if(empty){empty.textContent=`Nessuna ${cfg.single.toLowerCase()} disponibile per ${clientLabel({client_type:client})}.`;empty.classList.toggle('hidden',!!list.length)}
+  sel.innerHTML=list.map(s=>`<option value="${s.id}" ${s.id===currentSelected?'selected':''}>${esc(s.nome)}${s.citta?` · ${esc(s.citta)}`:''}</option>`).join('');
+  if(currentSelected&&list.some(s=>s.id===currentSelected))sel.value=currentSelected;
+  const empty=$('extraStoreEmpty');
+  if(empty){
+    empty.textContent=query
+      ?`Nessun risultato per “${query}”.`
+      :`Nessuna ${cfg.single.toLowerCase()} disponibile per ${clientLabel({client_type:client})}.`;
+    empty.classList.toggle('hidden',!!list.length);
+  }
   sel.disabled=!list.length;
 }
 function syncExtraDestinationUi(){
@@ -2755,6 +2798,7 @@ function syncExtraDestinationUi(){
   $('extraStoreWrap').classList.toggle('hidden',ext);$('extraExternalWrap').classList.toggle('hidden',!ext);
 }
 $('extraDestination').onchange=syncExtraDestinationUi;
+$('extraStoreSearch')?.addEventListener('input',()=>renderExtraStoreOptions());
 
 function pdfDateToIso(value){
   const m=String(value||'').match(/\b(\d{1,2})\s*[./-]\s*(\d{1,2})\s*[./-]\s*(\d{4})\b/);
@@ -2938,6 +2982,7 @@ async function autoFillExtraFromPdf(file){
     const matchedStore=findStoreFromPdf(found.client,found.locationText||found.text);
     if(matchedStore){
       $('extraDestination').value='store';
+      if($('extraStoreSearch'))$('extraStoreSearch').value='';
       renderExtraStoreOptions(matchedStore.id);
       $('extraStore').value=matchedStore.id;
       syncExtraDestinationUi();
@@ -2970,6 +3015,7 @@ $('extraPdf')?.addEventListener('change',()=>{
 });
 $('extraForm').onsubmit=async e=>{e.preventDefault();const workers=[...$('extraWorkers').querySelectorAll('input:checked')].map(x=>x.value),external=$('extraDestination').value==='external',pdf=$('extraPdf').files[0],closureMode=$('extraClosureProfile').value;if(!pdf)return alert('Allega il PDF della richiesta.');const duplicateTarget=findExistingExtraByTarget($('extraTargetNumber').value);if(duplicateTarget){showDuplicateTargetWarning(duplicateTarget);const st=stores.find(s=>s.id===duplicateTarget.store_id);return alert(`Target ${$('extraTargetNumber').value.trim()} già presente${st?.nome?` su ${st.nome}`:''}. Apri l’extra esistente invece di crearne un duplicato.`);}if(!external){const chosen=stores.find(s=>s.id===$('extraStore').value);if(!chosen)return alert('Seleziona una sede valida.');if((chosen.client_type||'eurospin')!==$('extraClient').value)return alert('La sede selezionata non appartiene al cliente scelto.');}if(closureMode==='intesa_ordinario'||closureMode==='eurospin_ordinario'){const expected=closureMode==='intesa_ordinario'?'intesa':'eurospin';if($('extraClient').value!==expected)return alert('Il modello di chiusura non corrisponde al cliente selezionato.');if(external)return alert(closureMode==='intesa_ordinario'?'Il ticket Intesa incluso nell’ordinario deve essere collegato a una filiale.':'Il target Eurospin incluso nell’ordinario deve essere collegato a un punto vendita.');if(!$('extraWithOrdinary').checked)return alert('Per questa modalità attiva “Da fare insieme al passaggio ordinario”.');}const payload={client_type:$('extraClient').value,closure_profile:$('extraClosureProfile').value,deadline_at:$('extraDeadline').value?new Date($('extraDeadline').value).toISOString():null,store_id:external?null:$('extraStore').value,nome_esterno:external?$('extraExternalName').value.trim():null,indirizzo_esterno:external?$('extraExternalAddress').value.trim():null,titolo:$('extraTitle').value.trim(),numero_target:$('extraTargetNumber').value.trim()||null,categoria_target:$('extraCategory').value,descrizione:$('extraDescription').value.trim()||null,data_richiesta:$('extraRequestDate').value,giorno_intervento:$('extraDate').value||null,note_lorenzo:null,stato:'programmato',con_ordinario:$('extraWithOrdinary').checked,creato_da:profile.id};const {data,error}=await sb.from('extras').insert(payload).select().single();if(error){const msg=String(error.message||error);if((msg.includes("numero_target")||msg.includes("categoria_target"))&&msg.includes("schema cache"))return alert("Database non aggiornato: esegui MIGRAZIONE-V74.sql su Supabase, poi riprova.");if(msg.includes("con_ordinario")&&msg.includes("schema cache"))return alert("Database non aggiornato: esegui MIGRAZIONE-V59.sql su Supabase, poi riprova.");return alert(msg)}if(workers.length){const r=await sb.from('extra_workers').insert(workers.map(profile_id=>({extra_id:data.id,profile_id})));if(r.error)return alert(r.error.message)}const path=`extra/${data.id}/richiesta-${Date.now()}.pdf`;try{await uploadFile(path,pdf);await addAttachment({tipo:'pdf_richiesta',extra_id:data.id,storage_path:path,nome_file:pdf.name,mime_type:pdf.type,dimensione_bytes:pdf.size,caricato_da:profile.id})}catch(err){return alert('Extra creato, ma PDF non caricato: '+err.message)}$('extraDialog').close();toast(workers.length?'Extra creato':'Extra creato · da programmare e assegnare');await loadAll()};
 $('extraEditDestination').onchange=toggleExtraEditDestination;
+$('extraEditStoreSearch')?.addEventListener('input',()=>renderExtraEditStoreOptions());
 $('extraEditForm').onsubmit=async e=>{
   e.preventDefault();if(!admin())return;
   const id=$('extraEditId').value,workers=[...$('extraEditWorkers').querySelectorAll('input:checked')].map(x=>x.value),external=$('extraEditDestination').value==='external',closureMode=$('extraEditClosureProfile').value;

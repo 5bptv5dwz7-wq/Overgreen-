@@ -141,8 +141,20 @@ const toDateTimeLocal=v=>{if(!v)return '';const d=new Date(v);if(Number.isNaN(d.
 const closedByName=row=>profiles.find(p=>p.id===row?.closed_by)?.nome||'Utente non disponibile';
 const closureText=row=>`${fmtClosedAt(row?.closed_at)} · ${closedByName(row)}`;
 function extraRequestDate(e){return e.data_richiesta||String(e.created_at||'').slice(0,10)||null}
-function elapsedDaysFrom(date){if(!date)return null;const start=new Date(date+'T00:00:00'),end=new Date(today()+'T00:00:00');return Math.max(0,Math.floor((end-start)/86400000))}
-function elapsedDaysLabel(e){const d=elapsedDaysFrom(extraRequestDate(e));return d===null?'Giorni trascorsi non disponibili':d===0?'Richiesto oggi':d===1?'1 giorno trascorso':`${d} giorni trascorsi`}
+function elapsedDaysFrom(date,endDate=today()){if(!date)return null;const start=new Date(date+'T00:00:00'),end=new Date((endDate||today())+'T00:00:00');if(Number.isNaN(start.getTime())||Number.isNaN(end.getTime()))return null;return Math.max(0,Math.floor((end-start)/86400000))}
+function extraExecutionElapsedDays(e){
+  const executed=['in_attesa','completato'].includes(e?.stato)&&e?.giorno_intervento;
+  return executed?elapsedDaysFrom(extraRequestDate(e),e.giorno_intervento):null;
+}
+function elapsedDaysLabel(e){
+  const executed=['in_attesa','completato'].includes(e?.stato)&&e?.giorno_intervento;
+  if(executed){
+    const d=extraExecutionElapsedDays(e);
+    return d===null?'Tempo di esecuzione non disponibile':d===0?'Eseguito in: 0 giorni':d===1?'Eseguito in: 1 giorno':`Eseguito in: ${d} giorni`;
+  }
+  const d=elapsedDaysFrom(extraRequestDate(e));
+  return d===null?'Giorni trascorsi non disponibili':d===0?'Richiesto oggi':d===1?'1 giorno trascorso':`${d} giorni trascorsi`;
+}
 function extraCategory(e){return ['verde','pulizie'].includes(e?.categoria_target)?e.categoria_target:null}
 function extraCategoryLabel(e){return extraCategory(e)==='verde'?'🌿 Verde':extraCategory(e)==='pulizie'?'🧹 Pulizie':'Categoria non indicata'}
 function extraCategoryClass(e){return extraCategory(e)?`category-${extraCategory(e)}`:'category-unknown'}

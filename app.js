@@ -1488,6 +1488,37 @@ async function previewSingleClientReport(kind,row){
   }catch(err){alert('Impossibile creare il report cliente: '+err.message)}
 }
 
+async function createStoreInterventionsReportFile(store,rows){
+  if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
+  const selected=[...(rows||[])].filter(Boolean).sort((a,b)=>String(a.data_intervento||'').localeCompare(String(b.data_intervento||'')));
+  if(!selected.length)throw new Error('Seleziona almeno un intervento.');
+  const {PDFDocument}=PDFLib,merged=await PDFDocument.create();
+  for(const intervention of selected){
+    const single=await createSingleClientReportFile('ordinary',intervention);
+    const bytes=new Uint8Array(await single.file.arrayBuffer());
+    const source=await PDFDocument.load(bytes);
+    const copied=await merged.copyPages(source,source.getPageIndices());
+    copied.forEach(p=>merged.addPage(p));
+  }
+  const safe=value=>pdfSafeText(value).replace(/[\/:*?"<>|]/g,' ').replace(/\s+/g,' ').trim()||'Sede';
+  const dates=selected.map(i=>interventionEndDate(i)).filter(Boolean).sort();
+  const first=dates[0]||today(),last=dates[dates.length-1]||first;
+  merged.setTitle(`Report interventi ${safe(store?.nome||'Sede')}`);
+  merged.setAuthor('Overgreen');merged.setCreator('Overgreen Cloud');merged.setProducer('Overgreen Cloud');
+  const bytes=await merged.save({useObjectStreams:true,addDefaultPage:false});
+  const range=first===last?fmt(first):`${fmt(first)} - ${fmt(last)}`;
+  const fileName=`Report interventi - ${safe(clientLabel(store))} - ${safe(store?.nome||'Sede')} - ${safe(range)}.pdf`;
+  const file=new File([bytes],fileName,{type:'application/pdf'});
+  return {file,fileName,title:`${store?.nome||'Sede'} · ${selected.length} interventi`,sizeKb:Math.max(1,Math.round(file.size/1024))};
+}
+async function downloadStoreInterventionsReport(store,rows){
+  try{
+    toast(rows.length===1?'Creo il report intervento...':`Creo il report di ${rows.length} interventi...`);
+    const data=rows.length===1?await createSingleClientReportFile('ordinary',rows[0]):await createStoreInterventionsReportFile(store,rows);
+    await shareClientReportData(data);
+  }catch(err){alert('Impossibile creare il report: '+(err?.message||String(err)))}
+}
+
 async function createDailyReportFile(mode='compact'){
   if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
   const {PDFDocument,StandardFonts,rgb}=PDFLib,data=dailyReportData(),counts=reportCounts(data);
@@ -1714,14 +1745,39 @@ async function showHistory(s,refreshOnly=false){
   currentHistoryStoreId=s.id;
   const rows=interventions.filter(i=>i.store_id===s.id&&!i.multi_day_open).sort((a,b)=>String(interventionEndDate(b)).localeCompare(String(interventionEndDate(a))));
   $('historyTitle').textContent=s.nome;
-  $('historyList').innerHTML=`<div class="history-summary"><div><strong>${rows.length}</strong><span>interventi</span></div><div><strong>${rows.filter(x=>x.stato==='convalidato').length}</strong><span>convalidati</span></div><div><strong>${attachments.filter(a=>rows.some(r=>r.id===a.intervention_id)&&a.tipo==='foto_generica').length}</strong><span>foto</span></div></div><div class="history-subtitle">Cronologia interventi</div>`;
+  const photoCount=attachments.filter(a=>rows.some(r=>r.id===a.intervention_id)&&a.tipo==='foto_generica').length;
+  $('historyList').innerHTML=`<div class="history-summary"><div><strong>${rows.length}</strong><span>interventi</span></div><div><strong>${rows.filter(x=>x.stato==='convalidato').length}</strong><span>convalidati</span></div><div><strong>${photoCount}</strong><span>foto</span></div></div>${rows.length?`<div class="history-report-toolbar"><div><strong>Report della sede</strong><span class="muted" data-history-selected-count>Nessun intervento selezionato</span></div><div class="actions"><button type="button" class="secondary" data-history-select-all>Seleziona tutti</button><button type="button" data-history-report-selected disabled>Report selezionati</button></div></div>`:''}<div class="history-subtitle">Cronologia interventi</div>`;
   if(!rows.length){$('historyList').insertAdjacentHTML('beforeend','<div class="history-empty"><div>🗂️</div><strong>Nessun intervento</strong><span>Gli interventi registrati compariranno qui.</span></div>');if(!refreshOnly&&!$('historyDialog').open)openDialog('historyDialog');return}
+
+  const selected=new Set();
+  const selectedLabel=$('historyList').querySelector('[data-history-selected-count]');
+  const selectedButton=$('historyList').querySelector('[data-history-report-selected]');
+  const selectAllButton=$('historyList').querySelector('[data-history-select-all]');
+  const updateSelectionUi=()=>{
+    const count=selected.size;
+    if(selectedLabel)selectedLabel.textContent=count?`${count} intervent${count===1?'o':'i'} selezionat${count===1?'o':'i'}`:'Nessun intervento selezionato';
+    if(selectedButton){selectedButton.disabled=!count;selectedButton.textContent=count?`Report selezionati (${count})`:'Report selezionati'}
+    if(selectAllButton)selectAllButton.textContent=count===rows.length?'Deseleziona tutti':'Seleziona tutti';
+  };
+  selectAllButton?.addEventListener('click',()=>{
+    if(selected.size===rows.length)selected.clear();else rows.forEach(i=>selected.add(i.id));
+    $('historyList').querySelectorAll('[data-history-select]').forEach(cb=>cb.checked=selected.has(cb.value));
+    updateSelectionUi();
+  });
+  selectedButton?.addEventListener('click',()=>{
+    const chosen=rows.filter(i=>selected.has(i.id));
+    if(chosen.length)downloadStoreInterventionsReport(s,chosen);
+  });
+
   const timeline=document.createElement('div');timeline.className='history-timeline';$('historyList').appendChild(timeline);
   for(const i of rows){
     const names=await workerNames(i.id),pics=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica');
     const d=document.createElement('article');d.className=`history-card history-${i.stato}`;
     const statusText=historyStatusLabel(i.stato);
-    d.innerHTML=`<div class="history-dot"></div><div class="history-card-top"><div class="history-date"><span>${interventionDateLabel(i)}</span><small>${i.data_fine&&i.data_fine!==i.data_intervento?'Intervento ordinario · più giorni':'Intervento ordinario'}</small></div><span class="history-status">${esc(statusText)}</span></div>${i.note?`<div class="history-note">${esc(i.note)}</div>`:'<div class="history-note muted">Nessuna nota inserita</div>'}${i.next_visit_note?`<div class="history-next-visit"><strong>Promemoria lasciato per il passaggio successivo:</strong> ${esc(i.next_visit_note)}</div>`:''}<div class="history-meta"><div class="history-workers">${names.length?names.map(n=>`<span>👤 ${esc(n)}</span>`).join(''):'<span>👤 Operatori non indicati</span>'}</div>${pics.length?`<span class="history-photo-count">📷 ${pics.length}</span>`:''}</div><div class="closure-stamp">🕒 Chiuso: ${esc(closureText(i))}</div><div class="history-photos" data-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':''}</div>${admin()?'<div class="history-admin-actions"><button class="history-edit-btn" data-edit-history>Modifica</button><button class="history-delete-btn" data-delete-history>Elimina</button></div>':''}`;
+    d.innerHTML=`<div class="history-dot"></div><div class="history-card-top"><div class="history-date"><span>${interventionDateLabel(i)}</span><small>${i.data_fine&&i.data_fine!==i.data_intervento?'Intervento ordinario · più giorni':'Intervento ordinario'}</small></div><span class="history-status">${esc(statusText)}</span></div><label class="history-report-select"><input type="checkbox" data-history-select value="${i.id}"><span>Includi nel report multiplo</span></label>${i.note?`<div class="history-note">${esc(i.note)}</div>`:'<div class="history-note muted">Nessuna nota inserita</div>'}${i.next_visit_note?`<div class="history-next-visit"><strong>Promemoria lasciato per il passaggio successivo:</strong> ${esc(i.next_visit_note)}</div>`:''}<div class="history-meta"><div class="history-workers">${names.length?names.map(n=>`<span>👤 ${esc(n)}</span>`).join(''):'<span>👤 Operatori non indicati</span>'}</div>${pics.length?`<span class="history-photo-count">📷 ${pics.length}</span>`:''}</div><div class="closure-stamp">🕒 Chiuso: ${esc(closureText(i))}</div><div class="history-photos" data-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':''}</div><div class="history-report-actions"><button type="button" data-single-report>📄 Report singolo</button></div>${admin()?'<div class="history-admin-actions"><button class="history-edit-btn" data-edit-history>Modifica</button><button class="history-delete-btn" data-delete-history>Elimina</button></div>':''}`;
+    const checkbox=d.querySelector('[data-history-select]');
+    checkbox?.addEventListener('change',()=>{checkbox.checked?selected.add(i.id):selected.delete(i.id);updateSelectionUi()});
+    d.querySelector('[data-single-report]')?.addEventListener('click',()=>downloadStoreInterventionsReport(s,[i]));
     d.querySelector('[data-edit-history]')?.addEventListener('click',()=>openHistoryEdit(i));d.querySelector('[data-delete-history]')?.addEventListener('click',()=>deleteHistoryIntervention(i,s));
     timeline.appendChild(d);
     if(pics.length){
@@ -1730,6 +1786,7 @@ async function showHistory(s,refreshOnly=false){
       for(const x of urls.filter(Boolean)){const wrap=document.createElement('button');wrap.type='button';wrap.className='history-photo';wrap.innerHTML=`<img src="${x.url}" alt="${esc(x.a.nome_file||'Foto intervento')}" loading="lazy"><span>Apri</span>`;wrap.onclick=()=>window.open(x.url,'_blank');box.appendChild(wrap)}
     }
   }
+  updateSelectionUi();
   if(!refreshOnly&&!$('historyDialog').open)openDialog('historyDialog')
 }
 

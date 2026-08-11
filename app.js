@@ -158,8 +158,10 @@ function clientBadge(row){
   const type=clientType(row),icon=type==='eurospin'?'🛒':type==='intesa'?'🏦':'🏠';
   return `<span class="client-badge client-${type}">${icon} ${esc(clientLabel(row))}</span>`;
 }
-function closureProfile(row){const value=row?.closure_profile;return ['eurospin','intesa','intesa_ordinario','privato'].includes(value)?value:clientType(row)}
+function closureProfile(row){const value=row?.closure_profile;return ['eurospin','eurospin_ordinario','intesa','intesa_ordinario','privato'].includes(value)?value:clientType(row)}
 function isIntesaOrdinaryTicket(row){return closureProfile(row)==='intesa_ordinario'}
+function isEurospinOrdinaryTarget(row){return closureProfile(row)==='eurospin_ordinario'}
+function isOrdinaryIncludedExtra(row){return isIntesaOrdinaryTicket(row)||isEurospinOrdinaryTarget(row)}
 function deadlineLabel(row){
   if(!row?.deadline_at)return '';
   const d=new Date(row.deadline_at);if(Number.isNaN(d.getTime()))return '';
@@ -1048,7 +1050,7 @@ async function shareStoreExternally(s){
   const text=buildStoreShareText(s),title=`${clientLabel(s)} · ${s?.nome||'Sede'}`;
   // Se sulla sede c'è un ticket Intesa incluso in un ordinario, condividiamo
   // anche il PDF originale del ticket come allegato (oltre al testo/Maps).
-  const ticketExtras=extras.filter(e=>e.store_id===s?.id&&isIntesaOrdinaryTicket(e)&&!extraIsDone(e));
+  const ticketExtras=extras.filter(e=>e.store_id===s?.id&&isOrdinaryIncludedExtra(e)&&!extraIsDone(e));
   const ticketAttachments=ticketExtras
     .map(e=>attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta'))
     .filter(Boolean);
@@ -1058,7 +1060,7 @@ async function shareStoreExternally(s){
       const url=await signedAttachmentUrl(a),res=await fetch(url);
       if(!res.ok)throw new Error('Download PDF ticket non riuscito');
       const blob=await res.blob();
-      files.push(new File([blob],a.nome_file||'Ticket Intesa.pdf',{type:a.mime_type||blob.type||'application/pdf'}));
+      files.push(new File([blob],a.nome_file||'Istruzioni intervento.pdf',{type:a.mime_type||blob.type||'application/pdf'}));
     }catch(err){console.warn('PDF ticket non allegato',err)}
   }
   try{
@@ -1718,7 +1720,7 @@ async function openDone(s,scheduleItemId=''){
     if(error)return alert('Impossibile verificare lo stato del passaggio: '+error.message);
     if(existing?.length){await loadAll();return alert(existing[0].stato==='in_attesa'?'Questo passaggio è già stato inviato ed è in attesa di convalida.':'Questo passaggio risulta già completato.')}
   }
-  $('doneForm').reset();donePhotoFiles=[];renderDonePhotoSelection();$('doneStoreId').value=s.id;$('doneScheduleItemId').value=scheduleItemId;const openMulti=openMultiDayIntervention(s.id);$('doneTitle').textContent=(openMulti?'Continua intervento · ':'Intervento · ')+s.nome;$('doneDate').value=today();$('doneNextVisitWrap').classList.add('hidden');const currentNextNote=String(s.next_visit_note||'').trim();if(openMulti){$('doneNextVisitCurrent').innerHTML=`<strong>↪ Intervento già in corso</strong><p>Iniziato il ${esc(fmt(openMulti.data_intervento))}. Questa giornata verrà aggiunta allo stesso intervento.</p>`;$('doneNextVisitCurrent').classList.remove('hidden')}if(!openMulti){$('doneNextVisitCurrent').innerHTML=currentNextNote?`<strong>⚠️ Da fare in questo passaggio</strong><p>${esc(currentNextNote)}</p>`:'';$('doneNextVisitCurrent').classList.toggle('hidden',!currentNextNote);}const linked=scheduleItemId?linkedExtrasForScheduleItem(scheduleItemId):[];$('doneLinkedExtras').innerHTML=linked.length?`<strong>⚠ Indicazioni collegate a questo passaggio</strong>${linked.map(e=>{const ticket=isIntesaOrdinaryTicket(e),pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');return `<div class="linked-extra-category ${extraCategoryClass(e)}"><b>${ticket?'🎫 Ticket Intesa':esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}${e.descrizione?`<small style="display:block;margin-top:4px">${esc(e.descrizione)}</small>`:''}${ticket&&pdf?`<button type="button" class="secondary compact-btn" data-linked-ticket-pdf="${e.id}" style="margin-top:7px">Apri PDF ticket</button>`:''}</div>`}).join('')}`:'';$('doneLinkedExtras').classList.toggle('hidden',!linked.length);$('doneLinkedExtras').querySelectorAll('[data-linked-ticket-pdf]').forEach(b=>{const ex=linked.find(e=>e.id===b.dataset.linkedTicketPdf),pdf=attachments.find(a=>a.extra_id===ex?.id&&a.tipo==='pdf_richiesta');if(pdf)b.onclick=()=>openAttachment(pdf)});
+  $('doneForm').reset();donePhotoFiles=[];renderDonePhotoSelection();$('doneStoreId').value=s.id;$('doneScheduleItemId').value=scheduleItemId;const openMulti=openMultiDayIntervention(s.id);$('doneTitle').textContent=(openMulti?'Continua intervento · ':'Intervento · ')+s.nome;$('doneDate').value=today();$('doneNextVisitWrap').classList.add('hidden');const currentNextNote=String(s.next_visit_note||'').trim();if(openMulti){$('doneNextVisitCurrent').innerHTML=`<strong>↪ Intervento già in corso</strong><p>Iniziato il ${esc(fmt(openMulti.data_intervento))}. Questa giornata verrà aggiunta allo stesso intervento.</p>`;$('doneNextVisitCurrent').classList.remove('hidden')}if(!openMulti){$('doneNextVisitCurrent').innerHTML=currentNextNote?`<strong>⚠️ Da fare in questo passaggio</strong><p>${esc(currentNextNote)}</p>`:'';$('doneNextVisitCurrent').classList.toggle('hidden',!currentNextNote);}const linked=scheduleItemId?linkedExtrasForScheduleItem(scheduleItemId):[];$('doneLinkedExtras').innerHTML=linked.length?`<strong>⚠ Indicazioni collegate a questo passaggio</strong>${linked.map(e=>{const intesaTicket=isIntesaOrdinaryTicket(e),eurospinTarget=isEurospinOrdinaryTarget(e),included=intesaTicket||eurospinTarget,pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');return `<div class="linked-extra-category ${extraCategoryClass(e)}"><b>${intesaTicket?'🎫 Ticket Intesa':eurospinTarget?'🎯 Target Eurospin':esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}${e.numero_target?` <small>· Target ${esc(e.numero_target)}</small>`:''}${e.descrizione?`<small style="display:block;margin-top:4px">${esc(e.descrizione)}</small>`:''}${included&&pdf?`<button type="button" class="secondary compact-btn" data-linked-ticket-pdf="${e.id}" style="margin-top:7px">Apri PDF ${intesaTicket?'ticket':'target'}</button>`:''}</div>`}).join('')}`:'';$('doneLinkedExtras').classList.toggle('hidden',!linked.length);$('doneLinkedExtras').querySelectorAll('[data-linked-ticket-pdf]').forEach(b=>{const ex=linked.find(e=>e.id===b.dataset.linkedTicketPdf),pdf=attachments.find(a=>a.extra_id===ex?.id&&a.tipo==='pdf_richiesta');if(pdf)b.onclick=()=>openAttachment(pdf)});
   const fieldset=$('doneWorkersFieldset'),checks=[...$('doneWorkers').querySelectorAll('input')];
   if(admin()){
     fieldset?.classList.remove('hidden');
@@ -1864,8 +1866,8 @@ async function renderPending(){
     c.querySelector('[data-re]')?.addEventListener('click',()=>openAttachment(re));c.querySelector('[data-ro]')?.addEventListener('click',()=>openAttachment(ro));c.querySelector('[data-ok]').onclick=()=>approveExtra(e);$('pendingList').appendChild(c);if(pics.length)hydrateExtraPhotos(c,pics);
   }
 }
-async function approveIntervention(i){const now=new Date().toISOString();const {error}=await sb.from('interventions').update({stato:'convalidato',convalidato_da:profile.id,convalidato_il:now}).eq('id',i.id);if(error)return alert(error.message);const {error:e2}=await sb.from('stores').update({ultimo_passaggio:interventionEndDate(i),next_visit_note:i.next_visit_note||null}).eq('id',i.store_id);if(e2)return alert(e2.message);const ids=[...(i.schedule_item_ids||[])];if(i.schedule_item_id&&!ids.includes(i.schedule_item_id))ids.push(i.schedule_item_id);if(ids.length){await sb.from('schedule_items').update({stato:'completato'}).in('id',ids);const linkedTickets=extras.filter(e=>ids.includes(e.schedule_item_id)&&isIntesaOrdinaryTicket(e)&&e.stato!=='completato');if(linkedTickets.length){const r=await sb.from('extras').update({stato:'completato',convalidato_da:profile.id,convalidato_il:now,closed_at:now}).in('id',linkedTickets.map(e=>e.id));if(r.error)return alert('Intervento convalidato, ma ticket Intesa non aggiornato: '+r.error.message)}}toast('Intervento convalidato');await loadAll()}
-async function rejectIntervention(i){const reason=prompt('Motivo del rifiuto','')||'';const {error}=await sb.from('interventions').update({stato:'rifiutato',motivo_rifiuto:reason,convalidato_da:profile.id,convalidato_il:new Date().toISOString()}).eq('id',i.id);if(error)return alert(error.message);const ids=[...(i.schedule_item_ids||[])];if(i.schedule_item_id&&!ids.includes(i.schedule_item_id))ids.push(i.schedule_item_id);const lastId=ids[ids.length-1];if(lastId)await sb.from('schedule_items').update({stato:'da_fare'}).eq('id',lastId);if(ids.length){const linkedTickets=extras.filter(e=>ids.includes(e.schedule_item_id)&&isIntesaOrdinaryTicket(e));if(linkedTickets.length)await sb.from('extras').update({stato:'programmato',closed_by:null,closed_at:null,convalidato_da:null,convalidato_il:null}).in('id',linkedTickets.map(e=>e.id))}toast('Intervento rifiutato');await loadAll()}
+async function approveIntervention(i){const now=new Date().toISOString();const {error}=await sb.from('interventions').update({stato:'convalidato',convalidato_da:profile.id,convalidato_il:now}).eq('id',i.id);if(error)return alert(error.message);const {error:e2}=await sb.from('stores').update({ultimo_passaggio:interventionEndDate(i),next_visit_note:i.next_visit_note||null}).eq('id',i.store_id);if(e2)return alert(e2.message);const ids=[...(i.schedule_item_ids||[])];if(i.schedule_item_id&&!ids.includes(i.schedule_item_id))ids.push(i.schedule_item_id);if(ids.length){await sb.from('schedule_items').update({stato:'completato'}).in('id',ids);const linkedTickets=extras.filter(e=>ids.includes(e.schedule_item_id)&&isOrdinaryIncludedExtra(e)&&e.stato!=='completato');if(linkedTickets.length){const r=await sb.from('extras').update({stato:'completato',convalidato_da:profile.id,convalidato_il:now,closed_at:now}).in('id',linkedTickets.map(e=>e.id));if(r.error)return alert('Intervento convalidato, ma ticket/target incluso non aggiornato: '+r.error.message)}}toast('Intervento convalidato');await loadAll()}
+async function rejectIntervention(i){const reason=prompt('Motivo del rifiuto','')||'';const {error}=await sb.from('interventions').update({stato:'rifiutato',motivo_rifiuto:reason,convalidato_da:profile.id,convalidato_il:new Date().toISOString()}).eq('id',i.id);if(error)return alert(error.message);const ids=[...(i.schedule_item_ids||[])];if(i.schedule_item_id&&!ids.includes(i.schedule_item_id))ids.push(i.schedule_item_id);const lastId=ids[ids.length-1];if(lastId)await sb.from('schedule_items').update({stato:'da_fare'}).eq('id',lastId);if(ids.length){const linkedTickets=extras.filter(e=>ids.includes(e.schedule_item_id)&&isOrdinaryIncludedExtra(e));if(linkedTickets.length)await sb.from('extras').update({stato:'programmato',closed_by:null,closed_at:null,convalidato_da:null,convalidato_il:null}).in('id',linkedTickets.map(e=>e.id))}toast('Intervento rifiutato');await loadAll()}
 
 async function reopenOrdinaryIntervention(item,store){
   if(!admin()||!item)return;
@@ -2428,7 +2430,7 @@ function openExtraEdit(e){
   $('extraEditId').value=e.id;$('extraEditClient').value=clientType(e);syncExtraClosureOptions($('extraEditClosureProfile'),clientType(e),closureProfile(e));$('extraEditDeadline').value=isoToLocalInput(e.deadline_at);$('extraEditWithOrdinary').checked=!!e.con_ordinario;$('extraEditTitle').value=e.titolo||'';$('extraEditTargetNumber').value=e.numero_target||'';$('extraEditCategory').value=extraCategory(e)||'';$('extraEditDescription').value=e.descrizione||'';$('extraEditRequestDate').value=extraRequestDate(e)||today();$('extraEditDate').value=e.giorno_intervento||'';
   const external=!e.store_id;$('extraEditDestination').value=external?'external':'store';renderExtraEditStoreOptions(e.store_id);$('extraEditExternalName').value=e.nome_esterno||'';$('extraEditExternalAddress').value=e.indirizzo_esterno||'';toggleExtraEditDestination();
   $('extraEditWorkers').innerHTML=profiles.filter(p=>p.attivo).map(p=>`<label><input type="checkbox" value="${p.id}"><span>${esc(p.nome)}</span></label>`).join('');
-  const ids=new Set(extraWorkers.filter(w=>w.extra_id===e.id).map(w=>w.profile_id));$('extraEditWorkers').querySelectorAll('input').forEach(x=>x.checked=ids.has(x.value));$('extraEditPdf').value='';syncIntesaOrdinaryEditUi();openDialog('extraEditDialog');
+  const ids=new Set(extraWorkers.filter(w=>w.extra_id===e.id).map(w=>w.profile_id));$('extraEditWorkers').querySelectorAll('input').forEach(x=>x.checked=ids.has(x.value));$('extraEditPdf').value='';syncOrdinaryIncludedEditUi();openDialog('extraEditDialog');
 }
 function renderExtraEditStoreOptions(selected){
   const client=$('extraEditClient')?.value||'eurospin',cfg=extraStoreUiConfig(client),list=storesForExtraClient(client),sel=$('extraEditStore');
@@ -2501,30 +2503,34 @@ $('archiveUploadForm')?.addEventListener('submit',async e=>{
 });
 
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeDialog(b));$('helpBtn').onclick=openHelp;document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));document.querySelectorAll('[data-client-filter]').forEach(b=>b.onclick=()=>{storeClientFilter=b.dataset.clientFilter;document.querySelectorAll('[data-client-filter]').forEach(x=>x.classList.toggle('active',x===b));renderStores()});document.querySelectorAll('[data-extra-client]').forEach(b=>b.onclick=()=>{extraClientFilter=b.dataset.extraClient;document.querySelectorAll('[data-extra-client]').forEach(x=>x.classList.toggle('active',x===b));renderExtras()});document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{storeFilter=b.dataset.filter;renderStores()});
-$('globalSearch').oninput=renderGlobalSearch;$('dashboardRefresh').onclick=loadAll;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){scheduleDateFilter='all';$('scheduleDateFilter').value='all';setView('schedule')}else if(b.dataset.dash==='today'){scheduleDateFilter='today';$('scheduleDateFilter').value='today';setView('schedule')}else if(b.dataset.dash==='openextras')setView('extras');else if(b.dataset.dash==='todayextras'){$('extraSearchInput').value=today();setView('extras');renderExtras()}else setView('stores')});$('scheduleClientFilter').onchange=e=>{scheduleClientFilter=e.target.value;renderSchedules()};$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('bulkIntervalBtn').onclick=openBulkIntervalDialog;$('bulkIntervalClient').onchange=updateBulkIntervalPreview;$('bulkIntervalSiteType').onchange=updateBulkIntervalPreview;$('bulkIntervalDays').oninput=updateBulkIntervalPreview;$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('schedulePickerClient').onchange=renderSchedulePicker;document.querySelectorAll('[data-quick-date]').forEach(b=>b.onclick=()=>{$('scheduleDate').value=b.dataset.quickDate==='today'?today():tomorrow()});$('addScheduleSearch').oninput=renderAddSchedulePicker;$('newExtraBtn').onclick=()=>{$('extraForm').reset();$('extraRequestDate').value=today();$('extraDate').value='';$('extraDeadline').value='';$('extraClient').value='eurospin';syncExtraClosureOptions($('extraClosureProfile'),'eurospin','eurospin');if($('extraIntesaOrdinaryMode'))$('extraIntesaOrdinaryMode').checked=false;syncIntesaOrdinaryCreateUi();renderExtraStoreOptions();syncExtraDestinationUi();openDialog('extraDialog')};
-function syncIntesaOrdinaryCreateUi(){
-  const client=$('extraClient')?.value||'eurospin',isIntesa=client==='intesa';
+$('globalSearch').oninput=renderGlobalSearch;$('dashboardRefresh').onclick=loadAll;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){scheduleDateFilter='all';$('scheduleDateFilter').value='all';setView('schedule')}else if(b.dataset.dash==='today'){scheduleDateFilter='today';$('scheduleDateFilter').value='today';setView('schedule')}else if(b.dataset.dash==='openextras')setView('extras');else if(b.dataset.dash==='todayextras'){$('extraSearchInput').value=today();setView('extras');renderExtras()}else setView('stores')});$('scheduleClientFilter').onchange=e=>{scheduleClientFilter=e.target.value;renderSchedules()};$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('bulkIntervalBtn').onclick=openBulkIntervalDialog;$('bulkIntervalClient').onchange=updateBulkIntervalPreview;$('bulkIntervalSiteType').onchange=updateBulkIntervalPreview;$('bulkIntervalDays').oninput=updateBulkIntervalPreview;$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('schedulePickerClient').onchange=renderSchedulePicker;document.querySelectorAll('[data-quick-date]').forEach(b=>b.onclick=()=>{$('scheduleDate').value=b.dataset.quickDate==='today'?today():tomorrow()});$('addScheduleSearch').oninput=renderAddSchedulePicker;$('newExtraBtn').onclick=()=>{$('extraForm').reset();$('extraRequestDate').value=today();$('extraDate').value='';$('extraDeadline').value='';$('extraClient').value='eurospin';syncExtraClosureOptions($('extraClosureProfile'),'eurospin','eurospin');if($('extraIntesaOrdinaryMode'))$('extraIntesaOrdinaryMode').checked=false;if($('extraEurospinOrdinaryMode'))$('extraEurospinOrdinaryMode').checked=false;syncOrdinaryIncludedCreateUi();renderExtraStoreOptions();syncExtraDestinationUi();openDialog('extraDialog')};
+function syncOrdinaryIncludedCreateUi(){
+  const client=$('extraClient')?.value||'eurospin';
+  const isIntesa=client==='intesa',isEurospin=client==='eurospin';
   $('extraIntesaOrdinaryModeWrap')?.classList.toggle('hidden',!isIntesa);
-  if(!isIntesa&&$('extraIntesaOrdinaryMode'))$('extraIntesaOrdinaryMode').checked=false;
+  $('extraEurospinOrdinaryModeWrap')?.classList.toggle('hidden',!isEurospin);
+  if($('extraIntesaOrdinaryMode'))$('extraIntesaOrdinaryMode').checked=isIntesa&&$('extraClosureProfile')?.value==='intesa_ordinario';
+  if($('extraEurospinOrdinaryMode'))$('extraEurospinOrdinaryMode').checked=isEurospin&&$('extraClosureProfile')?.value==='eurospin_ordinario';
 }
-function syncIntesaOrdinaryEditUi(){
-  const client=$('extraEditClient')?.value||'eurospin',isIntesa=client==='intesa';
+function syncOrdinaryIncludedEditUi(){
+  const client=$('extraEditClient')?.value||'eurospin';
+  const isIntesa=client==='intesa',isEurospin=client==='eurospin';
   $('extraEditIntesaOrdinaryModeWrap')?.classList.toggle('hidden',!isIntesa);
+  $('extraEditEurospinOrdinaryModeWrap')?.classList.toggle('hidden',!isEurospin);
   if($('extraEditIntesaOrdinaryMode'))$('extraEditIntesaOrdinaryMode').checked=isIntesa&&$('extraEditClosureProfile')?.value==='intesa_ordinario';
+  if($('extraEditEurospinOrdinaryMode'))$('extraEditEurospinOrdinaryMode').checked=isEurospin&&$('extraEditClosureProfile')?.value==='eurospin_ordinario';
 }
 $('extraClient').onchange=()=>{
   const client=$('extraClient').value;
   syncExtraClosureOptions($('extraClosureProfile'),client,client);
-  if($('extraIntesaOrdinaryMode'))$('extraIntesaOrdinaryMode').checked=false;
-  syncIntesaOrdinaryCreateUi();
+  syncOrdinaryIncludedCreateUi();
   renderExtraStoreOptions();
   syncExtraDestinationUi();
 };
 $('extraEditClient').onchange=()=>{
   const client=$('extraEditClient').value;
   syncExtraClosureOptions($('extraEditClosureProfile'),client,client);
-  if($('extraEditIntesaOrdinaryMode'))$('extraEditIntesaOrdinaryMode').checked=false;
-  syncIntesaOrdinaryEditUi();
+  syncOrdinaryIncludedEditUi();
   renderExtraEditStoreOptions();
   toggleExtraEditDestination();
 };
@@ -2539,6 +2545,20 @@ $('extraIntesaOrdinaryMode')?.addEventListener('change',()=>{
   }else if($('extraClient').value==='intesa'){
     $('extraClosureProfile').value='intesa';
   }
+  syncOrdinaryIncludedCreateUi();
+});
+$('extraEurospinOrdinaryMode')?.addEventListener('change',()=>{
+  if($('extraEurospinOrdinaryMode').checked){
+    $('extraClient').value='eurospin';
+    syncExtraClosureOptions($('extraClosureProfile'),'eurospin','eurospin_ordinario');
+    $('extraDestination').value='store';
+    renderExtraStoreOptions();
+    $('extraWithOrdinary').checked=true;
+    $('extraDestination').dispatchEvent(new Event('change'));
+  }else if($('extraClient').value==='eurospin'){
+    $('extraClosureProfile').value='eurospin';
+  }
+  syncOrdinaryIncludedCreateUi();
 });
 $('extraEditIntesaOrdinaryMode')?.addEventListener('change',()=>{
   if($('extraEditIntesaOrdinaryMode').checked){
@@ -2551,27 +2571,42 @@ $('extraEditIntesaOrdinaryMode')?.addEventListener('change',()=>{
   }else if($('extraEditClient').value==='intesa'){
     $('extraEditClosureProfile').value='intesa';
   }
+  syncOrdinaryIncludedEditUi();
 });
-$('extraClosureProfile').onchange=()=>{
-  if($('extraClosureProfile').value==='intesa_ordinario'){
-    $('extraClient').value='intesa';
-    $('extraDestination').value='store';
-    $('extraWithOrdinary').checked=true;
-    if($('extraIntesaOrdinaryMode'))$('extraIntesaOrdinaryMode').checked=true;
-    syncIntesaOrdinaryCreateUi();
-    $('extraDestination').dispatchEvent(new Event('change'));
-  }else if($('extraIntesaOrdinaryMode')){
-    $('extraIntesaOrdinaryMode').checked=false;
-  }
-};
-$('extraEditClosureProfile').onchange=()=>{
-  if($('extraEditClosureProfile').value==='intesa_ordinario'){
-    $('extraEditClient').value='intesa';
+$('extraEditEurospinOrdinaryMode')?.addEventListener('change',()=>{
+  if($('extraEditEurospinOrdinaryMode').checked){
+    $('extraEditClient').value='eurospin';
+    syncExtraClosureOptions($('extraEditClosureProfile'),'eurospin','eurospin_ordinario');
     $('extraEditDestination').value='store';
+    renderExtraEditStoreOptions($('extraEditStore').value);
     $('extraEditWithOrdinary').checked=true;
     toggleExtraEditDestination();
+  }else if($('extraEditClient').value==='eurospin'){
+    $('extraEditClosureProfile').value='eurospin';
   }
-  syncIntesaOrdinaryEditUi();
+  syncOrdinaryIncludedEditUi();
+});
+$('extraClosureProfile').onchange=()=>{
+  const mode=$('extraClosureProfile').value;
+  if(mode==='intesa_ordinario'||mode==='eurospin_ordinario'){
+    $('extraClient').value=mode==='intesa_ordinario'?'intesa':'eurospin';
+    $('extraDestination').value='store';
+    $('extraWithOrdinary').checked=true;
+    renderExtraStoreOptions();
+    $('extraDestination').dispatchEvent(new Event('change'));
+  }
+  syncOrdinaryIncludedCreateUi();
+};
+$('extraEditClosureProfile').onchange=()=>{
+  const mode=$('extraEditClosureProfile').value;
+  if(mode==='intesa_ordinario'||mode==='eurospin_ordinario'){
+    $('extraEditClient').value=mode==='intesa_ordinario'?'intesa':'eurospin';
+    $('extraEditDestination').value='store';
+    $('extraEditWithOrdinary').checked=true;
+    renderExtraEditStoreOptions($('extraEditStore').value);
+    toggleExtraEditDestination();
+  }
+  syncOrdinaryIncludedEditUi();
 };$('extraSearchInput').oninput=renderExtras;$('extraCategoryFilter').onchange=renderExtras;$('clearExtraSearch').onclick=()=>{$('extraSearchInput').value='';renderExtras();$('extraSearchInput').focus()};
 function addDonePhotos(fileList){
   const incoming=[...fileList].filter(f=>f.type.startsWith('image/'));
@@ -2617,7 +2652,7 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
     const workers=admin()?[...$('doneWorkers').querySelectorAll('input:checked')].map(x=>x.value):[profile.id];
     if(!workers.length)throw new Error('Seleziona chi ha eseguito.');
     const files=[...donePhotoFiles],storeId=$('doneStoreId').value,scheduleItemId=$('doneScheduleItemId').value||null;
-    const linkedToClose=scheduleItemId?linkedExtrasForScheduleItem(scheduleItemId):[];const linkedIntesaTickets=linkedToClose.filter(isIntesaOrdinaryTicket);const linkedExtrasToClose=linkedToClose.filter(e=>!isIntesaOrdinaryTicket(e));
+    const linkedToClose=scheduleItemId?linkedExtrasForScheduleItem(scheduleItemId):[];const linkedIncludedExtras=linkedToClose.filter(isOrdinaryIncludedExtra);const linkedEurospinTargets=linkedIncludedExtras.filter(isEurospinOrdinaryTarget);const linkedExtrasToClose=linkedToClose.filter(e=>!isOrdinaryIncludedExtra(e));
     const existingOpen=await fetchOpenMultiDayIntervention(storeId);
     if(scheduleItemId&&!existingOpen){
       const localDuplicate=interventions.some(i=>i.schedule_item_id===scheduleItemId&&['in_attesa','convalidato'].includes(i.stato)&&!i.multi_day_open);
@@ -2627,6 +2662,11 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
     }
     const nextVisitNote=continueAnotherDay?'':($('doneHasNextVisitNote').checked?$('doneNextVisitNote').value.trim():'');
     if(!continueAnotherDay&&$('doneHasNextVisitNote').checked&&!nextVisitNote)throw new Error('Scrivi cosa va fatto al prossimo passaggio.');
+    if(!continueAnotherDay&&linkedEurospinTargets.length){
+      const labels=linkedEurospinTargets.map(e=>`${e.numero_target?`Target ${e.numero_target} · `:''}${e.titolo||'Target Eurospin'}`).join('\n• ');
+      const ok=confirm(`Prima di chiudere l’intervento:\n\nConfermi che l’operatore ha fatto chiudere in negozio ${linkedEurospinTargets.length===1?'il target Eurospin collegato':'tutti i target Eurospin collegati'}?\n\n• ${labels}\n\nPremi OK solo dopo aver verificato la chiusura in negozio.`);
+      if(!ok)throw new Error('Chiusura annullata: fai chiudere il target in negozio prima di chiudere l’intervento ordinario.');
+    }
     const day=$('doneDate').value,dayNote=$('doneNotes').value.trim();
     let data;
     if(existingOpen){
@@ -2656,7 +2696,7 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
     }
     if(scheduleItemId){const nextState=continueAnotherDay?'completato':(admin()?'completato':'in_attesa');const r=await sb.from('schedule_items').update({stato:nextState}).eq('id',scheduleItemId);if(r.error)console.warn('Stato programmazione non aggiornato:',r.error.message);const localItem=scheduleItems.find(x=>x.id===scheduleItemId);if(localItem)localItem.stato=nextState}
     if(!continueAnotherDay&&admin()){const r=await sb.from('stores').update({ultimo_passaggio:day,next_visit_note:nextVisitNote||null}).eq('id',storeId);if(r.error)throw r.error}
-    if(!continueAnotherDay&&linkedIntesaTickets.length){const ticketState=admin()?'completato':'in_attesa',now=new Date().toISOString(),r=await sb.from('extras').update({stato:ticketState,giorno_intervento:day,closed_by:profile.id,closed_at:admin()?now:null,convalidato_da:admin()?profile.id:null,convalidato_il:admin()?now:null}).in('id',linkedIntesaTickets.map(e=>e.id));if(r.error)throw new Error('Intervento salvato, ma aggiornamento ticket Intesa non riuscito: '+r.error.message)}
+    if(!continueAnotherDay&&linkedIncludedExtras.length){const includedState=admin()?'completato':'in_attesa',now=new Date().toISOString(),r=await sb.from('extras').update({stato:includedState,giorno_intervento:day,closed_by:profile.id,closed_at:admin()?now:null,convalidato_da:admin()?profile.id:null,convalidato_il:admin()?now:null}).in('id',linkedIncludedExtras.map(e=>e.id));if(r.error)throw new Error('Intervento salvato, ma aggiornamento ticket/target incluso non riuscito: '+r.error.message)}
     donePhotoFiles=[];renderDonePhotoSelection();$('doneDialog').close();toast(continueAnotherDay?'Giornata salvata · intervento ancora aperto':files.length?`Intervento salvato · ${files.length} foto in caricamento`:admin()?'Intervento convalidato':'Inviato a Lorenzo');renderSchedules();renderDashboard();
     try{await loadAll()}catch(refreshErr){console.warn('Aggiornamento dati non riuscito dopo il salvataggio:',refreshErr)}
     if(files.length)enqueueInterventionPhotos(data.id,files).catch(err=>{console.error(err);toast('⚠️ Foto in attesa di sincronizzazione')});
@@ -2683,7 +2723,7 @@ function syncExtraClosureOptions(select,client,selected){
     ?[{value:'intesa',label:'Intesa · ticket, note e foto'},{value:'intesa_ordinario',label:'Intesa · ticket incluso nell’ordinario · nessun documento'}]
     :client==='privato'
       ?[{value:'privato',label:'Privato · note e foto'}]
-      :[{value:'eurospin',label:'Eurospin · richiesta + 2 rapportini'}];
+      :[{value:'eurospin',label:'Eurospin · richiesta + 2 rapportini'},{value:'eurospin_ordinario',label:'Eurospin · target incluso nell’ordinario · conferma chiusura in negozio'}];
   select.innerHTML=options.map(o=>`<option value="${o.value}">${o.label}</option>`).join('');
   select.value=options.some(o=>o.value===selected)?selected:options[0].value;
 }
@@ -2702,11 +2742,11 @@ function syncExtraDestinationUi(){
   $('extraStoreWrap').classList.toggle('hidden',ext);$('extraExternalWrap').classList.toggle('hidden',!ext);
 }
 $('extraDestination').onchange=syncExtraDestinationUi;
-$('extraForm').onsubmit=async e=>{e.preventDefault();const workers=[...$('extraWorkers').querySelectorAll('input:checked')].map(x=>x.value),external=$('extraDestination').value==='external',pdf=$('extraPdf').files[0],closureMode=$('extraClosureProfile').value;if(!pdf)return alert('Allega il PDF della richiesta.');if(!external){const chosen=stores.find(s=>s.id===$('extraStore').value);if(!chosen)return alert('Seleziona una sede valida.');if((chosen.client_type||'eurospin')!==$('extraClient').value)return alert('La sede selezionata non appartiene al cliente scelto.');}if(closureMode==='intesa_ordinario'){if($('extraClient').value!=='intesa')return alert('La modalità ticket incluso nell’ordinario è disponibile solo per Intesa Sanpaolo.');if(external)return alert('Il ticket Intesa incluso nell’ordinario deve essere collegato a una filiale.');if(!$('extraWithOrdinary').checked)return alert('Per questa modalità attiva “Da fare insieme al passaggio ordinario”.');}const payload={client_type:$('extraClient').value,closure_profile:$('extraClosureProfile').value,deadline_at:$('extraDeadline').value?new Date($('extraDeadline').value).toISOString():null,store_id:external?null:$('extraStore').value,nome_esterno:external?$('extraExternalName').value.trim():null,indirizzo_esterno:external?$('extraExternalAddress').value.trim():null,titolo:$('extraTitle').value.trim(),numero_target:$('extraTargetNumber').value.trim()||null,categoria_target:$('extraCategory').value,descrizione:$('extraDescription').value.trim()||null,data_richiesta:$('extraRequestDate').value,giorno_intervento:$('extraDate').value||null,note_lorenzo:null,stato:'programmato',con_ordinario:$('extraWithOrdinary').checked,creato_da:profile.id};const {data,error}=await sb.from('extras').insert(payload).select().single();if(error){const msg=String(error.message||error);if((msg.includes("numero_target")||msg.includes("categoria_target"))&&msg.includes("schema cache"))return alert("Database non aggiornato: esegui MIGRAZIONE-V74.sql su Supabase, poi riprova.");if(msg.includes("con_ordinario")&&msg.includes("schema cache"))return alert("Database non aggiornato: esegui MIGRAZIONE-V59.sql su Supabase, poi riprova.");return alert(msg)}if(workers.length){const r=await sb.from('extra_workers').insert(workers.map(profile_id=>({extra_id:data.id,profile_id})));if(r.error)return alert(r.error.message)}const path=`extra/${data.id}/richiesta-${Date.now()}.pdf`;try{await uploadFile(path,pdf);await addAttachment({tipo:'pdf_richiesta',extra_id:data.id,storage_path:path,nome_file:pdf.name,mime_type:pdf.type,dimensione_bytes:pdf.size,caricato_da:profile.id})}catch(err){return alert('Extra creato, ma PDF non caricato: '+err.message)}$('extraDialog').close();toast(workers.length?'Extra creato':'Extra creato · da programmare e assegnare');await loadAll()};
+$('extraForm').onsubmit=async e=>{e.preventDefault();const workers=[...$('extraWorkers').querySelectorAll('input:checked')].map(x=>x.value),external=$('extraDestination').value==='external',pdf=$('extraPdf').files[0],closureMode=$('extraClosureProfile').value;if(!pdf)return alert('Allega il PDF della richiesta.');if(!external){const chosen=stores.find(s=>s.id===$('extraStore').value);if(!chosen)return alert('Seleziona una sede valida.');if((chosen.client_type||'eurospin')!==$('extraClient').value)return alert('La sede selezionata non appartiene al cliente scelto.');}if(closureMode==='intesa_ordinario'||closureMode==='eurospin_ordinario'){const expected=closureMode==='intesa_ordinario'?'intesa':'eurospin';if($('extraClient').value!==expected)return alert('Il modello di chiusura non corrisponde al cliente selezionato.');if(external)return alert(closureMode==='intesa_ordinario'?'Il ticket Intesa incluso nell’ordinario deve essere collegato a una filiale.':'Il target Eurospin incluso nell’ordinario deve essere collegato a un punto vendita.');if(!$('extraWithOrdinary').checked)return alert('Per questa modalità attiva “Da fare insieme al passaggio ordinario”.');}const payload={client_type:$('extraClient').value,closure_profile:$('extraClosureProfile').value,deadline_at:$('extraDeadline').value?new Date($('extraDeadline').value).toISOString():null,store_id:external?null:$('extraStore').value,nome_esterno:external?$('extraExternalName').value.trim():null,indirizzo_esterno:external?$('extraExternalAddress').value.trim():null,titolo:$('extraTitle').value.trim(),numero_target:$('extraTargetNumber').value.trim()||null,categoria_target:$('extraCategory').value,descrizione:$('extraDescription').value.trim()||null,data_richiesta:$('extraRequestDate').value,giorno_intervento:$('extraDate').value||null,note_lorenzo:null,stato:'programmato',con_ordinario:$('extraWithOrdinary').checked,creato_da:profile.id};const {data,error}=await sb.from('extras').insert(payload).select().single();if(error){const msg=String(error.message||error);if((msg.includes("numero_target")||msg.includes("categoria_target"))&&msg.includes("schema cache"))return alert("Database non aggiornato: esegui MIGRAZIONE-V74.sql su Supabase, poi riprova.");if(msg.includes("con_ordinario")&&msg.includes("schema cache"))return alert("Database non aggiornato: esegui MIGRAZIONE-V59.sql su Supabase, poi riprova.");return alert(msg)}if(workers.length){const r=await sb.from('extra_workers').insert(workers.map(profile_id=>({extra_id:data.id,profile_id})));if(r.error)return alert(r.error.message)}const path=`extra/${data.id}/richiesta-${Date.now()}.pdf`;try{await uploadFile(path,pdf);await addAttachment({tipo:'pdf_richiesta',extra_id:data.id,storage_path:path,nome_file:pdf.name,mime_type:pdf.type,dimensione_bytes:pdf.size,caricato_da:profile.id})}catch(err){return alert('Extra creato, ma PDF non caricato: '+err.message)}$('extraDialog').close();toast(workers.length?'Extra creato':'Extra creato · da programmare e assegnare');await loadAll()};
 $('extraEditDestination').onchange=toggleExtraEditDestination;
 $('extraEditForm').onsubmit=async e=>{
   e.preventDefault();if(!admin())return;
-  const id=$('extraEditId').value,workers=[...$('extraEditWorkers').querySelectorAll('input:checked')].map(x=>x.value),external=$('extraEditDestination').value==='external',closureMode=$('extraEditClosureProfile').value;if(!external){const chosen=stores.find(s=>s.id===$('extraEditStore').value);if(!chosen)return alert('Seleziona una sede valida.');if((chosen.client_type||'eurospin')!==$('extraEditClient').value)return alert('La sede selezionata non appartiene al cliente scelto.');}if(closureMode==='intesa_ordinario'){if($('extraEditClient').value!=='intesa')return alert('La modalità ticket incluso nell’ordinario è disponibile solo per Intesa Sanpaolo.');if(external)return alert('Il ticket Intesa incluso nell’ordinario deve essere collegato a una filiale.');if(!$('extraEditWithOrdinary').checked)return alert('Per questa modalità attiva “Da fare insieme al passaggio ordinario”.');}
+  const id=$('extraEditId').value,workers=[...$('extraEditWorkers').querySelectorAll('input:checked')].map(x=>x.value),external=$('extraEditDestination').value==='external',closureMode=$('extraEditClosureProfile').value;if(!external){const chosen=stores.find(s=>s.id===$('extraEditStore').value);if(!chosen)return alert('Seleziona una sede valida.');if((chosen.client_type||'eurospin')!==$('extraEditClient').value)return alert('La sede selezionata non appartiene al cliente scelto.');}if(closureMode==='intesa_ordinario'||closureMode==='eurospin_ordinario'){const expected=closureMode==='intesa_ordinario'?'intesa':'eurospin';if($('extraEditClient').value!==expected)return alert('Il modello di chiusura non corrisponde al cliente selezionato.');if(external)return alert(closureMode==='intesa_ordinario'?'Il ticket Intesa incluso nell’ordinario deve essere collegato a una filiale.':'Il target Eurospin incluso nell’ordinario deve essere collegato a un punto vendita.');if(!$('extraEditWithOrdinary').checked)return alert('Per questa modalità attiva “Da fare insieme al passaggio ordinario”.');}
   const payload={client_type:$('extraEditClient').value,closure_profile:$('extraEditClosureProfile').value,deadline_at:$('extraEditDeadline').value?new Date($('extraEditDeadline').value).toISOString():null,store_id:external?null:$('extraEditStore').value,nome_esterno:external?$('extraEditExternalName').value.trim():null,indirizzo_esterno:external?$('extraEditExternalAddress').value.trim():null,titolo:$('extraEditTitle').value.trim(),numero_target:$('extraEditTargetNumber').value.trim()||null,categoria_target:$('extraEditCategory').value,descrizione:$('extraEditDescription').value.trim()||null,data_richiesta:$('extraEditRequestDate').value,giorno_intervento:$('extraEditDate').value||null,con_ordinario:$('extraEditWithOrdinary').checked};
   let r=await sb.from('extras').update(payload).eq('id',id);if(r.error)return alert(r.error.message);
   r=await sb.from('extra_workers').delete().eq('extra_id',id);if(r.error)return alert(r.error.message);

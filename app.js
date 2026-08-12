@@ -704,14 +704,27 @@ async function linkOrdinaryExtras(scheduleId,scheduleDate,memberIds,items){
   return linked;
 }
 
+function interventionHasScheduleItem(intervention,itemId){
+  if(!intervention||!itemId)return false;
+  if(intervention.schedule_item_id===itemId)return true;
+  return Array.isArray(intervention.schedule_item_ids)&&intervention.schedule_item_ids.includes(itemId);
+}
 function effectiveScheduleState(item){
   if(!item)return 'da_fare';
-  // V100: un elemento riportato appartiene allo storico della giornata originaria
+  // Un elemento riportato appartiene allo storico della giornata originaria
   // e non deve più risultare come lavoro aperto. La copia attiva vive nella giornata successiva.
   if(item.stato==='riportato')return 'completato';
-  const related=interventions.filter(i=>i.schedule_item_id===item.id);
-  if(related.some(i=>i.stato==='convalidato'))return 'completato';
-  if(related.some(i=>i.stato==='in_attesa'))return 'in_attesa';
+
+  // Negli interventi multigiorno il primo giorno resta in schedule_item_id,
+  // mentre le continuazioni sono memorizzate in schedule_item_ids.
+  const related=interventions.filter(i=>interventionHasScheduleItem(i,item.id));
+  if(related.some(i=>i.stato==='convalidato'&&!i.multi_day_open))return 'completato';
+  if(related.some(i=>i.stato==='in_attesa'&&!i.multi_day_open))return 'in_attesa';
+
+  // Se il multigiorno è ancora aperto, la giornata già lavorata resta chiusa;
+  // l'eventuale prosecuzione attiva è rappresentata dalla voce programmata successiva.
+  if(related.some(i=>i.multi_day_open===true))return 'completato';
+
   // Lo storico è la fonte reale: senza intervento il lavoro deve essere nuovamente eseguibile.
   if(['completato','in_attesa'].includes(item.stato)&&!related.length)return 'da_fare';
   return item.stato||'da_fare';
@@ -720,7 +733,7 @@ function effectiveScheduleState(item){
 async function reconcileProgrammingConsistency(){
   if(!admin())return;
   const validItemIds=new Set(scheduleItems.map(x=>x.id));
-  const fixes=scheduleItems.filter(item=>['completato','in_attesa'].includes(item.stato)&&!interventions.some(i=>i.schedule_item_id===item.id));
+  const fixes=scheduleItems.filter(item=>['completato','in_attesa'].includes(item.stato)&&!interventions.some(i=>interventionHasScheduleItem(i,item.id)));
   for(const item of fixes){
     const {error}=await sb.from('schedule_items').update({stato:'da_fare'}).eq('id',item.id);
     if(error)console.warn('Ripristino programmazione non riuscito:',item.id,error.message);else item.stato='da_fare';
@@ -2706,7 +2719,7 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
     const linkedToClose=scheduleItemId?linkedExtrasForScheduleItem(scheduleItemId):[];const linkedIncludedExtras=linkedToClose.filter(isOrdinaryIncludedExtra);const linkedEurospinTargets=linkedIncludedExtras.filter(isEurospinOrdinaryTarget);const linkedExtrasToClose=linkedToClose.filter(e=>!isOrdinaryIncludedExtra(e));
     const existingOpen=await fetchOpenMultiDayIntervention(storeId);
     if(scheduleItemId&&!existingOpen){
-      const localDuplicate=interventions.some(i=>i.schedule_item_id===scheduleItemId&&['in_attesa','convalidato'].includes(i.stato)&&!i.multi_day_open);
+      const localDuplicate=interventions.some(i=>interventionHasScheduleItem(i,scheduleItemId)&&['in_attesa','convalidato'].includes(i.stato)&&!i.multi_day_open);
       if(localDuplicate)throw new Error('Questo passaggio è già stato chiuso o è in attesa di convalida.');
       const {data:existing,error:checkError}=await sb.from('interventions').select('id,stato,multi_day_open').eq('schedule_item_id',scheduleItemId).in('stato',['in_attesa','convalidato']).limit(1);
       if(checkError)throw checkError;if(existing?.some(x=>!x.multi_day_open))throw new Error('Questo passaggio è già stato chiuso o è in attesa di convalida.');
@@ -2745,7 +2758,13 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
       const r=await sb.from('interventions').insert(payload).select().single();if(r.error)throw r.error;data=r.data;
       const ir=await sb.from('intervention_workers').insert(workers.map(profile_id=>({intervention_id:data.id,profile_id})));if(ir.error)throw ir.error;interventions.unshift(data);
     }
-    if(scheduleItemId){const nextState=continueAnotherDay?'completato':(admin()?'completato':'in_attesa');const r=await sb.from('schedule_items').update({stato:nextState}).eq('id',scheduleItemId);if(r.error)console.warn('Stato programmazione non aggiornato:',r.error.message);const localItem=scheduleItems.find(x=>x.id===scheduleItemId);if(localItem)localItem.stato=nextState}
+    if(scheduleItemId){
+      const nextState=continueAnotherDay?'completato':(admin()?'completato':'in_attesa');
+      const linkedScheduleIds=new Set([scheduleItemId,...(Array.isArray(data?.schedule_item_ids)?data.schedule_item_ids:[])].filter(Boolean));
+      const r=await sb.from('schedule_items').update({stato:nextState}).in('id',[...linkedScheduleIds]);
+      if(r.error)console.warn('Stato programmazione non aggiornato:',r.error.message);
+      scheduleItems.filter(x=>linkedScheduleIds.has(x.id)).forEach(x=>x.stato=nextState);
+    }
     if(!continueAnotherDay&&admin()){const r=await sb.from('stores').update({ultimo_passaggio:day,next_visit_note:nextVisitNote||null}).eq('id',storeId);if(r.error)throw r.error}
     if(!continueAnotherDay&&linkedIncludedExtras.length){const includedState=admin()?'completato':'in_attesa',now=new Date().toISOString(),r=await sb.from('extras').update({stato:includedState,giorno_intervento:day,closed_by:profile.id,closed_at:admin()?now:null,convalidato_da:admin()?profile.id:null,convalidato_il:admin()?now:null}).in('id',linkedIncludedExtras.map(e=>e.id));if(r.error)throw new Error('Intervento salvato, ma aggiornamento ticket/target incluso non riuscito: '+r.error.message)}
     donePhotoFiles=[];renderDonePhotoSelection();$('doneDialog').close();toast(continueAnotherDay?'Giornata salvata · intervento ancora aperto':files.length?`Intervento salvato · ${files.length} foto in caricamento`:admin()?'Intervento convalidato':'Inviato a Lorenzo');renderSchedules();renderDashboard();

@@ -191,8 +191,9 @@ function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');set
 function openDialog(id){$(id)?.showModal()}
 function closeDialog(d){d.closest('dialog')?.close()}
 function isStoreProgrammed(storeId){return scheduleItems.some(item=>item.store_id===storeId&&effectiveScheduleState(item)!=='completato'&&schedules.some(s=>s.id===item.schedule_id))}
-function isUrgentStore(s){const n=days(s.ultimo_passaggio),lim=Number(s.intervallo_giorni)||15;return n!==null&&n>lim+10}
-function status(s){if(isStoreProgrammed(s.id))return'scheduled';const n=days(s.ultimo_passaggio),lim=s.intervallo_giorni||15;if(n===null||n>lim)return'due';if(n>=lim-3)return'warning';return'ok'}
+function storeHasInterval(s){return s?.intervallo_giorni!==null&&s?.intervallo_giorni!==undefined&&Number(s.intervallo_giorni)>0}
+function isUrgentStore(s){if(!storeHasInterval(s))return false;const n=days(s.ultimo_passaggio),lim=Number(s.intervallo_giorni);return n!==null&&n>lim+10}
+function status(s){if(isStoreProgrammed(s.id))return'scheduled';if(!storeHasInterval(s))return'ok';const n=days(s.ultimo_passaggio),lim=Number(s.intervallo_giorni);if(n===null||n>lim)return'due';if(n>=lim-3)return'warning';return'ok'}
 const CURRENT_VIEW_KEY='overgreen_current_view';
 let currentView=localStorage.getItem(CURRENT_VIEW_KEY)||'dashboard';
 function setView(name){
@@ -950,8 +951,8 @@ async function showStoreDetail(s){
   const extraPhotos=linkedAttachments.filter(a=>a.extra_id&&a.tipo==='foto_generica');
   const documents=linkedAttachments.filter(a=>a.tipo!=='foto_generica');
   const allPhotos=[...interventionPhotos,...extraPhotos,...manualPhotos];
-  const n=days(s.ultimo_passaggio),lim=s.intervallo_giorni||15;
-  const state=status(s),stateLabel=state==='scheduled'?'In programma':state==='ok'?'Regolare':state==='warning'?'In scadenza':'In ritardo';
+  const n=days(s.ultimo_passaggio),lim=storeHasInterval(s)?Number(s.intervallo_giorni):null;
+  const state=status(s),stateLabel=!storeHasInterval(s)?'Solo su richiesta':state==='scheduled'?'In programma':state==='ok'?'Regolare':state==='warning'?'In scadenza':'In ritardo';
   const todayDate=today();
   const futureItems=scheduleItems.filter(i=>i.store_id===s.id&&effectiveScheduleState(i)==='da_fare').map(i=>schedules.find(x=>x.id===i.schedule_id)).filter(x=>x&&x.giorno>=todayDate).sort((a,b)=>String(a.giorno).localeCompare(String(b.giorno)));
   const nextDate=futureItems[0]?.giorno||null;
@@ -1056,7 +1057,7 @@ function storeMapsShareUrl(s){
 }
 function storeSiteTypeLabel(s){
   const type=String(s?.site_type||'punto_vendita');
-  return type==='filiale'?'Filiale':type==='punto_vendita'?'Punto vendita':type.replaceAll('_',' ');
+  return type==='filiale'?'Filiale':type==='punto_vendita'?'Punto vendita':type==='atm'?'ATM':type.replaceAll('_',' ');
 }
 function buildStoreShareText(s){
   const lines=[
@@ -1738,7 +1739,7 @@ function renderStores(){
  let list=clientStores.filter(s=>`${s.nome} ${s.citta||''} ${s.indirizzo||''} ${clientLabel(s)}`.toLowerCase().includes(q));
  if(storeFilter!=='all')list=list.filter(s=>storeFilter==='today'?s.ultimo_passaggio===today():storeFilter==='urgent'?isUrgentStore(s):status(s)===storeFilter);
  list.sort((a,b)=>sort==='alpha'?a.nome.localeCompare(b.nome,'it'):(days(b.ultimo_passaggio)??9999)-(days(a.ultimo_passaggio)??9999));
- $('storesList').innerHTML='';for(const s of list){const n=days(s.ultimo_passaggio),pending=interventions.some(i=>i.store_id===s.id&&i.stato==='in_attesa'),storeState=status(s),programmed=storeState==='scheduled';const c=document.createElement('article');c.className=`card store-card ${storeState}`;c.innerHTML=`<div class="status-bar"></div><div><div class="card-top"><div><h3 data-detail>${esc(s.nome)}</h3><p class="muted">${esc(s.citta||s.indirizzo||'')}</p></div><div class="days">${n===null?'—':n+' gg'}</div></div>${programmed?'<p class="programmed-label">📅 In programma</p>':''}${pending?'<p class="pending">⏳ In attesa di convalida</p>':''}<p class="muted">Ultimo passaggio: ${fmt(s.ultimo_passaggio)}</p><div class="actions"><button class="secondary" data-map>Maps</button><button data-history>Storico</button>${!pending?'<button data-done>Eseguito</button>':''}${admin()?'<button class="secondary" data-share>Condividi</button><button class="secondary" data-edit>Modifica</button>':''}</div></div>`;
+ $('storesList').innerHTML='';for(const s of list){const n=days(s.ultimo_passaggio),pending=interventions.some(i=>i.store_id===s.id&&i.stato==='in_attesa'),storeState=status(s),programmed=storeState==='scheduled';const c=document.createElement('article');c.className=`card store-card ${storeState}`;c.innerHTML=`<div class="status-bar"></div><div><div class="card-top"><div><h3 data-detail>${esc(s.nome)}</h3><p class="muted">${esc(s.citta||s.indirizzo||'')}</p></div><div class="days">${!storeHasInterval(s)?'Su richiesta':n===null?'—':n+' gg'}</div></div>${programmed?'<p class="programmed-label">📅 In programma</p>':''}${!storeHasInterval(s)?'<p class="muted"><strong>↪ Nessun intervallo · solo su richiesta</strong></p>':''}${pending?'<p class="pending">⏳ In attesa di convalida</p>':''}<p class="muted">Ultimo passaggio: ${fmt(s.ultimo_passaggio)}</p><div class="actions"><button class="secondary" data-map>Maps</button><button data-history>Storico</button>${!pending?'<button data-done>Eseguito</button>':''}${admin()?'<button class="secondary" data-share>Condividi</button><button class="secondary" data-edit>Modifica</button>':''}</div></div>`;
  c.querySelector('[data-detail]').onclick=()=>showStoreDetail(s);c.querySelector('[data-map]').onclick=()=>openGoogleMaps(s.indirizzo,clientLabel(s)+' '+s.nome,s.citta);c.querySelector('[data-history]').onclick=()=>showHistory(s);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(s));c.querySelector('[data-share]')?.addEventListener('click',()=>shareStoreExternally(s));c.querySelector('[data-edit]')?.addEventListener('click',()=>openStore(s));$('storesList').appendChild(c)}
  $('totalCount').textContent=clientStores.length;
  $('dueCount').textContent=clientStores.filter(s=>status(s)==='due').length;
@@ -1746,7 +1747,9 @@ function renderStores(){
  $('todayCount').textContent=clientStores.filter(s=>s.ultimo_passaggio===today()).length;
 }
 function renderWorkers(){for(const id of ['doneWorkers','scheduleWorkers','extraWorkers']){const w=$(id);if(!w)continue;w.innerHTML='';profiles.filter(p=>p.attivo).forEach(p=>{const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${p.id}"> ${esc(p.nome)}`;w.appendChild(l)})}}
-function openStore(s=null){$('storeForm').reset();$('storeId').value=s?.id||'';$('storeClient').value=clientType(s);$('storeSiteType').value=s?.site_type||'punto_vendita';$('storeName').value=s?.nome||'';$('storeAddress').value=s?.indirizzo||'';$('storeCity').value=s?.citta||'';$('storeLast').value=s?.ultimo_passaggio||'';$('storeInterval').value=s?.intervallo_giorni||15;$('storeNotes').value=s?.note||'';openDialog('storeDialog')}
+function syncStoreIntervalUi(){const off=$('storeNoInterval')?.checked===true;if($('storeInterval')){$('storeInterval').disabled=off;$('storeInterval').required=!off}}
+function openStore(s=null){$('storeForm').reset();$('storeId').value=s?.id||'';$('storeClient').value=clientType(s);$('storeSiteType').value=s?.site_type||'punto_vendita';$('storeName').value=s?.nome||'';$('storeAddress').value=s?.indirizzo||'';$('storeCity').value=s?.citta||'';$('storeLast').value=s?.ultimo_passaggio||'';const noInterval=!!s&&!storeHasInterval(s);$('storeNoInterval').checked=noInterval;$('storeInterval').value=storeHasInterval(s)?Number(s.intervallo_giorni):15;$('storeNotes').value=s?.note||'';syncStoreIntervalUi();openDialog('storeDialog')}
+$('storeNoInterval')?.addEventListener('change',syncStoreIntervalUi);
 async function openDone(s,scheduleItemId=''){
   if(scheduleItemId){
     const localItem=scheduleItems.find(x=>x.id===scheduleItemId),localState=effectiveScheduleState(localItem);
@@ -2163,9 +2166,11 @@ function renderAddSchedulePicker(){
   const scheduleId=$('addScheduleId').value,q=($('addScheduleSearch').value||'').toLowerCase(),box=$('addScheduleStores');if(!box)return;
   const already=new Set(scheduleItems.filter(i=>i.schedule_id===scheduleId).map(i=>i.store_id));
   const selected=new Set([...box.querySelectorAll('input:checked')].map(x=>x.value));box.innerHTML='';
-  const available=stores.filter(st=>!already.has(st.id)&&st.nome.toLowerCase().includes(q)).sort((a,b)=>(days(b.ultimo_passaggio)??9999)-(days(a.ultimo_passaggio)??9999));
-  for(const st of available){const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${st.id}" ${selected.has(st.id)?'checked':''}><span><strong>${esc(st.nome)}</strong><br><small>${days(st.ultimo_passaggio)??'—'} giorni · ultimo ${fmt(st.ultimo_passaggio)}</small></span>`;box.appendChild(l)}
-  if(!available.length)box.innerHTML='<p class="muted">Nessun altro punto vendita disponibile.</p>';
+  const available=stores.filter(st=>!already.has(st.id)&&[st.nome,st.citta,st.indirizzo,storeSiteTypeLabel(st)].some(v=>String(v||'').toLowerCase().includes(q))).sort((a,b)=>String(a.nome||'').localeCompare(String(b.nome||''),'it'));
+  for(const st of available){const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${st.id}" ${selected.has(st.id)?'checked':''}><span><strong>${esc(st.nome)}</strong><br><small>${esc([storeSiteTypeLabel(st),st.citta,st.indirizzo].filter(Boolean).join(' · '))}</small></span>`;box.appendChild(l)}
+  const standalone=standaloneExtrasForPlanner().filter(e=>!q||schedulePlannerExtraSearchText(e).includes(q)).sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||''),'it'));
+  for(const e of standalone){const value=`extra:${e.id}`,l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${value}" ${selected.has(value)?'checked':''}><span><strong>🔧 ${esc(e.titolo||'Extra')}</strong><br><small>${esc([clientLabel(e),e.numero_target?`Target/Ticket ${e.numero_target}`:null,e.nome_esterno||e.indirizzo_esterno||'Extra senza sede'].filter(Boolean).join(' · '))}</small></span>`;box.appendChild(l)}
+  if(!available.length&&!standalone.length)box.innerHTML='<p class="muted">Nessun altro lavoro disponibile.</p>';
 }
 function extraMatchesScheduleDate(e){
   if(scheduleExactDate)return e.giorno_intervento===scheduleExactDate;
@@ -2238,12 +2243,18 @@ function renderSchedules(){
   }
   if(!$('scheduleList').children.length)$('scheduleList').innerHTML='<div class="card report-empty"><strong>Nessun lavoro con questi filtri</strong><p class="muted">Cambia cliente, data o squadra.</p></div>';
 }
+function standaloneExtrasForPlanner(){
+  return extras.filter(e=>!e.store_id&&!['completato','in_attesa'].includes(e.stato)&&!extraIsScheduled(e));
+}
+function schedulePlannerExtraSearchText(e){
+  return [e.titolo,e.numero_target,e.descrizione,e.nome_esterno,e.indirizzo_esterno,clientLabel(e),extraCategoryLabel(e)].filter(Boolean).join(' ').toLowerCase();
+}
 function renderSchedulePicker(){
   const q=String($('scheduleSearch')?.value||'').trim().toLowerCase(),w=$('scheduleStores');if(!w)return;
   const selected=new Set([...w.querySelectorAll('input:checked')].map(x=>x.value));w.innerHTML='';
   const pickerClient=$('schedulePickerClient')?.value||'all';
   const groups=[['eurospin','Eurospin'],['intesa','Intesa Sanpaolo'],['privato','Privati']];
-  const searchable=st=>[st.nome,st.citta,st.indirizzo,st.note,clientLabel(st.client_type)].some(v=>String(v||'').toLowerCase().includes(q));
+  const searchable=st=>[st.nome,st.citta,st.indirizzo,st.note,clientLabel(st.client_type),storeSiteTypeLabel(st)].some(v=>String(v||'').toLowerCase().includes(q));
   for(const [type,label] of groups){
     if(pickerClient!=='all'&&pickerClient!==type)continue;
     const rows=stores.filter(st=>String(st.client_type||'eurospin')===type&&searchable(st)).sort((a,b)=>String(a.nome||'').localeCompare(String(b.nome||''),'it'));
@@ -2251,10 +2262,31 @@ function renderSchedulePicker(){
     const group=document.createElement('details');group.className=`picker-group ${type}`;group.open=!!q||pickerClient!=='all'||type==='eurospin';
     group.innerHTML=`<summary><span>${esc(label)}</span><b>${rows.length}</b></summary><div class="picker-group-list"></div>`;
     const body=group.querySelector('.picker-group-list');
-    for(const st of rows){const l=document.createElement('label'),programmed=isStoreProgrammed(st.id);l.innerHTML=`<input type="checkbox" value="${st.id}" ${selected.has(st.id)?'checked':''}><span><strong>${esc(st.nome)}</strong>${programmed?' <em class="picker-programmed">Già in programma</em>':''}<small>${esc([st.citta,st.indirizzo].filter(Boolean).join(' · ')||'Nessun indirizzo')}</small></span>`;l.querySelector('input').onchange=updateScheduleSelectedCount;body.appendChild(l)}
+    for(const st of rows){
+      const l=document.createElement('label'),programmed=isStoreProgrammed(st.id);
+      l.innerHTML=`<input type="checkbox" value="${st.id}" ${selected.has(st.id)?'checked':''}><span><strong>${esc(st.nome)}</strong>${programmed?' <em class="picker-programmed">Già in programma</em>':''}${!storeHasInterval(st)?' <em class="picker-programmed">Solo su richiesta</em>':''}<small>${esc([storeSiteTypeLabel(st),st.citta,st.indirizzo].filter(Boolean).join(' · ')||'Nessun indirizzo')}</small></span>`;
+      l.querySelector('input').onchange=updateScheduleSelectedCount;body.appendChild(l)
+    }
     w.appendChild(group)
   }
-  if(!w.children.length)w.innerHTML='<p class="muted picker-empty">Nessuna sede trovata.</p>';
+
+  const standalone=standaloneExtrasForPlanner()
+    .filter(e=>(pickerClient==='all'||clientType(e)===pickerClient)&&(!q||schedulePlannerExtraSearchText(e).includes(q)))
+    .sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||''),'it'));
+  if(standalone.length){
+    const group=document.createElement('details');group.className='picker-group extras';group.open=true;
+    group.innerHTML=`<summary><span>🔧 Extra senza sede</span><b>${standalone.length}</b></summary><div class="picker-group-list"></div>`;
+    const body=group.querySelector('.picker-group-list');
+    for(const e of standalone){
+      const value=`extra:${e.id}`,l=document.createElement('label');
+      const place=e.nome_esterno||e.indirizzo_esterno||'Nessuna sede associata';
+      l.innerHTML=`<input type="checkbox" value="${value}" ${selected.has(value)?'checked':''}><span><strong>${esc(e.titolo||'Extra')}</strong><em class="picker-programmed">Extra standalone</em><small>${esc([clientLabel(e),e.numero_target?`Target/Ticket ${e.numero_target}`:null,place].filter(Boolean).join(' · '))}</small></span>`;
+      l.querySelector('input').onchange=updateScheduleSelectedCount;body.appendChild(l)
+    }
+    w.appendChild(group)
+  }
+
+  if(!w.children.length)w.innerHTML='<p class="muted picker-empty">Nessuna sede o extra trovato.</p>';
   updateScheduleSelectedCount();
 }
 
@@ -2708,7 +2740,7 @@ $('bulkIntervalForm').onsubmit=async e=>{e.preventDefault();
   const {error}=await q;if(error)return alert('Impossibile aggiornare gli intervalli: '+error.message);
   $('bulkIntervalDialog').close();toast(`Intervallo aggiornato per ${matches.length} sedi`);await loadAll();
 };
-$('storeForm').onsubmit=async e=>{e.preventDefault();const id=$('storeId').value,payload={client_type:$('storeClient').value,site_type:$('storeSiteType').value,nome:$('storeName').value.trim(),indirizzo:$('storeAddress').value.trim()||null,citta:$('storeCity').value.trim()||null,ultimo_passaggio:$('storeLast').value||null,intervallo_giorni:Number($('storeInterval').value)||15,note:$('storeNotes').value.trim()||null};const r=id?await sb.from('stores').update(payload).eq('id',id):await sb.from('stores').insert(payload);if(r.error)return alert(r.error.message);$('storeDialog').close();toast('Sede salvata');await loadAll()};
+$('storeForm').onsubmit=async e=>{e.preventDefault();const id=$('storeId').value,payload={client_type:$('storeClient').value,site_type:$('storeSiteType').value,nome:$('storeName').value.trim(),indirizzo:$('storeAddress').value.trim()||null,citta:$('storeCity').value.trim()||null,ultimo_passaggio:$('storeLast').value||null,intervallo_giorni:$('storeNoInterval')?.checked?null:(Number($('storeInterval').value)||15),note:$('storeNotes').value.trim()||null};const r=id?await sb.from('stores').update(payload).eq('id',id):await sb.from('stores').insert(payload);if(r.error)return alert(r.error.message);$('storeDialog').close();toast('Sede salvata');await loadAll()};
 $('doneHasNextVisitNote').onchange=e=>{$('doneNextVisitWrap').classList.toggle('hidden',!e.target.checked);if(!e.target.checked)$('doneNextVisitNote').value=''};
 async function saveOrdinaryIntervention(continueAnotherDay,btn){
   const oldText=btn.textContent;btn.disabled=true;btn.textContent='Salvataggio…';
@@ -2777,8 +2809,68 @@ $('doneForm').onsubmit=async e=>{e.preventDefault();await saveOrdinaryInterventi
 $('doneContinueBtn').onclick=async e=>{await saveOrdinaryIntervention(true,e.currentTarget)};
 $('historyEditForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const btn=e.submitter||$('historyEditForm').querySelector('[type=submit]'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Salvataggio…';try{const id=$('historyEditId').value,workers=[...$('historyEditWorkers').querySelectorAll('input:checked')].map(x=>x.value),newPhotos=[...historyEditPhotoFiles];if(!workers.length)throw new Error('Seleziona almeno un operatore.');const {error}=await sb.from('interventions').update({data_intervento:$('historyEditDate').value,closed_at:$('historyEditClosedAt').value?new Date($('historyEditClosedAt').value).toISOString():null,note:$('historyEditNotes').value.trim()||null}).eq('id',id);if(error)throw error;let r=await sb.from('intervention_workers').delete().eq('intervention_id',id);if(r.error)throw r.error;r=await sb.from('intervention_workers').insert(workers.map(profile_id=>({intervention_id:id,profile_id})));if(r.error)throw r.error;for(let n=0;n<newPhotos.length;n++){btn.textContent=`Caricamento foto ${n+1}/${newPhotos.length}…`;const file=await compressImage(newPhotos[n]),safe=(file.name||`foto-${n+1}.jpg`).replace(/[^a-zA-Z0-9._-]/g,'-'),path=`interventi/${id}/${Date.now()}-${n}-${safe}`;await uploadFile(path,file);const added=await addAttachment({tipo:'foto_generica',intervention_id:id,storage_path:path,nome_file:file.name||safe,mime_type:file.type||'image/jpeg',dimensione_bytes:file.size,caricato_da:profile.id});attachments.push(added)}const intervention=interventions.find(x=>x.id===id);if(intervention?.stato==='convalidato')await sb.from('stores').update({ultimo_passaggio:$('historyEditDate').value}).eq('id',intervention.store_id);historyEditPhotoFiles=[];$('historyEditDialog').close();toast(newPhotos.length?`Intervento aggiornato · ${newPhotos.length} foto aggiunte`:'Storico aggiornato');await loadAll();const st=stores.find(x=>x.id===intervention?.store_id);if(st)showHistory(st)}catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=oldText}};
 $('userEditForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const payload={action:'update',user_id:$('userEditId').value,nome:$('userEditName').value.trim(),email:$('userEditEmail').value.trim(),ruolo:$('userEditRole').value,attivo:$('userEditActive').checked};if(!payload.nome||!payload.email)return alert('Nome ed email sono obbligatori.');const btn=e.submitter;btn.disabled=true;const old=btn.textContent;btn.textContent='Salvataggio…';try{const {data,error}=await sb.functions.invoke('manage-user',{body:payload});if(error||data?.error)throw new Error(data?.error||error.message);$('userEditDialog').close();toast('Utente aggiornato');await loadAll();await renderCloudEmployeeList()}catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=old}};
-$('addScheduleItemsForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const scheduleId=$('addScheduleId').value,selected=[...$('addScheduleStores').querySelectorAll('input:checked')].map(x=>x.value);if(!selected.length)return alert('Seleziona almeno un punto vendita.');const siblings=scheduleItems.filter(i=>i.schedule_id===scheduleId),maxPosition=siblings.reduce((m,i)=>Math.max(m,Number(i.posizione)||0),0);const {data:inserted,error}=await sb.from('schedule_items').insert(selected.map((store_id,i)=>({schedule_id:scheduleId,tipo:'ordinario',store_id,posizione:maxPosition+i+1,stato:'da_fare'}))).select();if(error)return alert(error.message);const sch=schedules.find(x=>x.id===scheduleId),members=scheduleMembers.filter(m=>m.schedule_id===scheduleId).map(m=>m.profile_id);let linkedCount=0;try{linkedCount=(await linkOrdinaryExtras(scheduleId,sch?.giorno,members,inserted||[])).length}catch(err){return alert('Punti vendita aggiunti, ma associazione extra non riuscita: '+err.message)}$('addScheduleItemsDialog').close();toast(`${selected.length} punti vendita aggiunti${linkedCount?` · ${linkedCount} extra associati`:''}`);await loadAll()};
-$('scheduleForm').onsubmit=async e=>{e.preventDefault();const members=[...$('scheduleWorkers').querySelectorAll('input:checked')].map(x=>x.value),selected=[...$('scheduleStores').querySelectorAll('input:checked')].map(x=>x.value);if(!members.length||!selected.length)return alert('Seleziona squadra e punti vendita.');const {data,error}=await sb.from('schedules').insert({giorno:$('scheduleDate').value,nota_generale:$('scheduleNote').value.trim()||null,creato_da:profile.id,auto_rollover:$('scheduleAutoRollover')?.checked!==false}).select().single();if(error)return alert(error.message);let r=await sb.from('schedule_members').insert(members.map(profile_id=>({schedule_id:data.id,profile_id})));if(r.error)return alert(r.error.message);r=await sb.from('schedule_items').insert(selected.map((store_id,i)=>({schedule_id:data.id,tipo:'ordinario',store_id,posizione:i+1,stato:'da_fare'}))).select();if(r.error)return alert(r.error.message);let linkedCount=0;try{linkedCount=(await linkOrdinaryExtras(data.id,$('scheduleDate').value,members,r.data||[])).length}catch(err){return alert('Programmazione creata, ma associazione extra non riuscita: '+err.message)}toast(linkedCount?`Programmazione salvata · ${linkedCount} extra associati`:'Programmazione salvata');$('scheduleForm').reset();$('scheduleDate').value=tomorrow();if($('scheduleAutoRollover'))$('scheduleAutoRollover').checked=true;$('schedulePickerClient').value='all';renderSchedulePicker();await loadAll()};
+$('addScheduleItemsForm').onsubmit=async e=>{
+  e.preventDefault();if(!admin())return;
+  const scheduleId=$('addScheduleId').value,selected=[...$('addScheduleStores').querySelectorAll('input:checked')].map(x=>x.value);
+  if(!selected.length)return alert('Seleziona almeno una sede o un extra.');
+  const storeIds=selected.filter(v=>!v.startsWith('extra:')),extraIds=selected.filter(v=>v.startsWith('extra:')).map(v=>v.slice(6));
+  const siblings=scheduleItems.filter(i=>i.schedule_id===scheduleId),maxPosition=siblings.reduce((m,i)=>Math.max(m,Number(i.posizione)||0),0);
+  const sch=schedules.find(x=>x.id===scheduleId),members=scheduleMembers.filter(m=>m.schedule_id===scheduleId).map(m=>m.profile_id);
+  let linkedCount=0;
+
+  if(storeIds.length){
+    const {data:inserted,error}=await sb.from('schedule_items').insert(storeIds.map((store_id,i)=>({schedule_id:scheduleId,tipo:'ordinario',store_id,posizione:maxPosition+i+1,stato:'da_fare'}))).select();
+    if(error)return alert(error.message);
+    try{linkedCount=(await linkOrdinaryExtras(scheduleId,sch?.giorno,members,inserted||[])).length}catch(err){return alert('Sedi aggiunte, ma associazione extra non riuscita: '+err.message)}
+  }
+
+  for(const extraId of extraIds){
+    let r=await sb.from('extras').update({giorno_intervento:sch?.giorno||today()}).eq('id',extraId);if(r.error)return alert(r.error.message);
+    r=await sb.from('extra_workers').delete().eq('extra_id',extraId);if(r.error)return alert(r.error.message);
+    if(members.length){r=await sb.from('extra_workers').insert(members.map(profile_id=>({extra_id:extraId,profile_id})));if(r.error)return alert(r.error.message)}
+  }
+
+  $('addScheduleItemsDialog').close();
+  toast(`${storeIds.length?storeIds.length+' sedi':''}${storeIds.length&&extraIds.length?' · ':''}${extraIds.length?extraIds.length+' extra':''}${linkedCount?` · ${linkedCount} extra collegati`:''} aggiunti`);
+  await loadAll()
+};
+$('scheduleForm').onsubmit=async e=>{
+  e.preventDefault();
+  const members=[...$('scheduleWorkers').querySelectorAll('input:checked')].map(x=>x.value);
+  const selected=[...$('scheduleStores').querySelectorAll('input:checked')].map(x=>x.value);
+  const selectedExtraIds=selected.filter(v=>v.startsWith('extra:')).map(v=>v.slice(6));
+  const selectedStoreIds=selected.filter(v=>!v.startsWith('extra:'));
+  if(!members.length||!selected.length)return alert('Seleziona squadra e almeno una sede o un extra.');
+  const day=$('scheduleDate').value;
+  let linkedCount=0,scheduledExtras=0;
+
+  if(selectedStoreIds.length){
+    const {data,error}=await sb.from('schedules').insert({giorno:day,nota_generale:$('scheduleNote').value.trim()||null,creato_da:profile.id,auto_rollover:$('scheduleAutoRollover')?.checked!==false}).select().single();
+    if(error)return alert(error.message);
+    let r=await sb.from('schedule_members').insert(members.map(profile_id=>({schedule_id:data.id,profile_id})));
+    if(r.error)return alert(r.error.message);
+    r=await sb.from('schedule_items').insert(selectedStoreIds.map((store_id,i)=>({schedule_id:data.id,tipo:'ordinario',store_id,posizione:i+1,stato:'da_fare'}))).select();
+    if(r.error)return alert(r.error.message);
+    try{linkedCount=(await linkOrdinaryExtras(data.id,day,members,r.data||[])).length}catch(err){return alert('Programmazione creata, ma associazione extra non riuscita: '+err.message)}
+  }
+
+  for(const extraId of selectedExtraIds){
+    const u=await sb.from('extras').update({giorno_intervento:day}).eq('id',extraId);
+    if(u.error)return alert('Impossibile programmare un extra: '+u.error.message);
+    let wr=await sb.from('extra_workers').delete().eq('extra_id',extraId);
+    if(wr.error)return alert('Impossibile assegnare la squadra all’extra: '+wr.error.message);
+    wr=await sb.from('extra_workers').insert(members.map(profile_id=>({extra_id:extraId,profile_id})));
+    if(wr.error)return alert('Impossibile assegnare la squadra all’extra: '+wr.error.message);
+    scheduledExtras++;
+  }
+
+  const parts=[];
+  if(selectedStoreIds.length)parts.push(`${selectedStoreIds.length} ${selectedStoreIds.length===1?'sede':'sedi'}`);
+  if(scheduledExtras)parts.push(`${scheduledExtras} ${scheduledExtras===1?'extra':'extra'}`);
+  if(linkedCount)parts.push(`${linkedCount} extra collegati agli ordinari`);
+  toast(`Programmazione salvata · ${parts.join(' · ')}`);
+  $('scheduleForm').reset();$('scheduleDate').value=tomorrow();if($('scheduleAutoRollover'))$('scheduleAutoRollover').checked=true;$('schedulePickerClient').value='all';renderSchedulePicker();await loadAll()
+};
 function extraStoreUiConfig(client){
   if(client==='intesa')return {single:'Filiale',plural:'filiali Intesa Sanpaolo',storeOption:'Filiale',help:'Verrà associato automaticamente quando programmi l’intervento ordinario della filiale.'};
   if(client==='privato')return {single:'Sede / cliente',plural:'sedi private',storeOption:'Sede / cliente',help:'Verrà associato automaticamente quando programmi l’intervento ordinario della sede.'};

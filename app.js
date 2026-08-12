@@ -185,6 +185,7 @@ function isoToLocalInput(value){return toDateTimeLocal(value)}
 
 const days=d=>{if(!d)return null;const a=new Date(d+'T00:00:00'),b=new Date();b.setHours(0,0,0,0);return Math.max(0,Math.floor((b-a)/86400000));};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+const euro=v=>v===null||v===undefined||v===''?'—':new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(Number(v)||0);
 function attachmentLabel(a){return ({pdf_richiesta:'Richiesta extra',rapportino_eurospin:'File Eurospin',rapportino_overgreen:'File Overgreen'}[a?.tipo]||a?.nome_file||'Documento')}
 const admin=()=>profile?.ruolo==='admin';
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
@@ -744,7 +745,7 @@ async function reconcileProgrammingConsistency(){
     const {error}=await sb.from('extras').update({schedule_item_id:null}).eq('id',e.id);
     if(error)console.warn('Scollegamento extra orfano non riuscito:',e.id,error.message);else e.schedule_item_id=null;
   }
-  const emptySchedules=schedules.filter(s=>!scheduleItems.some(i=>i.schedule_id===s.id));
+  const emptySchedules=schedules.filter(s=>!scheduleItems.some(i=>i.schedule_id===s.id)&&!extras.some(e=>e.schedule_id===s.id&&e.stato!=='completato'));
   for(const sch of emptySchedules){
     let r=await sb.from('schedule_members').delete().eq('schedule_id',sch.id);
     if(r.error){console.warn('Pulizia membri programmazione vuota non riuscita:',r.error.message);continue}
@@ -1739,7 +1740,7 @@ function renderStores(){
  let list=clientStores.filter(s=>`${s.nome} ${s.citta||''} ${s.indirizzo||''} ${clientLabel(s)}`.toLowerCase().includes(q));
  if(storeFilter!=='all')list=list.filter(s=>storeFilter==='today'?s.ultimo_passaggio===today():storeFilter==='urgent'?isUrgentStore(s):status(s)===storeFilter);
  list.sort((a,b)=>sort==='alpha'?a.nome.localeCompare(b.nome,'it'):(days(b.ultimo_passaggio)??9999)-(days(a.ultimo_passaggio)??9999));
- $('storesList').innerHTML='';for(const s of list){const n=days(s.ultimo_passaggio),pending=interventions.some(i=>i.store_id===s.id&&i.stato==='in_attesa'),storeState=status(s),programmed=storeState==='scheduled';const c=document.createElement('article');c.className=`card store-card ${storeState}`;c.innerHTML=`<div class="status-bar"></div><div><div class="card-top"><div><h3 data-detail>${esc(s.nome)}</h3><p class="muted">${esc(s.citta||s.indirizzo||'')}</p></div><div class="days">${!storeHasInterval(s)?'Su richiesta':n===null?'—':n+' gg'}</div></div>${programmed?'<p class="programmed-label">📅 In programma</p>':''}${!storeHasInterval(s)?'<p class="muted"><strong>↪ Nessun intervallo · solo su richiesta</strong></p>':''}${pending?'<p class="pending">⏳ In attesa di convalida</p>':''}<p class="muted">Ultimo passaggio: ${fmt(s.ultimo_passaggio)}</p><div class="actions"><button class="secondary" data-map>Maps</button><button data-history>Storico</button>${!pending?'<button data-done>Eseguito</button>':''}${admin()?'<button class="secondary" data-share>Condividi</button><button class="secondary" data-edit>Modifica</button>':''}</div></div>`;
+ $('storesList').innerHTML='';for(const s of list){const n=days(s.ultimo_passaggio),pending=interventions.some(i=>i.store_id===s.id&&i.stato==='in_attesa'),storeState=status(s),programmed=storeState==='scheduled';const c=document.createElement('article');c.className=`card store-card ${storeState}`;c.innerHTML=`<div class="status-bar"></div><div><div class="card-top"><div><h3 data-detail>${esc(s.nome)}</h3><p class="muted">${esc(s.citta||s.indirizzo||'')}</p></div><div class="days">${!storeHasInterval(s)?'Su richiesta':n===null?'—':n+' gg'}</div></div>${programmed?'<p class="programmed-label">📅 In programma</p>':''}${!storeHasInterval(s)?'<p class="muted"><strong>↪ Nessun intervallo · solo su richiesta</strong></p>':''}${pending?'<p class="pending">⏳ In attesa di convalida</p>':''}${s.site_type==='atm'&&s.importo_fisso!==null&&s.importo_fisso!==undefined?`<p class="muted"><strong>Importo fisso:</strong> ${esc(euro(s.importo_fisso))}</p>`:''}<p class="muted">Ultimo passaggio: ${fmt(s.ultimo_passaggio)}</p><div class="actions"><button class="secondary" data-map>Maps</button><button data-history>Storico</button>${!pending?'<button data-done>Eseguito</button>':''}${admin()?'<button class="secondary" data-share>Condividi</button><button class="secondary" data-edit>Modifica</button>':''}</div></div>`;
  c.querySelector('[data-detail]').onclick=()=>showStoreDetail(s);c.querySelector('[data-map]').onclick=()=>openGoogleMaps(s.indirizzo,clientLabel(s)+' '+s.nome,s.citta);c.querySelector('[data-history]').onclick=()=>showHistory(s);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(s));c.querySelector('[data-share]')?.addEventListener('click',()=>shareStoreExternally(s));c.querySelector('[data-edit]')?.addEventListener('click',()=>openStore(s));$('storesList').appendChild(c)}
  $('totalCount').textContent=clientStores.length;
  $('dueCount').textContent=clientStores.filter(s=>status(s)==='due').length;
@@ -1748,8 +1749,10 @@ function renderStores(){
 }
 function renderWorkers(){for(const id of ['doneWorkers','scheduleWorkers','extraWorkers']){const w=$(id);if(!w)continue;w.innerHTML='';profiles.filter(p=>p.attivo).forEach(p=>{const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${p.id}"> ${esc(p.nome)}`;w.appendChild(l)})}}
 function syncStoreIntervalUi(){const off=$('storeNoInterval')?.checked===true;if($('storeInterval')){$('storeInterval').disabled=off;$('storeInterval').required=!off}}
-function openStore(s=null){$('storeForm').reset();$('storeId').value=s?.id||'';$('storeClient').value=clientType(s);$('storeSiteType').value=s?.site_type||'punto_vendita';$('storeName').value=s?.nome||'';$('storeAddress').value=s?.indirizzo||'';$('storeCity').value=s?.citta||'';$('storeLast').value=s?.ultimo_passaggio||'';const noInterval=!!s&&!storeHasInterval(s);$('storeNoInterval').checked=noInterval;$('storeInterval').value=storeHasInterval(s)?Number(s.intervallo_giorni):15;$('storeNotes').value=s?.note||'';syncStoreIntervalUi();openDialog('storeDialog')}
+function syncStoreTypeUi(){const atm=$('storeSiteType')?.value==='atm';$('storeFixedAmountWrap')?.classList.toggle('hidden',!atm);if(!atm&&$('storeFixedAmount'))$('storeFixedAmount').value=''}
+function openStore(s=null){$('storeForm').reset();$('storeId').value=s?.id||'';$('storeClient').value=clientType(s);$('storeSiteType').value=s?.site_type||'punto_vendita';$('storeFixedAmount').value=s?.importo_fisso??'';$('storeName').value=s?.nome||'';$('storeAddress').value=s?.indirizzo||'';$('storeCity').value=s?.citta||'';$('storeLast').value=s?.ultimo_passaggio||'';const noInterval=!!s&&!storeHasInterval(s);$('storeNoInterval').checked=noInterval;$('storeInterval').value=storeHasInterval(s)?Number(s.intervallo_giorni):15;$('storeNotes').value=s?.note||'';syncStoreTypeUi();syncStoreIntervalUi();openDialog('storeDialog')}
 $('storeNoInterval')?.addEventListener('change',syncStoreIntervalUi);
+$('storeSiteType')?.addEventListener('change',syncStoreTypeUi);
 async function openDone(s,scheduleItemId=''){
   if(scheduleItemId){
     const localItem=scheduleItems.find(x=>x.id===scheduleItemId),localState=effectiveScheduleState(localItem);
@@ -2212,7 +2215,7 @@ function renderSchedules(){
     if(!items.length)continue;
     const members=scheduleMembers.filter(m=>m.schedule_id===s.id).map(m=>profiles.find(p=>p.id===m.profile_id)?.nome).filter(Boolean);
     const c=document.createElement('article');c.className='card schedule-day-card';
-    c.innerHTML=`<div class="schedule-card-head"><div><span class="schedule-date-label">${fmt(s.giorno)}</span><h3>${esc(members.join(' + ')||'Squadra non indicata')}</h3>${s.nota_generale?`<p class="muted">${esc(s.nota_generale)}</p>`:''}${s.auto_rollover?'<p class="muted"><strong>↪ Continuazione automatica attiva</strong></p>':''}</div>${admin()?'<div class="actions schedule-head-actions"><button class="secondary" data-edit-note>Nota giornata</button><button class="secondary" data-add-stores>+ Sedi</button><button class="secondary" data-duplicate>Duplica</button></div>':''}</div><div class="schedule-progress-label">${items.length} lavor${items.length===1?'o':'i'} da eseguire</div>`;
+    c.innerHTML=`<div class="schedule-card-head"><div><span class="schedule-date-label">${fmt(s.giorno)}</span><h3>${esc(members.join(' + ')||'Squadra non indicata')}</h3>${s.nota_generale?`<p class="muted">${esc(s.nota_generale)}</p>`:''}${s.auto_rollover?'<p class="muted"><strong>↪ Continuazione automatica attiva</strong></p>':''}</div>${admin()?'<div class="actions schedule-head-actions"><button class="secondary" data-edit-note>Nota giornata</button><button class="secondary" data-add-stores>+ Sedi</button><button class="secondary" data-duplicate>Duplica</button></div>':''}</div><div class="schedule-progress-label">${items.length+extrasForSchedule(s.id).length} lavor${items.length+extrasForSchedule(s.id).length===1?'o':'i'} da eseguire</div>`;
     c.querySelector('[data-edit-note]')?.addEventListener('click',()=>editScheduleDayNote(s));
     c.querySelector('[data-add-stores]')?.addEventListener('click',()=>openAddScheduleItems(s));
     c.querySelector('[data-duplicate]')?.addEventListener('click',()=>openDuplicateSchedule(s));
@@ -2227,13 +2230,26 @@ function renderSchedules(){
       r.querySelector('[data-store-detail]').onclick=()=>showStoreDetail(st);r.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);
       r.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,item.id));r.querySelector('[data-delete-scheduled]')?.addEventListener('click',()=>deleteScheduleItem(item,st));c.appendChild(r)
     }}
+    const scheduleExtras=extrasForSchedule(s.id).filter(e=>admin()||assignedExtraIds().has(e.id));
+    for(const e of scheduleExtras){
+      if(scheduleWorkerFilter!=='all'&&!extraWorkers.some(w=>w.extra_id===e.id&&w.profile_id===scheduleWorkerFilter))continue;
+      if(scheduleClientFilter!=='all'&&clientType(e)!==scheduleClientFilter)continue;
+      const r=extraCard(e);r.classList.add('schedule-extra-card','schedule-item');r.dataset.scheduleExtraId=e.id;
+      const badge=document.createElement('div');badge.className='schedule-next-visit';badge.innerHTML='<strong>🔧 Extra standalone della giornata</strong>';
+      r.prepend(badge);
+      if(admin()){
+        const actions=r.querySelector('.actions')||r;
+        const remove=document.createElement('button');remove.type='button';remove.className='danger-btn';remove.textContent='Togli dalla giornata';remove.onclick=()=>unlinkExtraFromSchedule(e);actions.appendChild(remove);
+      }
+      c.appendChild(r);
+    }
     enableScheduleDrag(c,s);
     $('scheduleList').appendChild(c);
     hydrateScheduleTravel(c,currentScheduleTravelToken);
   }
 
   const assignedIds=assignedExtraIds();
-  let visibleExtraJobs=(admin()?extras:extras.filter(e=>assignedIds.has(e.id))).filter(extraIsScheduled).filter(extraMatchesScheduleDate);
+  let visibleExtraJobs=(admin()?extras:extras.filter(e=>assignedIds.has(e.id))).filter(e=>!e.schedule_id).filter(extraIsScheduled).filter(extraMatchesScheduleDate);
   if(scheduleWorkerFilter!=='all')visibleExtraJobs=visibleExtraJobs.filter(e=>extraWorkers.some(w=>w.extra_id===e.id&&w.profile_id===scheduleWorkerFilter));
   if(scheduleClientFilter!=='all')visibleExtraJobs=visibleExtraJobs.filter(e=>String(e.client_type||'eurospin')===scheduleClientFilter);
   visibleExtraJobs.sort((a,b)=>String(a.giorno_intervento).localeCompare(String(b.giorno_intervento))||String(a.titolo||'').localeCompare(String(b.titolo||'')));
@@ -2243,8 +2259,23 @@ function renderSchedules(){
   }
   if(!$('scheduleList').children.length)$('scheduleList').innerHTML='<div class="card report-empty"><strong>Nessun lavoro con questi filtri</strong><p class="muted">Cambia cliente, data o squadra.</p></div>';
 }
+function extrasForSchedule(scheduleId){
+  return extras.filter(e=>e.schedule_id===scheduleId&&!['completato'].includes(e.stato));
+}
+async function unlinkExtraFromSchedule(extra){
+  if(!admin()||!extra)return;
+  if(!confirm(`Togliere “${extra.titolo||'Extra'}” da questa programmazione? L’extra resterà aperto.`))return;
+  const r=await sb.from('extras').update({schedule_id:null,giorno_intervento:null}).eq('id',extra.id);
+  if(r.error)return alert(r.error.message);
+  const wr=await sb.from('extra_workers').delete().eq('extra_id',extra.id);
+  if(wr.error)return alert(wr.error.message);
+  extra.schedule_id=null;extra.giorno_intervento=null;
+  extraWorkers=extraWorkers.filter(w=>w.extra_id!==extra.id);
+  toast('Extra tolto dalla programmazione');
+  await loadAll();
+}
 function standaloneExtrasForPlanner(){
-  return extras.filter(e=>!e.store_id&&!['completato','in_attesa'].includes(e.stato)&&!extraIsScheduled(e));
+  return extras.filter(e=>!e.store_id&&!e.schedule_id&&!['completato','in_attesa'].includes(e.stato)&&!extraIsScheduled(e));
 }
 function schedulePlannerExtraSearchText(e){
   return [e.titolo,e.numero_target,e.descrizione,e.nome_esterno,e.indirizzo_esterno,clientLabel(e),extraCategoryLabel(e)].filter(Boolean).join(' ').toLowerCase();
@@ -2482,7 +2513,7 @@ function extraSearchText(e){
 }
 function extraIsScheduled(e){
   const hasDate=!!e.giorno_intervento,hasWorker=extraWorkers.some(w=>w.extra_id===e.id);
-  return e.stato!=='completato'&&e.stato!=='in_attesa'&&hasDate&&hasWorker;
+  return e.stato!=='completato'&&e.stato!=='in_attesa'&&((!!e.schedule_id)||(hasDate&&hasWorker));
 }
 function renderExtras(){
   const root=$('extrasList');if(!root)return;root.innerHTML='';
@@ -2740,7 +2771,7 @@ $('bulkIntervalForm').onsubmit=async e=>{e.preventDefault();
   const {error}=await q;if(error)return alert('Impossibile aggiornare gli intervalli: '+error.message);
   $('bulkIntervalDialog').close();toast(`Intervallo aggiornato per ${matches.length} sedi`);await loadAll();
 };
-$('storeForm').onsubmit=async e=>{e.preventDefault();const id=$('storeId').value,payload={client_type:$('storeClient').value,site_type:$('storeSiteType').value,nome:$('storeName').value.trim(),indirizzo:$('storeAddress').value.trim()||null,citta:$('storeCity').value.trim()||null,ultimo_passaggio:$('storeLast').value||null,intervallo_giorni:$('storeNoInterval')?.checked?null:(Number($('storeInterval').value)||15),note:$('storeNotes').value.trim()||null};const r=id?await sb.from('stores').update(payload).eq('id',id):await sb.from('stores').insert(payload);if(r.error)return alert(r.error.message);$('storeDialog').close();toast('Sede salvata');await loadAll()};
+$('storeForm').onsubmit=async e=>{e.preventDefault();const id=$('storeId').value,payload={client_type:$('storeClient').value,site_type:$('storeSiteType').value,importo_fisso:$('storeSiteType').value==='atm'&&$('storeFixedAmount').value!==''?Number($('storeFixedAmount').value):null,nome:$('storeName').value.trim(),indirizzo:$('storeAddress').value.trim()||null,citta:$('storeCity').value.trim()||null,ultimo_passaggio:$('storeLast').value||null,intervallo_giorni:$('storeNoInterval')?.checked?null:(Number($('storeInterval').value)||15),note:$('storeNotes').value.trim()||null};const r=id?await sb.from('stores').update(payload).eq('id',id):await sb.from('stores').insert(payload);if(r.error)return alert(r.error.message);$('storeDialog').close();toast('Sede salvata');await loadAll()};
 $('doneHasNextVisitNote').onchange=e=>{$('doneNextVisitWrap').classList.toggle('hidden',!e.target.checked);if(!e.target.checked)$('doneNextVisitNote').value=''};
 async function saveOrdinaryIntervention(continueAnotherDay,btn){
   const oldText=btn.textContent;btn.disabled=true;btn.textContent='Salvataggio…';
@@ -2825,7 +2856,7 @@ $('addScheduleItemsForm').onsubmit=async e=>{
   }
 
   for(const extraId of extraIds){
-    let r=await sb.from('extras').update({giorno_intervento:sch?.giorno||today()}).eq('id',extraId);if(r.error)return alert(r.error.message);
+    let r=await sb.from('extras').update({schedule_id:scheduleId,giorno_intervento:sch?.giorno||today()}).eq('id',extraId);if(r.error)return alert(r.error.message);
     r=await sb.from('extra_workers').delete().eq('extra_id',extraId);if(r.error)return alert(r.error.message);
     if(members.length){r=await sb.from('extra_workers').insert(members.map(profile_id=>({extra_id:extraId,profile_id})));if(r.error)return alert(r.error.message)}
   }
@@ -2842,31 +2873,36 @@ $('scheduleForm').onsubmit=async e=>{
   const selectedStoreIds=selected.filter(v=>!v.startsWith('extra:'));
   if(!members.length||!selected.length)return alert('Seleziona squadra e almeno una sede o un extra.');
   const day=$('scheduleDate').value;
-  let linkedCount=0,scheduledExtras=0;
 
+  const {data:schedule,error:scheduleError}=await sb.from('schedules').insert({
+    giorno:day,nota_generale:$('scheduleNote').value.trim()||null,creato_da:profile.id,
+    auto_rollover:$('scheduleAutoRollover')?.checked!==false
+  }).select().single();
+  if(scheduleError)return alert(scheduleError.message);
+
+  let r=await sb.from('schedule_members').insert(members.map(profile_id=>({schedule_id:schedule.id,profile_id})));
+  if(r.error)return alert(r.error.message);
+
+  let linkedCount=0;
   if(selectedStoreIds.length){
-    const {data,error}=await sb.from('schedules').insert({giorno:day,nota_generale:$('scheduleNote').value.trim()||null,creato_da:profile.id,auto_rollover:$('scheduleAutoRollover')?.checked!==false}).select().single();
-    if(error)return alert(error.message);
-    let r=await sb.from('schedule_members').insert(members.map(profile_id=>({schedule_id:data.id,profile_id})));
+    r=await sb.from('schedule_items').insert(selectedStoreIds.map((store_id,i)=>({
+      schedule_id:schedule.id,tipo:'ordinario',store_id,posizione:i+1,stato:'da_fare'
+    }))).select();
     if(r.error)return alert(r.error.message);
-    r=await sb.from('schedule_items').insert(selectedStoreIds.map((store_id,i)=>({schedule_id:data.id,tipo:'ordinario',store_id,posizione:i+1,stato:'da_fare'}))).select();
-    if(r.error)return alert(r.error.message);
-    try{linkedCount=(await linkOrdinaryExtras(data.id,day,members,r.data||[])).length}catch(err){return alert('Programmazione creata, ma associazione extra non riuscita: '+err.message)}
+    try{linkedCount=(await linkOrdinaryExtras(schedule.id,day,members,r.data||[])).length}
+    catch(err){return alert('Programmazione creata, ma associazione extra non riuscita: '+err.message)}
   }
 
   for(const extraId of selectedExtraIds){
-    const u=await sb.from('extras').update({giorno_intervento:day}).eq('id',extraId);
+    let u=await sb.from('extras').update({schedule_id:schedule.id,giorno_intervento:day}).eq('id',extraId);
     if(u.error)return alert('Impossibile programmare un extra: '+u.error.message);
-    let wr=await sb.from('extra_workers').delete().eq('extra_id',extraId);
-    if(wr.error)return alert('Impossibile assegnare la squadra all’extra: '+wr.error.message);
-    wr=await sb.from('extra_workers').insert(members.map(profile_id=>({extra_id:extraId,profile_id})));
-    if(wr.error)return alert('Impossibile assegnare la squadra all’extra: '+wr.error.message);
-    scheduledExtras++;
+    u=await sb.from('extra_workers').delete().eq('extra_id',extraId);if(u.error)return alert(u.error.message);
+    u=await sb.from('extra_workers').insert(members.map(profile_id=>({extra_id:extraId,profile_id})));if(u.error)return alert(u.error.message);
   }
 
   const parts=[];
   if(selectedStoreIds.length)parts.push(`${selectedStoreIds.length} ${selectedStoreIds.length===1?'sede':'sedi'}`);
-  if(scheduledExtras)parts.push(`${scheduledExtras} ${scheduledExtras===1?'extra':'extra'}`);
+  if(selectedExtraIds.length)parts.push(`${selectedExtraIds.length} extra`);
   if(linkedCount)parts.push(`${linkedCount} extra collegati agli ordinari`);
   toast(`Programmazione salvata · ${parts.join(' · ')}`);
   $('scheduleForm').reset();$('scheduleDate').value=tomorrow();if($('scheduleAutoRollover'))$('scheduleAutoRollover').checked=true;$('schedulePickerClient').value='all';renderSchedulePicker();await loadAll()

@@ -774,32 +774,29 @@ function renderDashboard(){
   const todaysDoneItems=scheduleItems.filter(i=>itemVisible(i)&&itemDate(i)===todayStr&&itemDone(i));
   const todaysDoneExtras=extras.filter(e=>isExtraVisible(e)&&e.giorno_intervento===todayStr&&extraIsDone(e));
   $('dashToday').textContent=todaysItems.length+todaysExtras.length;
-  $('dashPending').textContent=admin()?interventions.filter(i=>i.stato==='in_attesa'&&!i.multi_day_open).length+extras.filter(e=>e.stato==='in_attesa').length:interventions.filter(i=>i.stato==='in_attesa'&&!i.multi_day_open&&i.inserito_da===profile.id).length+extras.filter(e=>e.stato==='in_attesa'&&myExtraIds.has(e.id)).length;
   $('dashDone').textContent=todaysDoneItems.length+todaysDoneExtras.length;
-
-  const dashCards={
-    due:$('dashDue')?.closest('.dash-card'),
-    scheduled:$('dashScheduled')?.closest('.dash-card'),
-    urgent:$('dashUrgent')?.closest('.dash-card'),
-    openExtras:$('dashOpenExtras')?.closest('.dash-card')
-  };
+  $('dashScheduled').textContent=stores.filter(s=>status(s)==='scheduled').length;
+  const clientStores=type=>stores.filter(s=>clientType(s)===type);
+  const openClientExtras=type=>extras.filter(e=>clientType(e)===type&&!['completato','in_attesa'].includes(e.stato));
   if(admin()){
-    $('dashDue').textContent=stores.filter(s=>status(s)==='due').length;
-    dashCards.due?.querySelector('span')&&(dashCards.due.querySelector('span').textContent='Punti scaduti');
-    if(dashCards.due)dashCards.due.dataset.dash='due';
-    $('dashScheduled').textContent=stores.filter(s=>status(s)==='scheduled').length;
-    $('dashUrgent').textContent=stores.filter(isUrgentStore).length;
-    $('dashOpenExtras').textContent=openExtraJobs().length;
-    Object.values(dashCards).forEach(card=>card?.classList.remove('hidden'));
+    $('dashEurospinDue').textContent=clientStores('eurospin').filter(s=>status(s)==='due').length;
+    $('dashEurospinUrgent').textContent=clientStores('eurospin').filter(isUrgentStore).length;
+    $('dashEurospinTargets').textContent=openClientExtras('eurospin').length;
+    $('dashIntesaDue').textContent=clientStores('intesa').filter(s=>status(s)==='due').length;
+    $('dashIntesaUrgent').textContent=clientStores('intesa').filter(isUrgentStore).length;
+    $('dashIntesaTickets').textContent=openClientExtras('intesa').length;
+    $('dashboardClientCounters')?.classList.remove('hidden');
   }else{
-    const assignedTodayExtras=extras.filter(e=>myExtraIds.has(e.id)&&e.giorno_intervento===todayStr).length;
-    $('dashDue').textContent=assignedTodayExtras;
-    dashCards.due?.querySelector('span')&&(dashCards.due.querySelector('span').textContent='Extra assegnati oggi');
-    if(dashCards.due)dashCards.due.dataset.dash='todayextras';
-    dashCards.scheduled?.classList.add('hidden');
-    dashCards.urgent?.classList.add('hidden');
-    dashCards.openExtras?.classList.add('hidden');
+    $('dashboardClientCounters')?.classList.add('hidden');
   }
+
+  document.querySelectorAll('[data-client-counter]').forEach(btn=>{
+    btn.onclick=()=>{
+      const key=btn.dataset.clientCounter,[client,kind]=key.split('-');
+      if(kind==='extra'){extraClientFilter=client;setView('extras');renderExtras();return}
+      storeClientFilter=client;storeFilter=kind==='due'?'due':'all';setView('stores');renderStores();
+    };
+  });
 
   const oldStrip=$('dashboardOperationalStrip');
   if(oldStrip)oldStrip.remove();

@@ -3298,6 +3298,7 @@ $('extraPdf')?.addEventListener('change',()=>{
 });
 
 function workItemsForExtra(extraId){return extraWorkItems.filter(w=>w.extra_id===extraId).sort((a,b)=>(Number(a.posizione)||0)-(Number(b.posizione)||0))}
+function isStructuredExtra(extra){return !!extra&&workItemsForExtra(extra.id).length>0}
 function workPhotosForItem(itemId,tipo=null){return extraWorkItemPhotos.filter(p=>p.work_item_id===itemId&&(!tipo||p.tipo===tipo))}
 function workNotesForItem(itemId){return extraWorkItemNotes.filter(n=>n.work_item_id===itemId).sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')))}
 function workStateLabel(v){return {da_fare:'Da fare',completata:'Completata',da_proseguire:'Da proseguire',non_eseguita:'Non eseguita'}[v]||v}

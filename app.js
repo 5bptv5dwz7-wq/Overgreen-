@@ -2578,7 +2578,39 @@ Verranno eliminati anche tutti i file allegati.`))return;
   r=await sb.from('extras').delete().eq('id',e.id);if(r.error)return alert(r.error.message);
   toast('Extra eliminato');await loadAll();
 }
-async function openAttachment(a){const {data,error}=await sb.storage.from('documenti').createSignedUrl(a.storage_path,300);if(error)return alert(error.message);window.open(data.signedUrl,'_blank')}
+async function openAttachment(a){
+  if(!a)return;
+
+  // Apriamo la nuova scheda immediatamente durante il tap.
+  // Su Safari/iOS una window.open() eseguita dopo un await può essere bloccata.
+  const popup=window.open('about:blank','_blank');
+
+  if(popup){
+    try{
+      popup.document.title='Apertura documento…';
+      popup.document.body.innerHTML='<p style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:24px">Apertura documento…</p>';
+    }catch{}
+  }
+
+  try{
+    const {data,error}=await sb.storage.from('documenti').createSignedUrl(a.storage_path,300);
+    if(error)throw error;
+    if(!data?.signedUrl)throw new Error('URL del documento non disponibile.');
+
+    if(popup){
+      popup.location.href=data.signedUrl;
+    }else{
+      // Fallback: se il browser ha comunque bloccato la nuova scheda,
+      // apriamo il PDF nella scheda corrente.
+      window.location.href=data.signedUrl;
+    }
+  }catch(err){
+    try{
+      if(popup&&!popup.closed)popup.close();
+    }catch{}
+    alert('Impossibile aprire il PDF: '+(err?.message||String(err)));
+  }
+}
 async function approveExtra(e){const {error}=await sb.from('extras').update({stato:'completato',convalidato_da:profile.id,convalidato_il:new Date().toISOString()}).eq('id',e.id);if(error)return alert(error.message);toast('Extra convalidato');await loadAll()}
 async function seedStores(){if(!admin())return;if(stores.length&&!confirm(`Sono già presenti ${stores.length} punti vendita. Continuare?`))return;const rows=SEED_STORES.filter(x=>!stores.some(s=>s.nome===x.name)).map(x=>({nome:x.name,ultimo_passaggio:x.lastDone,intervallo_giorni:15,attivo:true}));if(!rows.length)return toast('Nessun punto vendita da importare');const {error}=await sb.from('stores').insert(rows);if(error)return alert(error.message);toast(`${rows.length} punti vendita importati`);await loadAll()}
 

@@ -1462,18 +1462,53 @@ async function createSingleClientReportFile(kind,row){
   if(pics.length){
     page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=16;
     const urls=await Promise.all(pics.map(async a=>{try{return await signedAttachmentUrl(a)}catch{return ''}}));
-    const valid=urls.filter(Boolean),gap=8,cols=3,imgW=(pageW-margin*2-gap*2)/3,imgH=112;
-    if(!valid.length){page.drawText('Nessuna documentazione fotografica allegata',{x:margin,y:y-8,size:10,font:regular,color:muted});}
-    for(let rowStart=0;rowStart<valid.length;rowStart+=cols){
-      if(y-imgH<55){newPage();page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=16;}
-      const rowUrls=valid.slice(rowStart,rowStart+cols);
-      for(let col=0;col<rowUrls.length;col++){
-        let photo;try{photo=await compressedPhotoForPdf(rowUrls[col])}catch{continue}
-        const img=await pdf.embedJpg(photo.bytes),x=margin+col*(imgW+gap),scale=Math.min(imgW/photo.width,imgH/photo.height),dw=photo.width*scale,dh=photo.height*scale;
-        page.drawRectangle({x,y:y-imgH,width:imgW,height:imgH,borderColor:border,borderWidth:.7});
-        page.drawImage(img,{x:x+(imgW-dw)/2,y:y-imgH+(imgH-dh)/2,width:dw,height:dh});
+    const valid=urls.filter(Boolean),gap=10,contentW=pageW-margin*2;
+    if(!valid.length){
+      page.drawText('Nessuna documentazione fotografica allegata',{x:margin,y:y-8,size:10,font:regular,color:muted});
+    }else{
+      // Layout fotografico dinamico:
+      // 1 foto = grande e centrata
+      // 2 foto = due colonne grandi
+      // 3 foto = una grande sopra + due sotto
+      // 4 foto = griglia 2x2
+      // 5+ foto = griglia 2 colonne, con nuove pagine automatiche.
+      const drawPhoto=async(url,x,top,boxW,boxH)=>{
+        let photo;try{photo=await compressedPhotoForPdf(url)}catch{return false}
+        const img=await pdf.embedJpg(photo.bytes),scale=Math.min(boxW/photo.width,boxH/photo.height),dw=photo.width*scale,dh=photo.height*scale;
+        page.drawRectangle({x,y:top-boxH,width:boxW,height:boxH,borderColor:border,borderWidth:.7});
+        page.drawImage(img,{x:x+(boxW-dw)/2,y:top-boxH+(boxH-dh)/2,width:dw,height:dh});
+        return true;
+      };
+      const photoHeading=()=>{page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=16};
+      const ensurePhotoSpace=need=>{if(y-need<48){newPage();photoHeading()}};
+
+      if(valid.length===1){
+        const availableH=Math.max(180,Math.min(430,y-58)),boxW=contentW*.82,boxH=availableH,x=margin+(contentW-boxW)/2;
+        ensurePhotoSpace(boxH);
+        await drawPhoto(valid[0],x,y,boxW,boxH);y-=boxH+gap;
+      }else if(valid.length===2){
+        const boxW=(contentW-gap)/2,boxH=Math.min(300,Math.max(190,y-58));
+        ensurePhotoSpace(boxH);
+        await drawPhoto(valid[0],margin,y,boxW,boxH);
+        await drawPhoto(valid[1],margin+boxW+gap,y,boxW,boxH);y-=boxH+gap;
+      }else if(valid.length===3){
+        const heroH=Math.min(265,Math.max(180,(y-80)*.52)),heroW=contentW*.78,heroX=margin+(contentW-heroW)/2;
+        ensurePhotoSpace(heroH);
+        await drawPhoto(valid[0],heroX,y,heroW,heroH);y-=heroH+gap;
+        const boxW=(contentW-gap)/2,boxH=205;ensurePhotoSpace(boxH);
+        await drawPhoto(valid[1],margin,y,boxW,boxH);
+        await drawPhoto(valid[2],margin+boxW+gap,y,boxW,boxH);y-=boxH+gap;
+      }else{
+        const cols=2,boxW=(contentW-gap)/2,boxH=205;
+        for(let rowStart=0;rowStart<valid.length;rowStart+=cols){
+          ensurePhotoSpace(boxH);
+          const rowUrls=valid.slice(rowStart,rowStart+cols);
+          for(let col=0;col<rowUrls.length;col++){
+            await drawPhoto(rowUrls[col],margin+col*(boxW+gap),y,boxW,boxH);
+          }
+          y-=boxH+gap;
+        }
       }
-      y-=imgH+gap;
     }
   }else{
     page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=20;

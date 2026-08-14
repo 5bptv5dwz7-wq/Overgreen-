@@ -806,7 +806,7 @@ function renderDashboard(){
   const startDate=new Date(todayStr+'T12:00:00');
   for(let offset=0;offset<7;offset++){
     const d=new Date(startDate);d.setDate(d.getDate()+offset);const date=d.toISOString().slice(0,10);
-    const ordinary=scheduleItems.filter(i=>itemVisible(i)&&itemDate(i)===date).map(i=>({item:i,schedule:scheduleForItem(i)})).sort((a,b)=>(a.item.posizione||0)-(b.item.posizione||0));
+    const ordinary=scheduleItems.filter(i=>itemVisible(i)&&itemDate(i)===date).map(i=>({item:i,schedule:scheduleForItem(i)})).sort((a,b)=>(Number(a.item.posizione)||0)-(Number(b.item.posizione)||0)||String(a.item.id).localeCompare(String(b.item.id)));
     const linkedIds=new Set(ordinary.flatMap(x=>linkedExtrasForScheduleItem(x.item.id).map(e=>e.id)));
     const dayExtras=extras.filter(e=>isExtraVisible(e)&&e.giorno_intervento===date&&!linkedIds.has(e.id)&&(activeExtraStates.includes(e.stato)||extraIsDone(e))).sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||'')));
     const allJobsCount=ordinary.length+dayExtras.length;
@@ -2160,10 +2160,18 @@ async function persistScheduleOrder(scheduleId,orderedItems){
   const valid=orderedItems.filter(item=>item?.schedule_id===scheduleId);
   if(!valid.length)return;
 
-  // Salviamo esplicitamente ogni posizione sul database.
-  // Non ci affidiamo al solo ordine del DOM.
+  // Gli interventi già completati sono "congelati": mantengono il numero
+  // che avevano durante il giro. Riordinando i lavori ancora aperti,
+  // questi ripartono sempre dopo l'ultima posizione già completata.
+  const completed=scheduleItems.filter(item=>
+    item.schedule_id===scheduleId &&
+    effectiveScheduleState(item)==='completato' &&
+    !valid.some(v=>v.id===item.id)
+  );
+  const lastCompletedPosition=completed.reduce((max,item)=>Math.max(max,Number(item.posizione)||0),0);
+
   for(let index=0;index<valid.length;index++){
-    const item=valid[index],wanted=index+1;
+    const item=valid[index],wanted=lastCompletedPosition+index+1;
     if(Number(item.posizione)===wanted)continue;
     const {error}=await sb
       .from('schedule_items')
@@ -2226,18 +2234,15 @@ function enableScheduleDrag(container,schedule){
         .map(r=>scheduleItems.find(i=>i.id===r.dataset.scheduleItemId))
         .filter(Boolean);
 
-      // Aggiorna subito i numeri visibili 1, 2, 3...
-      orderedRows.forEach((r,i)=>{
-        const n=r.querySelector('.schedule-order-number');
-        if(n)n.textContent=String(i+1);
-      });
-
       try{
         await persistScheduleOrder(schedule.id,orderedItems);
 
-        // Allinea anche l'array locale: cambiando pagina l'ordine resta già
-        // corretto senza dover aspettare un nuovo caricamento dal server.
-        orderedItems.forEach((item,i)=>item.posizione=i+1);
+        // Mostra i numeri reali salvati. Se durante il giro esistono già
+        // interventi completati, la numerazione dei rimanenti non riparte da 1.
+        orderedRows.forEach((r,i)=>{
+          const n=r.querySelector('.schedule-order-number');
+          if(n)n.textContent=String(orderedItems[i]?.posizione??i+1);
+        });
 
         toast('Ordine del giro salvato');
         renderDashboard();

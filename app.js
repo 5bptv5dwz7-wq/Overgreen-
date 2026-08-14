@@ -2281,8 +2281,32 @@ function extraMatchesScheduleDate(e){
 }
 function scheduleClientMatchesStore(store){return scheduleClientFilter==='all'||String(store?.client_type||'eurospin')===scheduleClientFilter}
 function scheduleClientBadge(store){const type=String(store?.client_type||'eurospin');return `<span class="client-pill ${type}">${esc(clientLabel(type))}</span>`}
-function selectedScheduleStoreIds(){const box=$('scheduleStores');return box?[...box.querySelectorAll('input:checked')].map(x=>x.value):[]}
-function updateScheduleSelectedCount(){const count=selectedScheduleStoreIds().length;if($('scheduleSelectedCount'))$('scheduleSelectedCount').textContent=`${count} selezionat${count===1?'o':'i'}`;if($('scheduleSubmitBtn'))$('scheduleSubmitBtn').textContent=count?`Aggiungi ${count} lavor${count===1?'o':'i'} alla giornata`:'Aggiungi lavori alla giornata'}
+let schedulePickerSelected=new Set();
+let schedulePickerMode='all';
+let schedulePickerLetter='';
+function selectedScheduleStoreIds(){return [...schedulePickerSelected]}
+function setSchedulePickerValue(value,checked){if(checked)schedulePickerSelected.add(value);else schedulePickerSelected.delete(value);updateScheduleSelectedCount()}
+function updateScheduleSelectedCount(){const count=schedulePickerSelected.size;if($('scheduleSelectedCount'))$('scheduleSelectedCount').textContent=`${count} selezionat${count===1?'o':'i'}`;if($('scheduleSubmitBtn'))$('scheduleSubmitBtn').textContent=count?`Aggiungi ${count} lavor${count===1?'o':'i'} alla giornata`:'Aggiungi lavori alla giornata'}
+function resetSchedulePickerSelection(){schedulePickerSelected.clear();schedulePickerMode='all';schedulePickerLetter='';if($('scheduleSearch'))$('scheduleSearch').value='';updateScheduleSelectedCount()}
+function schedulePickerMatchesStore(st,q,pickerClient){
+  if(pickerClient!=='all'&&String(st.client_type||'eurospin')!==pickerClient)return false;
+  if(schedulePickerLetter&&!String(st.nome||'').trim().toLocaleUpperCase('it').startsWith(schedulePickerLetter))return false;
+  if(q&&![st.nome,st.citta,st.indirizzo,st.note,clientLabel(st.client_type),storeSiteTypeLabel(st)].some(v=>String(v||'').toLowerCase().includes(q)))return false;
+  return schedulePickerMode!=='selected'||schedulePickerSelected.has(st.id);
+}
+function schedulePickerMatchesExtra(e,q,pickerClient){
+  const value=`extra:${e.id}`;
+  if(pickerClient!=='all'&&clientType(e)!==pickerClient)return false;
+  if(schedulePickerLetter&&!String(e.titolo||'Extra').trim().toLocaleUpperCase('it').startsWith(schedulePickerLetter))return false;
+  if(q&&!schedulePlannerExtraSearchText(e).includes(q))return false;
+  return schedulePickerMode!=='selected'||schedulePickerSelected.has(value);
+}
+function selectAllSchedulePickerResults(){
+  const q=String($('scheduleSearch')?.value||'').trim().toLowerCase(),pickerClient=$('schedulePickerClient')?.value||'all';
+  stores.filter(st=>schedulePickerMatchesStore(st,q,pickerClient)).forEach(st=>schedulePickerSelected.add(st.id));
+  standaloneExtrasForPlanner().filter(e=>schedulePickerMatchesExtra(e,q,pickerClient)).forEach(e=>schedulePickerSelected.add(`extra:${e.id}`));
+  renderSchedulePicker();
+}
 function renderScheduleUnplannedSummary(){const root=$('scheduleUnplannedSummary');if(!root)return;const openExtras=extras.filter(e=>e.stato!=='completato'&&!extraIsScheduled(e)).length;const dueStores=stores.filter(st=>!isStoreProgrammed(st.id)&&['due','warning'].includes(status(st))).length;root.innerHTML=`<span><strong>${dueStores}</strong>Sedi da programmare</span><span><strong>${openExtras}</strong>Extra senza programma</span>`}
 async function editScheduleDayNote(schedule){
   if(!admin()||!schedule)return;
@@ -2378,42 +2402,55 @@ function schedulePlannerExtraSearchText(e){
 }
 function renderSchedulePicker(){
   const q=String($('scheduleSearch')?.value||'').trim().toLowerCase(),w=$('scheduleStores');if(!w)return;
-  const selected=new Set([...w.querySelectorAll('input:checked')].map(x=>x.value));w.innerHTML='';
   const pickerClient=$('schedulePickerClient')?.value||'all';
+  w.innerHTML='';
+
+  const tools=document.createElement('div');tools.className='schedule-picker-tools';
+  tools.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 10px';
+  tools.innerHTML=`<button type="button" class="secondary" data-picker-mode="all" ${schedulePickerMode==='all'?'disabled':''}>Tutti</button><button type="button" class="secondary" data-picker-mode="selected" ${schedulePickerMode==='selected'?'disabled':''}>Selezionati (${schedulePickerSelected.size})</button><button type="button" class="secondary" data-select-results>✓ Seleziona risultati</button>${schedulePickerSelected.size?'<button type="button" class="secondary" data-clear-selected>✕ Azzera selezione</button>':''}`;
+  tools.querySelectorAll('[data-picker-mode]').forEach(b=>b.onclick=()=>{schedulePickerMode=b.dataset.pickerMode;renderSchedulePicker()});
+  tools.querySelector('[data-select-results]').onclick=selectAllSchedulePickerResults;
+  tools.querySelector('[data-clear-selected]')?.addEventListener('click',()=>{schedulePickerSelected.clear();schedulePickerMode='all';renderSchedulePicker()});
+  w.appendChild(tools);
+
+  const alphabet=document.createElement('div');alphabet.className='schedule-picker-alphabet';
+  alphabet.style.cssText='display:flex;gap:5px;overflow-x:auto;padding:2px 0 10px;white-space:nowrap;-webkit-overflow-scrolling:touch';
+  const letters=['','A','B','C','D','E','F','G','H','I','L','M','N','O','P','Q','R','S','T','U','V','Z'];
+  alphabet.innerHTML=letters.map(letter=>`<button type="button" class="secondary" data-picker-letter="${letter}" ${schedulePickerLetter===letter?'disabled':''} style="min-width:34px;padding:7px 9px">${letter||'Tutte'}</button>`).join('');
+  alphabet.querySelectorAll('[data-picker-letter]').forEach(b=>b.onclick=()=>{schedulePickerLetter=b.dataset.pickerLetter;renderSchedulePicker()});
+  w.appendChild(alphabet);
+
+  let resultCount=0;
   const groups=[['eurospin','Eurospin'],['intesa','Intesa Sanpaolo'],['privato','Privati']];
-  const searchable=st=>[st.nome,st.citta,st.indirizzo,st.note,clientLabel(st.client_type),storeSiteTypeLabel(st)].some(v=>String(v||'').toLowerCase().includes(q));
   for(const [type,label] of groups){
     if(pickerClient!=='all'&&pickerClient!==type)continue;
-    const rows=stores.filter(st=>String(st.client_type||'eurospin')===type&&searchable(st)).sort((a,b)=>String(a.nome||'').localeCompare(String(b.nome||''),'it'));
-    if(!rows.length)continue;
-    const group=document.createElement('details');group.className=`picker-group ${type}`;group.open=!!q||pickerClient!=='all'||type==='eurospin';
+    const rows=stores.filter(st=>String(st.client_type||'eurospin')===type&&schedulePickerMatchesStore(st,q,pickerClient)).sort((a,b)=>String(a.nome||'').localeCompare(String(b.nome||''),'it'));
+    if(!rows.length)continue;resultCount+=rows.length;
+    const group=document.createElement('details');group.className=`picker-group ${type}`;group.open=!!q||!!schedulePickerLetter||schedulePickerMode==='selected'||pickerClient!=='all'||type==='eurospin';
     group.innerHTML=`<summary><span>${esc(label)}</span><b>${rows.length}</b></summary><div class="picker-group-list"></div>`;
     const body=group.querySelector('.picker-group-list');
     for(const st of rows){
       const l=document.createElement('label'),programmed=isStoreProgrammed(st.id);
-      l.innerHTML=`<input type="checkbox" value="${st.id}" ${selected.has(st.id)?'checked':''}><span><strong>${esc(st.nome)}</strong>${programmed?' <em class="picker-programmed">Già in programma</em>':''}${!storeHasInterval(st)?' <em class="picker-programmed">Solo su richiesta</em>':''}<small>${esc([storeSiteTypeLabel(st),st.citta,st.indirizzo].filter(Boolean).join(' · ')||'Nessun indirizzo')}</small></span>`;
-      l.querySelector('input').onchange=updateScheduleSelectedCount;body.appendChild(l)
+      l.innerHTML=`<input type="checkbox" value="${st.id}" ${schedulePickerSelected.has(st.id)?'checked':''}><span><strong>${esc(st.nome)}</strong>${programmed?' <em class="picker-programmed">Già in programma</em>':''}${!storeHasInterval(st)?' <em class="picker-programmed">Solo su richiesta</em>':''}<small>${esc([storeSiteTypeLabel(st),st.citta,st.indirizzo].filter(Boolean).join(' · ')||'Nessun indirizzo')}</small></span>`;
+      l.querySelector('input').onchange=e=>setSchedulePickerValue(st.id,e.target.checked);body.appendChild(l)
     }
     w.appendChild(group)
   }
 
-  const standalone=standaloneExtrasForPlanner()
-    .filter(e=>(pickerClient==='all'||clientType(e)===pickerClient)&&(!q||schedulePlannerExtraSearchText(e).includes(q)))
-    .sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||''),'it'));
-  if(standalone.length){
+  const standalone=standaloneExtrasForPlanner().filter(e=>schedulePickerMatchesExtra(e,q,pickerClient)).sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||''),'it'));
+  if(standalone.length){resultCount+=standalone.length;
     const group=document.createElement('details');group.className='picker-group extras';group.open=true;
     group.innerHTML=`<summary><span>🔧 Extra senza sede</span><b>${standalone.length}</b></summary><div class="picker-group-list"></div>`;
     const body=group.querySelector('.picker-group-list');
     for(const e of standalone){
-      const value=`extra:${e.id}`,l=document.createElement('label');
-      const place=e.nome_esterno||e.indirizzo_esterno||'Nessuna sede associata';
-      l.innerHTML=`<input type="checkbox" value="${value}" ${selected.has(value)?'checked':''}><span><strong>${esc(e.titolo||'Extra')}</strong><em class="picker-programmed">Extra standalone</em><small>${esc([clientLabel(e),e.numero_target?`Target/Ticket ${e.numero_target}`:null,place].filter(Boolean).join(' · '))}</small></span>`;
-      l.querySelector('input').onchange=updateScheduleSelectedCount;body.appendChild(l)
+      const value=`extra:${e.id}`,l=document.createElement('label'),place=e.nome_esterno||e.indirizzo_esterno||'Nessuna sede associata';
+      l.innerHTML=`<input type="checkbox" value="${value}" ${schedulePickerSelected.has(value)?'checked':''}><span><strong>${esc(e.titolo||'Extra')}</strong><em class="picker-programmed">Extra standalone</em><small>${esc([clientLabel(e),e.numero_target?`Target/Ticket ${e.numero_target}`:null,place].filter(Boolean).join(' · '))}</small></span>`;
+      l.querySelector('input').onchange=ev=>setSchedulePickerValue(value,ev.target.checked);body.appendChild(l)
     }
     w.appendChild(group)
   }
 
-  if(!w.children.length)w.innerHTML='<p class="muted picker-empty">Nessuna sede o extra trovato.</p>';
+  if(!resultCount){const empty=document.createElement('p');empty.className='muted picker-empty';empty.textContent=schedulePickerMode==='selected'?'Nessun elemento selezionato.':'Nessuna sede o extra trovato.';w.appendChild(empty)}
   updateScheduleSelectedCount();
 }
 
@@ -2996,7 +3033,7 @@ $('addScheduleItemsForm').onsubmit=async e=>{
 $('scheduleForm').onsubmit=async e=>{
   e.preventDefault();
   const members=[...$('scheduleWorkers').querySelectorAll('input:checked')].map(x=>x.value);
-  const selected=[...$('scheduleStores').querySelectorAll('input:checked')].map(x=>x.value);
+  const selected=selectedScheduleStoreIds();
   const selectedExtraIds=selected.filter(v=>v.startsWith('extra:')).map(v=>v.slice(6));
   const selectedStoreIds=selected.filter(v=>!v.startsWith('extra:'));
   if(!members.length||!selected.length)return alert('Seleziona squadra e almeno una sede o un extra.');
@@ -3033,7 +3070,7 @@ $('scheduleForm').onsubmit=async e=>{
   if(selectedExtraIds.length)parts.push(`${selectedExtraIds.length} extra`);
   if(linkedCount)parts.push(`${linkedCount} extra collegati agli ordinari`);
   toast(`Programmazione salvata · ${parts.join(' · ')}`);
-  $('scheduleForm').reset();$('scheduleDate').value=tomorrow();if($('scheduleAutoRollover'))$('scheduleAutoRollover').checked=true;$('schedulePickerClient').value='all';renderSchedulePicker();await loadAll()
+  $('scheduleForm').reset();resetSchedulePickerSelection();$('scheduleDate').value=tomorrow();if($('scheduleAutoRollover'))$('scheduleAutoRollover').checked=true;$('schedulePickerClient').value='all';renderSchedulePicker();await loadAll()
 };
 function extraStoreUiConfig(client){
   if(client==='intesa')return {single:'Filiale',plural:'filiali Intesa Sanpaolo',storeOption:'Filiale',help:'Verrà associato automaticamente quando programmi l’intervento ordinario della filiale.'};

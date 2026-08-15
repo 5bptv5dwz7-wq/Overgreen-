@@ -200,7 +200,7 @@ let currentView=localStorage.getItem(CURRENT_VIEW_KEY)||'dashboard';
 function setView(name){
   if(!$(name+'View'))name='dashboard';
   currentView=name;localStorage.setItem(CURRENT_VIEW_KEY,name);
-  document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');$('pageTitle').textContent={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report attività',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',audit:'Log attività',settings:'Impostazioni'}[name];if(name==='dashboard')renderDashboard();if(name==='stores')renderStores();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='reports')renderDailyReport();if(name==='signatures')openSignatureSheetsView();if(name==='archive')openCompanyArchive();if(name==='audit'&&admin())openAuditView();if(name!=='audit')auditViewOpen(name);if(name==='settings'){ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin())loadSupabaseUsage();}}
+  document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');$('pageTitle').textContent={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',audit:'Log attività',settings:'Impostazioni'}[name];if(name==='dashboard')renderDashboard();if(name==='stores')renderStores();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='reports')renderDailyReport();if(name==='stats')renderStats();if(name==='signatures')openSignatureSheetsView();if(name==='archive')openCompanyArchive();if(name==='audit'&&admin())openAuditView();if(name!=='audit')auditViewOpen(name);if(name==='settings'){ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin())loadSupabaseUsage();}}
 
 
 
@@ -559,7 +559,7 @@ function auditHumanDescription(r){
   return r.description||`${auditActionLabel(action)} · ${auditEntityLabel(t)}`;
 }
 async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:details,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V99'}})}catch(e){console.warn('audit',e)}}
-function auditViewOpen(name){if(!session?.user?.id)return;const labels={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:'Programmazione',extras:'Lavori extra',reports:'Report attività',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',audit:'Log attività',settings:'Impostazioni'};if(labels[name])writeClientAudit('VIEW','navigation',`Aperta pagina ${labels[name]}`,{view:name})}
+function auditViewOpen(name){if(!session?.user?.id)return;const labels={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:'Programmazione',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',audit:'Log attività',settings:'Impostazioni'};if(labels[name])writeClientAudit('VIEW','navigation',`Aperta pagina ${labels[name]}`,{view:name})}
 function renderAuditUsers(){const sel=$('auditUser');if(!sel)return;const cur=sel.value||'all';sel.innerHTML='<option value="all">Tutti gli utenti</option>';[...profiles].sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.nome||p.email||p.id;sel.appendChild(o)});if([...sel.options].some(o=>o.value===cur))sel.value=cur}
 async function openAuditView(){if(!admin())return setView('dashboard');renderAuditUsers();await loadAuditLogs(true)}
 async function loadAuditLogs(reset=true){if(!admin())return;const box=$('auditList');if(reset){auditPage=0;auditLogs=[];if(box)box.innerHTML='<p class="muted">Caricamento log…</p>'}const from=$('auditFrom')?.value||'',to=$('auditTo')?.value||'',user=$('auditUser')?.value||'all',section=$('auditSection')?.value||'all',search=($('auditSearch')?.value||'').trim();const size=80,offset=auditPage*size;let q=sb.from('audit_log').select('*').order('created_at',{ascending:false}).range(offset,offset+size);if(from)q=q.gte('created_at',`${from}T00:00:00`);if(to)q=q.lte('created_at',`${to}T23:59:59.999`);if(user!=='all')q=q.eq('actor_id',user);if(section!=='all')q=q.eq('section',section);if(search){const safe=search.replace(/[%_,()]/g,' ');q=q.or(`description.ilike.%${safe}%,action.ilike.%${safe}%,actor_name.ilike.%${safe}%,actor_email.ilike.%${safe}%,entity_type.ilike.%${safe}%`)}const {data,error}=await q;if(error){box.innerHTML=`<p class="error">${esc(error.message)}</p><p class="muted">Esegui MIGRAZIONE-V93.sql su Supabase.</p>`;return}let rows=data||[];auditHasMore=rows.length>size;if(auditHasMore)rows=rows.slice(0,size);auditLogs=reset?rows:[...auditLogs,...rows];renderAuditLogs()}
@@ -673,7 +673,7 @@ async function loadAll(){
   await reconcileProgrammingConsistency();
   $('userLabel').textContent=`${profile.nome} · ${admin()?'Amministratore':'Dipendente'}`;$('settingsUser').textContent=`${profile.nome} — ${session.user.email}`;
   document.querySelectorAll('.admin-only').forEach(x=>x.classList.toggle('hidden',!admin()));
-  renderStores();renderWorkers();renderReportFilters();renderPending();renderScheduleFilters();renderSchedules();renderExtras();renderDashboard();ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();processUploadQueue();
+  renderStores();renderWorkers();renderReportFilters();renderPending();renderScheduleFilters();renderSchedules();renderExtras();renderDashboard();if($('statsView'))renderStats();ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();processUploadQueue();
   const lastUpdate=$('syncStatus');if(lastUpdate)lastUpdate.textContent='Ultimo aggiornamento dati: '+new Date().toLocaleTimeString('it-IT');
   })();
   try{return await loadAllPromise}finally{loadAllPromise=null}
@@ -1765,6 +1765,54 @@ async function shareDailyReport(){
   const text=buildDailyReportText();
   try{if(navigator.share)await navigator.share({title:'Report attività Overgreen',text});else{await navigator.clipboard.writeText(text);toast('Riepilogo copiato')}}catch(err){if(err?.name!=='AbortError')alert('Condivisione non riuscita: '+err.message)}
 }
+let statsDays='15';
+function statsIsoDate(d){return d.toISOString().slice(0,10)}
+function statsAddDays(iso,days){const d=new Date(iso+'T12:00:00');d.setDate(d.getDate()+days);return statsIsoDate(d)}
+function statsRange(){
+  if(statsDays==='custom'){
+    let start=$('statsStartDate')?.value||today(),end=$('statsEndDate')?.value||today();
+    if(start>end)[start,end]=[end,start];return {start,end};
+  }
+  const days=Math.max(1,Number(statsDays)||15),end=today(),start=statsAddDays(end,-(days-1));return {start,end};
+}
+function statsStoreForRow(row){return row?.store_id?stores.find(s=>s.id===row.store_id):null}
+function statsSiteMatches(row){
+  const f=$('statsSiteType')?.value||'all';if(f==='all')return true;
+  const st=statsStoreForRow(row);if(f==='atm')return st?.site_type==='atm';return !st||st.site_type!=='atm';
+}
+function statsExecutedRows(range=statsRange()){
+  const client=$('statsClient')?.value||'all',type=$('statsType')?.value||'all';
+  const inRange=d=>d&&d>=range.start&&d<=range.end;
+  const rows=[];
+  if(type!=='extra'){
+    interventions.filter(i=>!i.multi_day_open&&['in_attesa','convalidato'].includes(i.stato)&&inRange(interventionEndDate(i))).forEach(i=>rows.push({kind:'ordinary',date:interventionEndDate(i),row:i,client:clientType(i),store:statsStoreForRow(i)}));
+  }
+  if(type!=='ordinary'){
+    extras.filter(e=>['in_attesa','completato'].includes(e.stato)&&inRange(e.giorno_intervento)).forEach(e=>rows.push({kind:'extra',date:e.giorno_intervento,row:e,client:clientType(e),store:statsStoreForRow(e)}));
+  }
+  return rows.filter(x=>(client==='all'||x.client===client)&&statsSiteMatches(x.row));
+}
+function statsPeriodLength(range){const a=new Date(range.start+'T12:00:00'),b=new Date(range.end+'T12:00:00');return Math.max(1,Math.round((b-a)/86400000)+1)}
+function statsDelta(current,previous){if(!previous)return current?'Nuovo nel periodo':'—';const pct=Math.round(((current-previous)/previous)*100);return `${pct>0?'+':''}${pct}% vs periodo prima`}
+function statsKpi(title,value,sub,delta){return `<article class="stats-kpi"><strong>${esc(String(value))}</strong><span>${esc(title)}</span>${sub?`<small>${esc(sub)}</small>`:''}${delta?`<small class="${delta.startsWith('+')?'up':delta.startsWith('-')?'down':''}">${esc(delta)}</small>`:''}</article>`}
+function statsBars(rootId,items){
+  const root=$(rootId);if(!root)return;const max=Math.max(1,...items.map(x=>x.value));
+  root.innerHTML=items.some(x=>x.value)?items.map(x=>`<div class="stats-bar-row"><span>${esc(x.label)}</span><div class="stats-bar-track"><div class="stats-bar-fill" style="width:${Math.max(2,(x.value/max)*100)}%"></div></div><strong>${x.value}</strong></div>`).join(''):'<div class="stats-empty">Nessun lavoro nel periodo.</div>';
+}
+function renderStats(){
+  if(!admin()||!$('statsView'))return;
+  const range=statsRange(),len=statsPeriodLength(range),rows=statsExecutedRows(range),prevEnd=statsAddDays(range.start,-1),prevStart=statsAddDays(prevEnd,-(len-1)),prev=statsExecutedRows({start:prevStart,end:prevEnd});
+  const ord=rows.filter(x=>x.kind==='ordinary').length,ext=rows.filter(x=>x.kind==='extra').length,total=rows.length,unique=new Set(rows.map(x=>x.store?.id||x.row?.nome_esterno||x.row?.indirizzo_esterno).filter(Boolean)).size;
+  $('statsKpis').innerHTML=[statsKpi('Lavori eseguiti',total,`${fmt(range.start)} → ${fmt(range.end)}`,statsDelta(total,prev.length)),statsKpi('Ordinari',ord,`${Math.round(ord/Math.max(1,total)*100)}% del totale`,statsDelta(ord,prev.filter(x=>x.kind==='ordinary').length)),statsKpi('Extra',ext,`${Math.round(ext/Math.max(1,total)*100)}% del totale`,statsDelta(ext,prev.filter(x=>x.kind==='extra').length)),statsKpi('Sedi lavorate',unique,`Media ${(total/len).toLocaleString('it-IT',{maximumFractionDigits:1})} lavori/giorno`,'')].join('');
+  const byClient=['eurospin','intesa','privato'].map(c=>({label:clientLabel(c),value:rows.filter(x=>x.client===c).length}));statsBars('statsClients',byClient);statsBars('statsTypes',[{label:'Ordinari',value:ord},{label:'Extra',value:ext}]);
+  const dayMap=new Map();for(let d=range.start;d<=range.end;d=statsAddDays(d,1))dayMap.set(d,0);rows.forEach(x=>dayMap.set(x.date,(dayMap.get(x.date)||0)+1));const entries=[...dayMap.entries()],max=Math.max(1,...entries.map(x=>x[1]));
+  const compact=len>31,step=len>60?14:len>31?7:len>15?3:1;
+  $('statsTrend').innerHTML=`<div class="stats-trend">${entries.map(([d,v],i)=>`<div class="stats-trend-col" title="${fmt(d)}: ${v}"><div class="stats-trend-bar" style="height:${Math.max(2,(v/max)*100)}%"></div>${(!compact||i%step===0)?`<small>${d.slice(5).split('-').reverse().join('/')}</small>`:''}</div>`).join('')}</div>`;
+  const storeCounts=new Map();rows.forEach(x=>{const key=x.store?.id||`ext:${x.row?.nome_esterno||x.row?.indirizzo_esterno||'esterno'}`;const cur=storeCounts.get(key)||{name:x.store?.nome||x.row?.nome_esterno||'Sede esterna',city:x.store?.citta||x.row?.indirizzo_esterno||'',client:x.client,count:0};cur.count++;storeCounts.set(key,cur)});const top=[...storeCounts.values()].sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name,'it')).slice(0,8);
+  $('statsTopStores').innerHTML=top.length?top.map((x,i)=>`<div class="stats-top-item"><span><strong>${i+1}. ${esc(x.name)}</strong><small>${esc([x.city,clientLabel(x.client)].filter(Boolean).join(' · '))}</small></span><strong>${x.count}</strong></div>`).join(''):'<div class="stats-empty">Nessuna sede nel periodo.</div>';
+}
+function setStatsDays(value){statsDays=String(value);document.querySelectorAll('[data-stats-days]').forEach(b=>b.classList.toggle('active',b.dataset.statsDays===statsDays));$('statsCustomRange')?.classList.toggle('active',statsDays==='custom');renderStats()}
+
 function renderDailyReport(){
   if(!admin())return setView('dashboard');renderReportFilters();
   const data=dailyReportData(),all=[...data.ordinary.map(x=>({kind:'ordinary',row:x})),...data.extra.map(x=>({kind:'extra',row:x}))];
@@ -3673,6 +3721,7 @@ $('closeExtraForm').onsubmit=async e=>{
 function isRecoverableJwtError(err){const m=String(err?.message||err||'').toLowerCase();return m.includes('jwt issued at future')||m.includes('jwt expired')||m.includes('invalid refresh token')||m.includes('refresh token not found')}
 async function resetBrokenSession(){try{await sb.auth.signOut({scope:'local'})}catch{};localStorage.removeItem('sb-'+new URL(cfg.supabaseUrl).hostname.split('.')[0]+'-auth-token');sessionStorage.clear();session=null;$('app').classList.add('hidden');$('loginScreen').classList.remove('hidden');const box=$('loginError');if(box){box.textContent='La sessione era scaduta o non valida. Accedi di nuovo.';box.classList.remove('hidden')}}
 
+document.querySelectorAll('[data-stats-days]').forEach(b=>b.addEventListener('click',()=>setStatsDays(b.dataset.statsDays)));$('statsClient')?.addEventListener('change',renderStats);$('statsType')?.addEventListener('change',renderStats);$('statsSiteType')?.addEventListener('change',renderStats);$('statsStartDate')?.addEventListener('change',renderStats);$('statsEndDate')?.addEventListener('change',renderStats);$('statsRefresh')?.addEventListener('click',async()=>{await loadAll();renderStats();toast('Statistiche aggiornate')});
 const refreshReportAndPdfCache=()=>{renderDailyReport();prewarmDailyReportPdfs()};$('reportDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportStartDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportEndDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportMonth')?.addEventListener('change',refreshReportAndPdfCache);document.querySelectorAll('[data-report-mode]').forEach(b=>b.addEventListener('click',()=>{setReportMode(b.dataset.reportMode);prewarmDailyReportPdfs()}));$('reportType')?.addEventListener('change',refreshReportAndPdfCache);$('reportWorker')?.addEventListener('change',refreshReportAndPdfCache);$('reportRefresh')?.addEventListener('click',async()=>{await loadAll();dailyReportPdfCache.clear();dailyReportPdfPending.clear();renderDailyReport();prewarmDailyReportPdfs();toast('Report aggiornato')});$('shareDailyReport')?.addEventListener('click',shareDailyReport);$('exportDailyReportCompact')?.addEventListener('click',()=>exportDailyReportPdf('compact'));$('exportDailyReportFull')?.addEventListener('click',()=>exportDailyReportPdf('full'));
 
 sb.auth.onAuthStateChange(async(event,s)=>{

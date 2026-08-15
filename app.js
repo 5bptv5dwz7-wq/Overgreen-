@@ -779,11 +779,13 @@ function renderDashboard(){
   const clientStores=type=>stores.filter(s=>clientType(s)===type);
   const openClientExtras=type=>extras.filter(e=>clientType(e)===type&&!['completato','in_attesa'].includes(e.stato));
   if(admin()){
-    $('dashEurospinDue').textContent=clientStores('eurospin').filter(s=>status(s)==='due').length;
-    $('dashEurospinUrgent').textContent=clientStores('eurospin').filter(isUrgentStore).length;
+    const rawDue=s=>{if(!storeHasInterval(s))return false;const n=days(s.ultimo_passaggio),lim=Number(s.intervallo_giorni);return n===null||n>lim};
+    const counterWithUnscheduled=(list,test)=>{const total=list.filter(test).length,available=list.filter(s=>test(s)&&!isStoreProgrammed(s.id)).length;return `${total} (${available})`};
+    $('dashEurospinDue').textContent=counterWithUnscheduled(clientStores('eurospin'),rawDue);
+    $('dashEurospinUrgent').textContent=counterWithUnscheduled(clientStores('eurospin'),isUrgentStore);
     $('dashEurospinTargets').textContent=openClientExtras('eurospin').length;
-    $('dashIntesaDue').textContent=clientStores('intesa').filter(s=>status(s)==='due').length;
-    $('dashIntesaUrgent').textContent=clientStores('intesa').filter(isUrgentStore).length;
+    $('dashIntesaDue').textContent=counterWithUnscheduled(clientStores('intesa'),rawDue);
+    $('dashIntesaUrgent').textContent=counterWithUnscheduled(clientStores('intesa'),isUrgentStore);
     $('dashIntesaTickets').textContent=openClientExtras('intesa').length;
     $('dashboardClientCounters')?.classList.remove('hidden');
   }else{

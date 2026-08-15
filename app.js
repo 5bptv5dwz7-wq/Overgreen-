@@ -1286,24 +1286,89 @@ let scheduleTravelRenderToken=0;
 function readTravelCache(){try{return JSON.parse(localStorage.getItem(travelCacheKey)||'{}')}catch{return {}}}
 function writeTravelCache(cache){try{localStorage.setItem(travelCacheKey,JSON.stringify(cache))}catch{}}
 function normalizedRouteAddress(address){return String(address||'').replace(/\s+/g,' ').trim()}
-async function geocodeRouteAddress(address){
-  const key='geo:'+normalizedRouteAddress(address).toLowerCase(),cache=readTravelCache();
-  if(cache[key]&&Date.now()-cache[key].savedAt<1000*60*60*24*180)return cache[key].value;
-  const url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=it&q='+encodeURIComponent(address);
+function routeStoreForAddress(address){
+  const key=normalizedRouteAddress(address).toLowerCase();
+  return stores.find(st=>normalizedRouteAddress(routeAddressForStore(st)).toLowerCase()===key)||null;
+}
+function storedRoutePoint(address){
+  const st=routeStoreForAddress(address),rawLat=st?.route_latitude,rawLon=st?.route_longitude,lat=Number(rawLat),lon=Number(rawLon);
+  return st&&rawLat!==null&&rawLat!==undefined&&rawLon!==null&&rawLon!==undefined&&Number.isFinite(lat)&&Number.isFinite(lon)?{lat,lon,source:'saved-store',resolvedAddress:st.route_geocode_label||routeAddressForStore(st),approximate:false}:null;
+}
+async function persistRoutePoint(address,value){
+  const st=routeStoreForAddress(address);if(!st||!Number.isFinite(value?.lat)||!Number.isFinite(value?.lon))return;
+  st.route_latitude=value.lat;st.route_longitude=value.lon;st.route_geocoded_at=new Date().toISOString();st.route_geocode_label=value.resolvedAddress||normalizedRouteAddress(address);
+  try{
+    const {error}=await sb.from('stores').update({route_latitude:value.lat,route_longitude:value.lon,route_geocoded_at:st.route_geocoded_at,route_geocode_label:st.route_geocode_label}).eq('id',st.id);
+    if(error)console.warn('Coordinate sede non salvate (migrazione v112-16 mancante o permessi insufficienti):',error.message);
+  }catch(e){console.warn('Coordinate sede non salvate:',e)}
+}
+function routeAddressParts(address){
+  const parts=normalizedRouteAddress(address).split(',').map(x=>x.trim()).filter(Boolean);
+  return {street:parts[0]||'',city:parts[1]||'',country:parts.slice(2).join(', ')||'Italia'};
+}
+function routeStreetWithoutNumber(street){return String(street||'').replace(/\s+\d+[a-zA-Z]?(?:[\/-]\d+[a-zA-Z]?)?\s*$/,'').trim()}
+function nominatimLabel(row){return row?.display_name||[row?.name,row?.type].filter(Boolean).join(' ')||''}
+async function nominatimGeocode(query){
+  const url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=3&addressdetails=1&countrycodes=it&q='+encodeURIComponent(query);
   let r;try{r=await fetch(url,{headers:{'Accept':'application/json'}})}catch(e){throw new Error('Errore di connessione durante la ricerca indirizzo')}
   if(!r.ok)throw new Error(`Servizio indirizzi non disponibile (HTTP ${r.status})`);
-  const rows=await r.json();if(!rows?.length)throw new Error(`Indirizzo non trovato: ${normalizedRouteAddress(address)}`);
-  const value={lat:Number(rows[0].lat),lon:Number(rows[0].lon)};cache[key]={savedAt:Date.now(),value};writeTravelCache(cache);return value;
+  const rows=await r.json();if(!rows?.length)return null;
+  const row=rows[0],lat=Number(row.lat),lon=Number(row.lon);if(!Number.isFinite(lat)||!Number.isFinite(lon))return null;
+  return {lat,lon,source:'Nominatim',resolvedAddress:nominatimLabel(row)};
+}
+async function photonGeocode(query){
+  const url='https://photon.komoot.io/api/?limit=5&lang=it&q='+encodeURIComponent(query);
+  let r;try{r=await fetch(url,{headers:{'Accept':'application/json'}})}catch(e){return null}
+  if(!r.ok)return null;
+  const data=await r.json(),features=(data?.features||[]).filter(f=>String(f?.properties?.countrycode||'').toLowerCase()==='it'||String(f?.properties?.country||'').toLowerCase()==='italia');
+  const f=features[0]||data?.features?.[0];if(!f?.geometry?.coordinates)return null;
+  const [lon,lat]=f.geometry.coordinates.map(Number);if(!Number.isFinite(lat)||!Number.isFinite(lon))return null;
+  const p=f.properties||{},label=[p.name,p.street,p.housenumber,p.city||p.locality,p.state,'Italia'].filter((v,i,a)=>v&&a.indexOf(v)===i).join(', ');
+  return {lat,lon,source:'Photon',resolvedAddress:label||query,properties:p};
+}
+async function correctedRouteCity(city){
+  if(!city)return '';
+  const hit=await photonGeocode(city+', Italia');if(!hit)return '';
+  const p=hit.properties||{};return p.city||p.locality||p.name||'';
+}
+async function geocodeRouteAddress(address){
+  const normalized=normalizedRouteAddress(address),key='geo2:'+normalized.toLowerCase(),cache=readTravelCache();
+  const saved=storedRoutePoint(normalized);if(saved)return saved;
+  if(cache[key]&&Date.now()-cache[key].savedAt<1000*60*60*24*180)return cache[key].value;
+  const {street,city}=routeAddressParts(normalized),attempts=[];
+  const push=async(label,fn,approximate=false)=>{try{const hit=await fn();attempts.push(label+(hit?' ✓':' ✗'));if(hit)return {...hit,approximate}}catch(e){attempts.push(label+' → '+(e?.message||String(e)));if(String(e?.message||'').includes('Servizio indirizzi')||String(e?.message||'').includes('connessione'))throw e}return null};
+  let value=await push('Nominatim indirizzo completo',()=>nominatimGeocode(normalized));
+  if(!value)value=await push('Photon indirizzo completo',()=>photonGeocode(normalized));
+  if(!value&&street&&city){
+    const corrected=await correctedRouteCity(city);
+    if(corrected&&corrected.toLowerCase()!==city.toLowerCase()){
+      const correctedQuery=[street,corrected,'Italia'].join(', ');
+      value=await push(`Località corretta automaticamente: ${city} → ${corrected}`,()=>nominatimGeocode(correctedQuery));
+      if(!value)value=await push(`Photon con località corretta: ${corrected}`,()=>photonGeocode(correctedQuery));
+    }
+  }
+  if(!value&&street&&city){
+    const streetOnly=routeStreetWithoutNumber(street);
+    if(streetOnly&&streetOnly!==street){
+      const q=[streetOnly,city,'Italia'].join(', ');
+      value=await push('Via senza numero civico',()=>nominatimGeocode(q),true);
+      if(!value)value=await push('Photon via senza numero civico',()=>photonGeocode(q),true);
+    }
+  }
+  if(!value)throw new Error(`Indirizzo non trovato: ${normalized}\nTentativi: ${attempts.join(' | ')}`);
+  value.originalAddress=normalized;
+  cache[key]={savedAt:Date.now(),value};writeTravelCache(cache);persistRoutePoint(normalized,value);
+  return value;
 }
 async function routeBetweenAddresses(from,to){
-  const a=normalizedRouteAddress(from),b=normalizedRouteAddress(to),key='route:'+a.toLowerCase()+'>'+b.toLowerCase(),cache=readTravelCache();
+  const a=normalizedRouteAddress(from),b=normalizedRouteAddress(to),key='route2:'+a.toLowerCase()+'>'+b.toLowerCase(),cache=readTravelCache();
   if(cache[key]&&Date.now()-cache[key].savedAt<1000*60*60*24*30)return cache[key].value;
   const [p1,p2]=await Promise.all([geocodeRouteAddress(a),geocodeRouteAddress(b)]);
   const url=`https://router.project-osrm.org/route/v1/driving/${p1.lon},${p1.lat};${p2.lon},${p2.lat}?overview=false&steps=false`;
   let r;try{r=await fetch(url)}catch(e){throw new Error('Errore di connessione durante il calcolo percorso')}
   if(!r.ok)throw new Error(`Servizio percorsi non disponibile (HTTP ${r.status})`);const data=await r.json();
   const route=data.routes?.[0];if(!route)throw new Error('Percorso stradale non trovato');
-  const value={km:route.distance/1000,minutes:Math.max(1,Math.round(route.duration/60))};cache[key]={savedAt:Date.now(),value};writeTravelCache(cache);return value;
+  const value={km:route.distance/1000,minutes:Math.max(1,Math.round(route.duration/60)),approximate:!!(p1.approximate||p2.approximate),fromResolved:p1.resolvedAddress||a,toResolved:p2.resolvedAddress||b};cache[key]={savedAt:Date.now(),value};writeTravelCache(cache);return value;
 }
 function routeAddressForStore(st){return [st?.indirizzo,st?.citta,'Italia'].filter(Boolean).join(', ')}
 function routeAddressForExtra(e,st){return [st?.indirizzo||e?.indirizzo_esterno,st?.citta,'Italia'].filter(Boolean).join(', ')}
@@ -1337,7 +1402,7 @@ async function hydrateScheduleTravel(section,token){
       const route=await routeBetweenAddresses(cards[i].dataset.routeAddress,cards[i+1].dataset.routeAddress);
       if(token!==scheduleTravelRenderToken)return;
       totalKm+=route.km;totalMinutes+=route.minutes;okCount++;
-      separator.innerHTML=`<span>↓</span><strong>🚗 ${formatTravelMinutes(route.minutes)} · ${route.km.toFixed(route.km<10?1:0)} km</strong>`;
+      separator.innerHTML=`<span>↓</span><strong>${route.approximate?'≈ ':''}🚗 ${formatTravelMinutes(route.minutes)} · ${route.km.toFixed(route.km<10?1:0)} km${route.approximate?' · posizione approssimativa':''}</strong>`;
     }catch(err){renderTravelError(separator,err,cards[i].dataset.routeAddress,cards[i+1].dataset.routeAddress)}
   }
   if(token!==scheduleTravelRenderToken)return;
@@ -1356,7 +1421,7 @@ async function hydrateWorkerTravel(section,token){
       const route=await routeBetweenAddresses(cards[i].dataset.routeAddress,cards[i+1].dataset.routeAddress);
       if(token!==travelRenderToken)return;
       totalKm+=route.km;totalMinutes+=route.minutes;okCount++;
-      separator.innerHTML=`<span>↓</span><strong>🚗 ${formatTravelMinutes(route.minutes)} · ${route.km.toFixed(route.km<10?1:0)} km</strong>`;
+      separator.innerHTML=`<span>↓</span><strong>${route.approximate?'≈ ':''}🚗 ${formatTravelMinutes(route.minutes)} · ${route.km.toFixed(route.km<10?1:0)} km${route.approximate?' · posizione approssimativa':''}</strong>`;
     }catch(err){renderTravelError(separator,err,cards[i].dataset.routeAddress,cards[i+1].dataset.routeAddress)}
   }
   if(token!==travelRenderToken)return;

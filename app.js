@@ -1331,6 +1331,76 @@ async function correctedRouteCity(city){
   const hit=await photonGeocode(city+', Italia');if(!hit)return '';
   const p=hit.properties||{};return p.city||p.locality||p.name||'';
 }
+function storeLookupAddressFromNominatim(row){
+  const a=row?.address||{};
+  const road=a.road||a.pedestrian||a.footway||a.residential||a.neighbourhood||'';
+  const number=a.house_number||'';
+  const city=a.city||a.town||a.village||a.municipality||a.hamlet||'';
+  const street=[road,number].filter(Boolean).join(' ').trim();
+  return {street,city,label:nominatimLabel(row)};
+}
+async function nominatimStoreLookup(query){
+  const url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&addressdetails=1&countrycodes=it&q='+encodeURIComponent(query);
+  let r;try{r=await fetch(url,{headers:{'Accept':'application/json'}})}catch(e){throw new Error('Connessione non disponibile')}
+  if(!r.ok)throw new Error(`Servizio indirizzi non disponibile (HTTP ${r.status})`);
+  const rows=await r.json();
+  for(const row of rows||[]){
+    const lat=Number(row.lat),lon=Number(row.lon),parts=storeLookupAddressFromNominatim(row);
+    if(Number.isFinite(lat)&&Number.isFinite(lon)&&(parts.street||parts.city))return {lat,lon,...parts,source:'Nominatim'};
+  }
+  return null;
+}
+function storeLookupAddressFromPhoton(hit){
+  const p=hit?.properties||{};
+  const street=[p.street||'',p.housenumber||''].filter(Boolean).join(' ').trim();
+  const city=p.city||p.locality||p.district||p.county||'';
+  const label=[p.name,p.street,p.housenumber,city,p.state,'Italia'].filter((v,i,a)=>v&&a.indexOf(v)===i).join(', ');
+  return {street,city,label};
+}
+async function photonStoreLookup(query){
+  const url='https://photon.komoot.io/api/?limit=8&lang=it&q='+encodeURIComponent(query);
+  let r;try{r=await fetch(url,{headers:{'Accept':'application/json'}})}catch(e){return null}
+  if(!r.ok)return null;
+  const data=await r.json();
+  for(const f of data?.features||[]){
+    const [lon,lat]=(f?.geometry?.coordinates||[]).map(Number);if(!Number.isFinite(lat)||!Number.isFinite(lon))continue;
+    const parts=storeLookupAddressFromPhoton(f);if(parts.street||parts.city)return {lat,lon,...parts,source:'Photon'};
+  }
+  return null;
+}
+async function lookupStoreAddressOnline(){
+  const btn=$('storeAddressLookupBtn'),status=$('storeAddressLookupStatus');
+  const name=$('storeName').value.trim(),address=$('storeAddress').value.trim(),city=$('storeCity').value.trim();
+  const client=({eurospin:'Eurospin',intesa:'Intesa Sanpaolo',privato:''})[$('storeClient').value]||'';
+  if(!name&&!address&&!city)return alert('Inserisci almeno il nome della sede, la città o una parte dell’indirizzo.');
+  const old=btn.textContent;btn.disabled=true;btn.textContent='Ricerca…';
+  if(status){status.textContent='Sto cercando la sede online…';status.classList.remove('hidden')}
+  try{
+    const queries=[];
+    const add=q=>{q=String(q||'').replace(/\s+/g,' ').trim();if(q&&!queries.includes(q))queries.push(q)};
+    add([client,name,address,city,'Italia'].filter(Boolean).join(', '));
+    add([client,name,city,'Italia'].filter(Boolean).join(', '));
+    add([name,address,'Italia'].filter(Boolean).join(', '));
+    add([address,city,'Italia'].filter(Boolean).join(', '));
+    add([name,city,'Italia'].filter(Boolean).join(', '));
+    let hit=null,used='';
+    for(const q of queries){
+      used=q;
+      try{hit=await nominatimStoreLookup(q)}catch(e){if(String(e?.message||'').includes('Servizio indirizzi'))throw e}
+      if(!hit)hit=await photonStoreLookup(q);
+      if(hit)break;
+    }
+    if(!hit)throw new Error('Nessun indirizzo affidabile trovato online. Prova a scrivere almeno il nome della sede e la provincia/città.');
+    if(hit.street)$('storeAddress').value=hit.street;
+    if(hit.city)$('storeCity').value=hit.city;
+    $('storeAddress').dataset.lookupLat=String(hit.lat);$('storeAddress').dataset.lookupLon=String(hit.lon);$('storeAddress').dataset.lookupLabel=hit.label||[hit.street,hit.city,'Italia'].filter(Boolean).join(', ');
+    if(status){status.textContent=`✓ Trovato con ${hit.source}: ${hit.label||[hit.street,hit.city].filter(Boolean).join(', ')}`;status.classList.remove('hidden')}
+    toast('Indirizzo trovato e compilato');
+  }catch(err){
+    if(status){status.textContent='⚠️ '+(err?.message||String(err));status.classList.remove('hidden')}
+    alert(err?.message||String(err));
+  }finally{btn.disabled=false;btn.textContent=old}
+}
 async function geocodeRouteAddress(address){
   const normalized=normalizedRouteAddress(address),key='geo2:'+normalized.toLowerCase(),cache=readTravelCache();
   const saved=storedRoutePoint(normalized);if(saved)return saved;
@@ -1973,7 +2043,7 @@ function renderStores(){
 function renderWorkers(){for(const id of ['doneWorkers','scheduleWorkers','extraWorkers']){const w=$(id);if(!w)continue;w.innerHTML='';profiles.filter(p=>p.attivo).forEach(p=>{const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${p.id}"> ${esc(p.nome)}`;w.appendChild(l)})}}
 function syncStoreIntervalUi(){const off=$('storeNoInterval')?.checked===true;if($('storeInterval')){$('storeInterval').disabled=off;$('storeInterval').required=!off}}
 function syncStoreTypeUi(){const atm=$('storeSiteType')?.value==='atm';$('storeFixedAmountWrap')?.classList.toggle('hidden',!atm);if(!atm&&$('storeFixedAmount'))$('storeFixedAmount').value=''}
-function openStore(s=null){$('storeForm').reset();$('storeId').value=s?.id||'';$('storeClient').value=clientType(s);$('storeSiteType').value=s?.site_type||'punto_vendita';$('storeFixedAmount').value=s?.importo_fisso??'';$('storeName').value=s?.nome||'';$('storeAddress').value=s?.indirizzo||'';$('storeCity').value=s?.citta||'';$('storeLast').value=s?.ultimo_passaggio||'';const noInterval=!!s&&!storeHasInterval(s);$('storeNoInterval').checked=noInterval;$('storeInterval').value=storeHasInterval(s)?Number(s.intervallo_giorni):15;$('storeNotes').value=s?.note||'';syncStoreTypeUi();syncStoreIntervalUi();openDialog('storeDialog')}
+function openStore(s=null){$('storeForm').reset();$('storeId').value=s?.id||'';$('storeClient').value=clientType(s);$('storeSiteType').value=s?.site_type||'punto_vendita';$('storeFixedAmount').value=s?.importo_fisso??'';$('storeName').value=s?.nome||'';$('storeAddress').value=s?.indirizzo||'';$('storeCity').value=s?.citta||'';$('storeAddress').dataset.originalValue=s?.indirizzo||'';$('storeCity').dataset.originalValue=s?.citta||'';$('storeAddress').dataset.lookupLat='';$('storeAddress').dataset.lookupLon='';$('storeAddress').dataset.lookupLabel='';if($('storeAddressLookupStatus')){$('storeAddressLookupStatus').textContent='';$('storeAddressLookupStatus').classList.add('hidden')}$('storeLast').value=s?.ultimo_passaggio||'';const noInterval=!!s&&!storeHasInterval(s);$('storeNoInterval').checked=noInterval;$('storeInterval').value=storeHasInterval(s)?Number(s.intervallo_giorni):15;$('storeNotes').value=s?.note||'';syncStoreTypeUi();syncStoreIntervalUi();openDialog('storeDialog')}
 $('storeNoInterval')?.addEventListener('change',syncStoreIntervalUi);
 $('storeSiteType')?.addEventListener('change',syncStoreTypeUi);
 async function openDone(s,scheduleItemId=''){
@@ -2938,7 +3008,7 @@ $('archiveUploadForm')?.addEventListener('submit',async e=>{
 });
 
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeDialog(b));$('helpBtn').onclick=openHelp;document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));document.querySelectorAll('[data-client-filter]').forEach(b=>b.onclick=()=>{storeClientFilter=b.dataset.clientFilter;document.querySelectorAll('[data-client-filter]').forEach(x=>x.classList.toggle('active',x===b));renderStores()});document.querySelectorAll('[data-extra-client]').forEach(b=>b.onclick=()=>{extraClientFilter=b.dataset.extraClient;document.querySelectorAll('[data-extra-client]').forEach(x=>x.classList.toggle('active',x===b));renderExtras()});document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{storeFilter=b.dataset.filter;renderStores()});
-$('globalSearch').oninput=renderGlobalSearch;$('dashboardRefresh').onclick=loadAll;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){scheduleDateFilter='all';$('scheduleDateFilter').value='all';setView('schedule')}else if(b.dataset.dash==='today'){scheduleDateFilter='today';$('scheduleDateFilter').value='today';setView('schedule')}else if(b.dataset.dash==='openextras')setView('extras');else if(b.dataset.dash==='todayextras'){$('extraSearchInput').value=today();setView('extras');renderExtras()}else setView('stores')});$('scheduleClientFilter').onchange=e=>{scheduleClientFilter=e.target.value;renderSchedules()};$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('bulkIntervalBtn').onclick=openBulkIntervalDialog;$('bulkIntervalClient').onchange=updateBulkIntervalPreview;$('bulkIntervalSiteType').onchange=updateBulkIntervalPreview;$('bulkIntervalDays').oninput=updateBulkIntervalPreview;$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('schedulePickerClient').onchange=renderSchedulePicker;document.querySelectorAll('[data-quick-date]').forEach(b=>b.onclick=()=>{$('scheduleDate').value=b.dataset.quickDate==='today'?today():tomorrow()});$('addScheduleSearch').oninput=renderAddSchedulePicker;$('newExtraBtn').onclick=()=>{$('extraForm').reset();$('extraRequestDate').value=today();$('extraDate').value='';$('extraDeadline').value='';$('extraClient').value='eurospin';syncExtraClosureOptions($('extraClosureProfile'),'eurospin','eurospin');syncExtraNumberLabel();if($('extraIntesaOrdinaryMode'))$('extraIntesaOrdinaryMode').checked=false;if($('extraEurospinOrdinaryMode'))$('extraEurospinOrdinaryMode').checked=false;if($('extraPdfAutoReadStatus')){$('extraPdfAutoReadStatus').textContent='';$('extraPdfAutoReadStatus').classList.add('hidden')}clearDuplicateTargetWarning();if($('extraStoreSearch'))$('extraStoreSearch').value='';if($('extraStructured'))$('extraStructured').checked=false;if($('extraWorkItemsEditor'))$('extraWorkItemsEditor').innerHTML='';syncStructuredCreateUi();syncOrdinaryIncludedCreateUi();renderExtraStoreOptions();syncExtraDestinationUi();openDialog('extraDialog')};
+$('globalSearch').oninput=renderGlobalSearch;$('dashboardRefresh').onclick=loadAll;if($('storeAddressLookupBtn'))$('storeAddressLookupBtn').onclick=lookupStoreAddressOnline;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){scheduleDateFilter='all';$('scheduleDateFilter').value='all';setView('schedule')}else if(b.dataset.dash==='today'){scheduleDateFilter='today';$('scheduleDateFilter').value='today';setView('schedule')}else if(b.dataset.dash==='openextras')setView('extras');else if(b.dataset.dash==='todayextras'){$('extraSearchInput').value=today();setView('extras');renderExtras()}else setView('stores')});$('scheduleClientFilter').onchange=e=>{scheduleClientFilter=e.target.value;renderSchedules()};$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('bulkIntervalBtn').onclick=openBulkIntervalDialog;$('bulkIntervalClient').onchange=updateBulkIntervalPreview;$('bulkIntervalSiteType').onchange=updateBulkIntervalPreview;$('bulkIntervalDays').oninput=updateBulkIntervalPreview;$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('schedulePickerClient').onchange=renderSchedulePicker;document.querySelectorAll('[data-quick-date]').forEach(b=>b.onclick=()=>{$('scheduleDate').value=b.dataset.quickDate==='today'?today():tomorrow()});$('addScheduleSearch').oninput=renderAddSchedulePicker;$('newExtraBtn').onclick=()=>{$('extraForm').reset();$('extraRequestDate').value=today();$('extraDate').value='';$('extraDeadline').value='';$('extraClient').value='eurospin';syncExtraClosureOptions($('extraClosureProfile'),'eurospin','eurospin');syncExtraNumberLabel();if($('extraIntesaOrdinaryMode'))$('extraIntesaOrdinaryMode').checked=false;if($('extraEurospinOrdinaryMode'))$('extraEurospinOrdinaryMode').checked=false;if($('extraPdfAutoReadStatus')){$('extraPdfAutoReadStatus').textContent='';$('extraPdfAutoReadStatus').classList.add('hidden')}clearDuplicateTargetWarning();if($('extraStoreSearch'))$('extraStoreSearch').value='';if($('extraStructured'))$('extraStructured').checked=false;if($('extraWorkItemsEditor'))$('extraWorkItemsEditor').innerHTML='';syncStructuredCreateUi();syncOrdinaryIncludedCreateUi();renderExtraStoreOptions();syncExtraDestinationUi();openDialog('extraDialog')};
 function syncOrdinaryIncludedCreateUi(){
   const client=$('extraClient')?.value||'eurospin';
   const isIntesa=client==='intesa',isEurospin=client==='eurospin';
@@ -3082,7 +3152,7 @@ $('bulkIntervalForm').onsubmit=async e=>{e.preventDefault();
   const {error}=await q;if(error)return alert('Impossibile aggiornare gli intervalli: '+error.message);
   $('bulkIntervalDialog').close();toast(`Intervallo aggiornato per ${matches.length} sedi`);await loadAll();
 };
-$('storeForm').onsubmit=async e=>{e.preventDefault();const id=$('storeId').value,payload={client_type:$('storeClient').value,site_type:$('storeSiteType').value,importo_fisso:$('storeSiteType').value==='atm'&&$('storeFixedAmount').value!==''?Number($('storeFixedAmount').value):null,nome:$('storeName').value.trim(),indirizzo:$('storeAddress').value.trim()||null,citta:$('storeCity').value.trim()||null,ultimo_passaggio:$('storeLast').value||null,intervallo_giorni:$('storeNoInterval')?.checked?null:(Number($('storeInterval').value)||15),note:$('storeNotes').value.trim()||null};const r=id?await sb.from('stores').update(payload).eq('id',id):await sb.from('stores').insert(payload);if(r.error)return alert(r.error.message);$('storeDialog').close();toast('Sede salvata');await loadAll()};
+$('storeForm').onsubmit=async e=>{e.preventDefault();const id=$('storeId').value,address=$('storeAddress').value.trim(),city=$('storeCity').value.trim(),addressChanged=address!==($('storeAddress').dataset.originalValue||'')||city!==($('storeCity').dataset.originalValue||''),lookupLat=Number($('storeAddress').dataset.lookupLat),lookupLon=Number($('storeAddress').dataset.lookupLon),hasLookup=Number.isFinite(lookupLat)&&Number.isFinite(lookupLon)&&$('storeAddress').dataset.lookupLat!==''&&$('storeAddress').dataset.lookupLon!=='';const payload={client_type:$('storeClient').value,site_type:$('storeSiteType').value,importo_fisso:$('storeSiteType').value==='atm'&&$('storeFixedAmount').value!==''?Number($('storeFixedAmount').value):null,nome:$('storeName').value.trim(),indirizzo:address||null,citta:city||null,ultimo_passaggio:$('storeLast').value||null,intervallo_giorni:$('storeNoInterval')?.checked?null:(Number($('storeInterval').value)||15),note:$('storeNotes').value.trim()||null};if(hasLookup){payload.route_latitude=lookupLat;payload.route_longitude=lookupLon;payload.route_geocoded_at=new Date().toISOString();payload.route_geocode_label=$('storeAddress').dataset.lookupLabel||[address,city,'Italia'].filter(Boolean).join(', ')}else if(addressChanged){payload.route_latitude=null;payload.route_longitude=null;payload.route_geocoded_at=null;payload.route_geocode_label=null}const r=id?await sb.from('stores').update(payload).eq('id',id):await sb.from('stores').insert(payload);if(r.error)return alert(r.error.message);$('storeDialog').close();toast('Sede salvata');await loadAll()};
 $('doneHasNextVisitNote').onchange=e=>{$('doneNextVisitWrap').classList.toggle('hidden',!e.target.checked);if(!e.target.checked)$('doneNextVisitNote').value=''};
 async function saveOrdinaryIntervention(continueAnotherDay,btn){
   const oldText=btn.textContent;btn.disabled=true;btn.textContent='Salvataggio…';

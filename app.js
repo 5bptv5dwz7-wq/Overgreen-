@@ -1290,8 +1290,9 @@ async function geocodeRouteAddress(address){
   const key='geo:'+normalizedRouteAddress(address).toLowerCase(),cache=readTravelCache();
   if(cache[key]&&Date.now()-cache[key].savedAt<1000*60*60*24*180)return cache[key].value;
   const url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=it&q='+encodeURIComponent(address);
-  const r=await fetch(url,{headers:{'Accept':'application/json'}});if(!r.ok)throw new Error('Indirizzo non trovato');
-  const rows=await r.json();if(!rows?.length)throw new Error('Indirizzo non trovato');
+  let r;try{r=await fetch(url,{headers:{'Accept':'application/json'}})}catch(e){throw new Error('Errore di connessione durante la ricerca indirizzo')}
+  if(!r.ok)throw new Error(`Servizio indirizzi non disponibile (HTTP ${r.status})`);
+  const rows=await r.json();if(!rows?.length)throw new Error(`Indirizzo non trovato: ${normalizedRouteAddress(address)}`);
   const value={lat:Number(rows[0].lat),lon:Number(rows[0].lon)};cache[key]={savedAt:Date.now(),value};writeTravelCache(cache);return value;
 }
 async function routeBetweenAddresses(from,to){
@@ -1299,13 +1300,30 @@ async function routeBetweenAddresses(from,to){
   if(cache[key]&&Date.now()-cache[key].savedAt<1000*60*60*24*30)return cache[key].value;
   const [p1,p2]=await Promise.all([geocodeRouteAddress(a),geocodeRouteAddress(b)]);
   const url=`https://router.project-osrm.org/route/v1/driving/${p1.lon},${p1.lat};${p2.lon},${p2.lat}?overview=false&steps=false`;
-  const r=await fetch(url);if(!r.ok)throw new Error('Percorso non disponibile');const data=await r.json();
-  const route=data.routes?.[0];if(!route)throw new Error('Percorso non disponibile');
+  let r;try{r=await fetch(url)}catch(e){throw new Error('Errore di connessione durante il calcolo percorso')}
+  if(!r.ok)throw new Error(`Servizio percorsi non disponibile (HTTP ${r.status})`);const data=await r.json();
+  const route=data.routes?.[0];if(!route)throw new Error('Percorso stradale non trovato');
   const value={km:route.distance/1000,minutes:Math.max(1,Math.round(route.duration/60))};cache[key]={savedAt:Date.now(),value};writeTravelCache(cache);return value;
 }
 function routeAddressForStore(st){return [st?.indirizzo,st?.citta,'Italia'].filter(Boolean).join(', ')}
 function routeAddressForExtra(e,st){return [st?.indirizzo||e?.indirizzo_esterno,st?.citta,'Italia'].filter(Boolean).join(', ')}
 function formatTravelMinutes(minutes){const h=Math.floor(minutes/60),m=minutes%60;return h?`${h} h${m?' '+m+' min':''}`:`${m} min`}
+
+function travelErrorLabel(err){
+  const m=String(err?.message||err||'Errore sconosciuto');
+  if(m.includes('Indirizzo non trovato'))return '⚠️ Indirizzo non trovato';
+  if(m.includes('Servizio indirizzi'))return '⚠️ Servizio indirizzi non disponibile';
+  if(m.includes('Percorso stradale'))return '⚠️ Percorso stradale non trovato';
+  if(m.includes('Servizio percorsi'))return '⚠️ Servizio percorsi non disponibile';
+  if(m.includes('connessione'))return '⚠️ Errore di connessione';
+  return '⚠️ Viaggio non calcolabile';
+}
+function renderTravelError(separator,err,from,to){
+  const technical=String(err?.message||err||'Errore sconosciuto');
+  separator.innerHTML=`<span>↓</span><div><small>${esc(travelErrorLabel(err))}</small><button type="button" class="travel-error-details">Dettagli</button></div>`;
+  separator.querySelector('.travel-error-details')?.addEventListener('click',()=>alert(`Dettagli calcolo viaggio\n\nDa:\n${from||'Indirizzo mancante'}\n\nA:\n${to||'Indirizzo mancante'}\n\nErrore:\n${technical}`));
+}
+
 async function hydrateScheduleTravel(section,token){
   const cards=[...section.querySelectorAll('.schedule-item[data-route-address]')];if(cards.length<2)return;
   const summary=document.createElement('div');summary.className='worker-travel-summary schedule-travel-summary';summary.innerHTML='<strong>🚗 Percorso</strong><span>Calcolo in corso…</span>';
@@ -1320,7 +1338,7 @@ async function hydrateScheduleTravel(section,token){
       if(token!==scheduleTravelRenderToken)return;
       totalKm+=route.km;totalMinutes+=route.minutes;okCount++;
       separator.innerHTML=`<span>↓</span><strong>🚗 ${formatTravelMinutes(route.minutes)} · ${route.km.toFixed(route.km<10?1:0)} km</strong>`;
-    }catch(err){separator.innerHTML='<span>↓</span><small>Viaggio non calcolabile</small>'}
+    }catch(err){renderTravelError(separator,err,cards[i].dataset.routeAddress,cards[i+1].dataset.routeAddress)}
   }
   if(token!==scheduleTravelRenderToken)return;
   summary.querySelector('span').textContent=okCount?`${totalKm.toFixed(totalKm<10?1:0)} km · ${formatTravelMinutes(totalMinutes)} di guida`:'Dati di viaggio non disponibili';
@@ -1339,7 +1357,7 @@ async function hydrateWorkerTravel(section,token){
       if(token!==travelRenderToken)return;
       totalKm+=route.km;totalMinutes+=route.minutes;okCount++;
       separator.innerHTML=`<span>↓</span><strong>🚗 ${formatTravelMinutes(route.minutes)} · ${route.km.toFixed(route.km<10?1:0)} km</strong>`;
-    }catch(err){separator.innerHTML='<span>↓</span><small>Viaggio non calcolabile</small>'}
+    }catch(err){renderTravelError(separator,err,cards[i].dataset.routeAddress,cards[i+1].dataset.routeAddress)}
   }
   if(token!==travelRenderToken)return;
   summary.querySelector('span').textContent=okCount?`${totalKm.toFixed(totalKm<10?1:0)} km · ${formatTravelMinutes(totalMinutes)} di guida`:'Dati di viaggio non disponibili';

@@ -1810,6 +1810,18 @@ function renderStats(){
   $('statsTrend').innerHTML=`<div class="stats-trend">${entries.map(([d,v],i)=>`<div class="stats-trend-col" title="${fmt(d)}: ${v}"><div class="stats-trend-bar" style="height:${Math.max(2,(v/max)*100)}%"></div>${(!compact||i%step===0)?`<small>${d.slice(5).split('-').reverse().join('/')}</small>`:''}</div>`).join('')}</div>`;
   const storeCounts=new Map();rows.forEach(x=>{const key=x.store?.id||`ext:${x.row?.nome_esterno||x.row?.indirizzo_esterno||'esterno'}`;const cur=storeCounts.get(key)||{name:x.store?.nome||x.row?.nome_esterno||'Sede esterna',city:x.store?.citta||x.row?.indirizzo_esterno||'',client:x.client,count:0};cur.count++;storeCounts.set(key,cur)});const top=[...storeCounts.values()].sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name,'it')).slice(0,8);
   $('statsTopStores').innerHTML=top.length?top.map((x,i)=>`<div class="stats-top-item"><span><strong>${i+1}. ${esc(x.name)}</strong><small>${esc([x.city,clientLabel(x.client)].filter(Boolean).join(' · '))}</small></span><strong>${x.count}</strong></div>`).join(''):'<div class="stats-empty">Nessuna sede nel periodo.</div>';
+
+  // Statistiche operatori: ogni lavoro viene attribuito a tutti gli operatori assegnati.
+  const workerMap=new Map();
+  const ensureWorker=id=>{if(!id)return null;let cur=workerMap.get(id);if(!cur){const p=profiles.find(x=>x.id===id);cur={id,name:p?.nome||p?.email||'Operatore',total:0,ordinary:0,extra:0,dates:new Set(),stores:new Set()};workerMap.set(id,cur)}return cur};
+  rows.forEach(x=>{
+    const assigned=x.kind==='ordinary'?interventionWorkers.filter(w=>w.intervention_id===x.row.id):extraWorkers.filter(w=>w.extra_id===x.row.id);
+    assigned.forEach(w=>{const cur=ensureWorker(w.profile_id);if(!cur)return;cur.total++;cur[x.kind]++;if(x.date)cur.dates.add(x.date);const site=x.store?.id||x.row?.nome_esterno||x.row?.indirizzo_esterno;if(site)cur.stores.add(site)});
+  });
+  const workers=[...workerMap.values()].sort((a,b)=>b.total-a.total||b.ordinary-a.ordinary||a.name.localeCompare(b.name,'it'));
+  const workerAssignments=workers.reduce((sum,w)=>sum+w.total,0),activeWorkers=workers.length;
+  if($('statsWorkerKpis'))$('statsWorkerKpis').innerHTML=[statsKpi('Operatori attivi',activeWorkers,'Con almeno 1 lavoro nel periodo',''),statsKpi('Assegnazioni',workerAssignments,'Un lavoro in squadra conta per ogni operatore',''),statsKpi('Media per operatore',activeWorkers?(workerAssignments/activeWorkers).toLocaleString('it-IT',{maximumFractionDigits:1}):'0','Lavori assegnati nel periodo','')].join('');
+  if($('statsOperators'))$('statsOperators').innerHTML=workers.length?workers.map((w,i)=>`<article class="stats-operator-card"><div class="stats-operator-rank">${i+1}</div><div class="stats-operator-main"><strong>${esc(w.name)}</strong><small>${w.dates.size} ${w.dates.size===1?'giorno':'giorni'} · ${w.stores.size} ${w.stores.size===1?'sede':'sedi'}</small><div class="stats-operator-split"><span>Ordinari <b>${w.ordinary}</b></span><span>Extra <b>${w.extra}</b></span></div></div><div class="stats-operator-total"><strong>${w.total}</strong><small>lavori</small></div></article>`).join(''):'<div class="stats-empty">Nessun operatore associato ai lavori del periodo.</div>';
 }
 function setStatsDays(value){statsDays=String(value);document.querySelectorAll('[data-stats-days]').forEach(b=>b.classList.toggle('active',b.dataset.statsDays===statsDays));$('statsCustomRange')?.classList.toggle('active',statsDays==='custom');renderStats()}
 

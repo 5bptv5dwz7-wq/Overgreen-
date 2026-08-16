@@ -1955,7 +1955,7 @@ function statsBars(rootId,items){
   root.innerHTML=items.some(x=>x.value)?items.map(x=>`<div class="stats-bar-row"><span>${esc(x.label)}</span><div class="stats-bar-track"><div class="stats-bar-fill" style="width:${Math.max(2,(x.value/max)*100)}%"></div></div><strong>${x.value}</strong></div>`).join(''):'<div class="stats-empty">Nessun lavoro nel periodo.</div>';
 }
 function renderStats(){
-  if(!admin()||!$('statsView'))return;
+  if(!$('statsView'))return;
   const range=statsRange(),len=statsPeriodLength(range),rows=statsExecutedRows(range),prevEnd=statsAddDays(range.start,-1),prevStart=statsAddDays(prevEnd,-(len-1)),prev=statsExecutedRows({start:prevStart,end:prevEnd});
   const ord=rows.filter(x=>x.kind==='ordinary').length,ext=rows.filter(x=>x.kind==='extra').length,total=rows.length,unique=new Set(rows.map(x=>x.store?.id||x.row?.nome_esterno||x.row?.indirizzo_esterno).filter(Boolean)).size;
   $('statsKpis').innerHTML=[statsKpi('Lavori eseguiti',total,`${fmt(range.start)} → ${fmt(range.end)}`,statsDelta(total,prev.length)),statsKpi('Ordinari',ord,`${Math.round(ord/Math.max(1,total)*100)}% del totale`,statsDelta(ord,prev.filter(x=>x.kind==='ordinary').length)),statsKpi('Extra',ext,`${Math.round(ext/Math.max(1,total)*100)}% del totale`,statsDelta(ext,prev.filter(x=>x.kind==='extra').length)),statsKpi('Sedi lavorate',unique,`Media ${(total/len).toLocaleString('it-IT',{maximumFractionDigits:1})} lavori/giorno`,'')].join('');

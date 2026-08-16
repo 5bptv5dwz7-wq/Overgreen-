@@ -2536,6 +2536,28 @@ async function editScheduleDayNote(schedule){
   toast(note?'Nota della giornata aggiornata':'Nota della giornata eliminata');
   renderSchedules();renderDashboard();
 }
+function openEditScheduleTeam(schedule){
+  if(!admin()||!schedule)return;
+  const box=$('editScheduleTeamWorkers');if(!box)return;
+  $('editScheduleTeamId').value=schedule.id;
+  const current=new Set(scheduleMemberIds(schedule.id));
+  box.innerHTML=profiles.filter(p=>p.attivo).map(p=>`<label><input type="checkbox" value="${p.id}" ${current.has(p.id)?'checked':''}> ${esc(p.nome)}</label>`).join('');
+  $('editScheduleTeamInfo').textContent=`${fmt(schedule.giorno)} · ${scheduleMemberNames(schedule.id).join(' + ')||'Squadra non indicata'}`;
+  openDialog('editScheduleTeamDialog');
+}
+async function saveEditScheduleTeam(){
+  if(!admin())return;
+  const scheduleId=$('editScheduleTeamId').value;
+  const memberIds=[...$('editScheduleTeamWorkers').querySelectorAll('input:checked')].map(x=>x.value);
+  if(!memberIds.length)return alert('Seleziona almeno un dipendente per la giornata.');
+  const current=new Set(scheduleMemberIds(scheduleId)),wanted=new Set(memberIds);
+  const toAdd=memberIds.filter(id=>!current.has(id)),toRemove=[...current].filter(id=>!wanted.has(id));
+  try{
+    if(toAdd.length){const r=await sb.from('schedule_members').insert(toAdd.map(profile_id=>({schedule_id:scheduleId,profile_id})));if(r.error)throw r.error}
+    for(const profileId of toRemove){const r=await sb.from('schedule_members').delete().eq('schedule_id',scheduleId).eq('profile_id',profileId);if(r.error)throw r.error}
+    $('editScheduleTeamDialog').close();toast('Squadra della giornata aggiornata');await loadAll();
+  }catch(err){alert('Impossibile aggiornare la squadra: '+(err.message||String(err)))}
+}
 function renderSchedules(){
   const currentScheduleTravelToken=++scheduleTravelRenderToken;
   $('scheduleTitle').textContent=admin()?'Programmazione':'I miei lavori';
@@ -2551,7 +2573,8 @@ function renderSchedules(){
     if(!items.length)continue;
     const members=scheduleMembers.filter(m=>m.schedule_id===s.id).map(m=>profiles.find(p=>p.id===m.profile_id)?.nome).filter(Boolean);
     const c=document.createElement('article');c.className='card schedule-day-card';
-    c.innerHTML=`<div class="schedule-card-head"><div><span class="schedule-date-label">${fmt(s.giorno)}</span><h3>${esc(members.join(' + ')||'Squadra non indicata')}</h3>${s.nota_generale?`<p class="muted">${esc(s.nota_generale)}</p>`:''}${s.auto_rollover?'<p class="muted"><strong>↪ Continuazione automatica attiva</strong></p>':''}</div>${admin()?'<div class="actions schedule-head-actions"><button class="secondary" data-edit-note>Nota giornata</button><button class="secondary" data-add-stores>+ Sedi</button><button class="secondary" data-duplicate>Duplica</button></div>':''}</div><div class="schedule-progress-label">${items.length+extrasForSchedule(s.id).length} lavor${items.length+extrasForSchedule(s.id).length===1?'o':'i'} da eseguire</div>`;
+    c.innerHTML=`<div class="schedule-card-head"><div><span class="schedule-date-label">${fmt(s.giorno)}</span><h3>${esc(members.join(' + ')||'Squadra non indicata')}</h3>${s.nota_generale?`<p class="muted">${esc(s.nota_generale)}</p>`:''}${s.auto_rollover?'<p class="muted"><strong>↪ Continuazione automatica attiva</strong></p>':''}</div>${admin()?'<div class="actions schedule-head-actions"><button class="secondary" data-edit-team>Squadra</button><button class="secondary" data-edit-note>Nota giornata</button><button class="secondary" data-add-stores>+ Sedi</button><button class="secondary" data-duplicate>Duplica</button></div>':''}</div><div class="schedule-progress-label">${items.length+extrasForSchedule(s.id).length} lavor${items.length+extrasForSchedule(s.id).length===1?'o':'i'} da eseguire</div>`;
+    c.querySelector('[data-edit-team]')?.addEventListener('click',()=>openEditScheduleTeam(s));
     c.querySelector('[data-edit-note]')?.addEventListener('click',()=>editScheduleDayNote(s));
     c.querySelector('[data-add-stores]')?.addEventListener('click',()=>openAddScheduleItems(s));
     c.querySelector('[data-duplicate]')?.addEventListener('click',()=>openDuplicateSchedule(s));
@@ -3915,3 +3938,5 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 
 $('dashboardShareStore')?.addEventListener('click',openShareStorePicker);$('shareStoreSearch')?.addEventListener('input',renderShareStorePicker);
+
+$('editScheduleTeamForm')?.addEventListener('submit',e=>{e.preventDefault();saveEditScheduleTeam()});

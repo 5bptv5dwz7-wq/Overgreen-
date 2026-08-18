@@ -712,6 +712,9 @@ async function loadAll(){
   await reconcileProgrammingConsistency();
   syncImpersonationUi();
   renderStores();renderWorkers();renderReportFilters();renderPending();renderScheduleFilters();renderSchedules();renderExtras();renderDashboard();if($('statsView'))renderStats();ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();processUploadQueue();
+  // V112-22: l'eventuale recupero dei vecchi extra standalone parte dopo il rendering,
+  // così non prolunga lo schermo nero in avvio.
+  setTimeout(()=>reconcileStandaloneExtrasInBackground(),0);
   const lastUpdate=$('syncStatus');if(lastUpdate)lastUpdate.textContent='Ultimo aggiornamento dati: '+new Date().toLocaleTimeString('it-IT');
   })();
   try{return await loadAllPromise}finally{loadAllPromise=null}
@@ -783,10 +786,6 @@ async function reconcileProgrammingConsistency(){
     const {error}=await sb.from('extras').update({schedule_item_id:null}).eq('id',e.id);
     if(error)console.warn('Scollegamento extra orfano non riuscito:',e.id,error.message);else e.schedule_item_id=null;
   }
-  const standaloneToReconcile=extras.filter(e=>!e.schedule_item_id&&!['completato','in_attesa'].includes(e.stato)&&e.giorno_intervento&&extraWorkers.some(w=>w.extra_id===e.id));
-  for(const e of standaloneToReconcile){
-    try{await ensureStandaloneExtraInProgramming(e)}catch(err){console.warn('Allineamento extra standalone alla programmazione non riuscito:',e.id,err.message)}
-  }
   const emptySchedules=schedules.filter(s=>!scheduleItems.some(i=>i.schedule_id===s.id)&&!extras.some(e=>e.schedule_id===s.id&&e.stato!=='completato'));
   for(const sch of emptySchedules){
     let r=await sb.from('schedule_members').delete().eq('schedule_id',sch.id);
@@ -795,6 +794,20 @@ async function reconcileProgrammingConsistency(){
     if(r.error)console.warn('Pulizia programmazione vuota non riuscita:',r.error.message);
     else{schedules=schedules.filter(x=>x.id!==sch.id);scheduleMembers=scheduleMembers.filter(x=>x.schedule_id!==sch.id)}
   }
+}
+let standaloneReconcileRunning=false;
+async function reconcileStandaloneExtrasInBackground(){
+  if(!admin()||standaloneReconcileRunning)return;
+  const pending=extras.filter(e=>!e.schedule_item_id&&!e.schedule_id&&!['completato','in_attesa'].includes(e.stato)&&e.giorno_intervento&&extraWorkers.some(w=>w.extra_id===e.id));
+  if(!pending.length)return;
+  standaloneReconcileRunning=true;
+  let changed=false;
+  try{
+    for(const e of pending){
+      try{const id=await ensureStandaloneExtraInProgramming(e);if(id)changed=true}catch(err){console.warn('Allineamento extra standalone in background non riuscito:',e.id,err.message)}
+    }
+    if(changed){renderSchedules();renderDashboard()}
+  }finally{standaloneReconcileRunning=false}
 }
 function renderDashboard(){
   if(!$('dashToday'))return;
@@ -921,10 +934,10 @@ function renderDashboard(){
           const extraNotes=[e.descrizione,e.note_lorenzo].filter(v=>String(v||'').trim());
           const requestPdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');
           const canClose=!done&&!isIntesaOrdinaryTicket(e)&&['programmato','ricevuto','da_integrare'].includes(e.stato)&&(admin()||myExtraIds.has(e.id));
-          const hasMap=!!(st?.indirizzo||st?.citta||e.indirizzo_esterno||e.nome_esterno);
+          const hasMap=!!extraMapsDestination(e,st);
           c.innerHTML=`<div class="job-main"><span class="job-kind">EXTRA</span>${clientBadge(e)}<span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span><strong>${esc(st?.nome||e.nome_esterno||'Extra')}</strong>${(st?.indirizzo||st?.citta||e.indirizzo_esterno)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo||e.indirizzo_esterno,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${esc(e.titolo)} · ${done?'Completato':urgent?'Urgente':'Da eseguire'}</small>${extraNotes.length?`<div class="dashboard-job-notes"><strong>${done?'Descrizione / note':'Descrizione'}</strong>${extraNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}</div><div class="actions">${hasMap?'<button class="secondary" data-map-extra>Maps</button>':''}${requestPdf?'<button class="secondary" data-pdf-extra>Apri PDF</button>':''}${canClose?'<button data-close-extra-dashboard>✓ Eseguito</button>':''}<button class="secondary" data-open-extra>Apri extra</button></div>`;
           c.dataset.routeAddress=routeAddressForExtra(e,st);
-          c.querySelector('[data-map-extra]')?.addEventListener('click',()=>openGoogleMaps(st?.indirizzo||e.indirizzo_esterno,st?.nome||e.nome_esterno||e.titolo,st?.citta||''));
+          c.querySelector('[data-map-extra]')?.addEventListener('click',()=>openExtraMaps(e,st));
           c.querySelector('[data-pdf-extra]')?.addEventListener('click',()=>openAttachment(requestPdf));
           c.querySelector('[data-close-extra-dashboard]')?.addEventListener('click',()=>openExtraClosureDialog(e));
           c.querySelector('[data-open-extra]').onclick=()=>openExtraById(e.id);list.appendChild(c)
@@ -1104,6 +1117,20 @@ function openGoogleMaps(address,name='',city=''){
   const query=encodeURIComponent(destination);
   // Il link universale apre Google Maps se installato, altrimenti la versione web.
   window.location.href=`https://www.google.com/maps/search/?api=1&query=${query}`;
+}
+
+function extraMapsDestination(e,st=null){
+  if(st){
+    return [st.indirizzo,st.citta].map(v=>String(v||'').trim()).filter(Boolean).join(', ')||[clientLabel(st),st.nome].filter(Boolean).join(' ');
+  }
+  // Per una sede non in anagrafica usiamo anche il nome del luogo: un indirizzo
+  // senza città (es. solo via/corso) da solo può portare Maps nel comune sbagliato.
+  return [e?.nome_esterno,e?.indirizzo_esterno].map(v=>String(v||'').trim()).filter(Boolean).join(', ')||String(e?.titolo||'').trim();
+}
+function openExtraMaps(e,st=null){
+  const destination=extraMapsDestination(e,st);
+  if(!destination)return alert('Per aprire Maps inserisci un indirizzo o il nome del luogo nell’extra.');
+  window.location.href=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destination)}`;
 }
 
 function storeMapsShareUrl(s){
@@ -2834,7 +2861,8 @@ function extraCard(e){
   const stateLabel=isIntesaOrdinaryTicket(e)?(e.stato==='completato'?'Ticket chiuso con intervento ordinario':e.stato==='in_attesa'?'In attesa insieme all’intervento ordinario':'Ticket incluso nell’intervento ordinario'):partialOpen?'Parziale · da continuare':e.stato.replaceAll('_',' ');
   c.className=`card extra-card ${extraCategoryClass(e)} ${e.stato}`;
   c.dataset.extraCardId=e.id;
-  c.innerHTML=`<div class="extra-card-heading"><div>${clientBadge(e)}<h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3></div><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span></div><p><strong>${esc(e.titolo)}</strong></p>${e.numero_target?`<p class="target-number"><strong>Numero target:</strong> ${esc(e.numero_target)}</p>`:''}${e.descrizione?`<p>${esc(e.descrizione)}</p>`:''}${structured?`<div class="linked-extra-reminder"><strong>📋 ${structuredItems.length} lavorazioni</strong><p>${structuredItems.map(w=>`${workStateIcon(w.stato)} ${esc(w.titolo)}`).join(' · ')}</p></div>`:''}${deadlineLabel(e)}<div class="extra-date-summary"><p><strong>Richiesta:</strong> ${fmt(extraRequestDate(e))}</p><span class="elapsed-days">⏱ ${esc(elapsedDaysLabel(e))}</span><p><strong>Esecuzione:</strong> ${e.giorno_intervento?fmt(e.giorno_intervento):'Da programmare'}</p></div>${e.con_ordinario?`<p class="linked-ordinary-label">${isIntesaOrdinaryTicket(e)?'🎫 Ticket incluso nel passaggio ordinario · nessun documento richiesto in chiusura':'🔗 Da fare insieme al passaggio ordinario'}</p>`:''}${partialOpen?'<span class="extra-partial-badge">↪ Parziale · da continuare</span>':`<p class="muted">${esc(stateLabel)}</p>`}<p class="assignment-label"><strong>${esc(assignmentLabel)}</strong></p>${showProgress?`<div class="extra-closure-details">${showClosure?`<div class="closure-stamp">🕒 Chiuso: ${esc(closureText(e))}</div><strong>Note finali</strong>`:'<strong>Avanzamento parziale</strong>'}<div class="history-note ${e.note_lorenzo?'':'muted'}">${esc(e.note_lorenzo||(partialOpen?'Nessuna nota parziale inserita':'Nessuna nota inserita'))}</div><div class="pending-photo-head"><strong>Foto del lavoro</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-extra-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div>`:''}<div class="actions">${pdf?'<button class="secondary" data-pdf>Apri PDF richiesta</button>':''}${structured?'<button class="secondary" data-work-progress>📋 Lavorazioni</button>':''}${showClosure&&reportEurospin?'<button class="secondary" data-report-eurospin>File Eurospin</button>':''}${showProgress&&reportOvergreen?'<button class="secondary" data-report-overgreen>File Overgreen</button>':''}${showClosure&&!reportEurospin?'<span class="muted">File Eurospin non presente</span>':''}${showClosure&&!reportOvergreen?'<span class="muted">File Overgreen non presente</span>':''}${structured&&['in_attesa','completato'].includes(e.stato)?'<button data-generate-work-report>Genera report lavorazioni</button>':''}${e.stato==='completato'&&!isIntesaOrdinaryTicket(e)?'<button data-generate-closure>Genera chiusura</button>':''}${admin()&&e.stato==='completato'?'<button class="secondary" data-edit-closure>Modifica chiusura</button>':''}${!isIntesaOrdinaryTicket(e)&&['programmato','ricevuto','da_integrare'].includes(e.stato)&&(admin()||isAssignedToMe)?`<button data-close-extra>${structured?'Chiudi definitivamente':(partialOpen?'Continua / chiudi lavoro':'Chiudi lavoro')}</button>`:''}${admin()&&e.stato==='in_attesa'?'<button data-approve-extra>Convalida</button>':''}${admin()?'<button class="secondary" data-edit-extra>Modifica</button><button class="danger-btn" data-delete-extra>Elimina</button>':''}</div>`;
+  c.innerHTML=`<div class="extra-card-heading"><div>${clientBadge(e)}<h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3></div><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span></div><p><strong>${esc(e.titolo)}</strong></p>${e.numero_target?`<p class="target-number"><strong>Numero target:</strong> ${esc(e.numero_target)}</p>`:''}${e.descrizione?`<p>${esc(e.descrizione)}</p>`:''}${structured?`<div class="linked-extra-reminder"><strong>📋 ${structuredItems.length} lavorazioni</strong><p>${structuredItems.map(w=>`${workStateIcon(w.stato)} ${esc(w.titolo)}`).join(' · ')}</p></div>`:''}${deadlineLabel(e)}<div class="extra-date-summary"><p><strong>Richiesta:</strong> ${fmt(extraRequestDate(e))}</p><span class="elapsed-days">⏱ ${esc(elapsedDaysLabel(e))}</span><p><strong>Esecuzione:</strong> ${e.giorno_intervento?fmt(e.giorno_intervento):'Da programmare'}</p></div>${e.con_ordinario?`<p class="linked-ordinary-label">${isIntesaOrdinaryTicket(e)?'🎫 Ticket incluso nel passaggio ordinario · nessun documento richiesto in chiusura':'🔗 Da fare insieme al passaggio ordinario'}</p>`:''}${partialOpen?'<span class="extra-partial-badge">↪ Parziale · da continuare</span>':`<p class="muted">${esc(stateLabel)}</p>`}<p class="assignment-label"><strong>${esc(assignmentLabel)}</strong></p>${showProgress?`<div class="extra-closure-details">${showClosure?`<div class="closure-stamp">🕒 Chiuso: ${esc(closureText(e))}</div><strong>Note finali</strong>`:'<strong>Avanzamento parziale</strong>'}<div class="history-note ${e.note_lorenzo?'':'muted'}">${esc(e.note_lorenzo||(partialOpen?'Nessuna nota parziale inserita':'Nessuna nota inserita'))}</div><div class="pending-photo-head"><strong>Foto del lavoro</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-extra-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div>`:''}<div class="actions">${extraMapsDestination(e,st)?'<button class="secondary" data-extra-map>Maps</button>':''}${pdf?'<button class="secondary" data-pdf>Apri PDF richiesta</button>':''}${structured?'<button class="secondary" data-work-progress>📋 Lavorazioni</button>':''}${showClosure&&reportEurospin?'<button class="secondary" data-report-eurospin>File Eurospin</button>':''}${showProgress&&reportOvergreen?'<button class="secondary" data-report-overgreen>File Overgreen</button>':''}${showClosure&&!reportEurospin?'<span class="muted">File Eurospin non presente</span>':''}${showClosure&&!reportOvergreen?'<span class="muted">File Overgreen non presente</span>':''}${structured&&['in_attesa','completato'].includes(e.stato)?'<button data-generate-work-report>Genera report lavorazioni</button>':''}${e.stato==='completato'&&!isIntesaOrdinaryTicket(e)?'<button data-generate-closure>Genera chiusura</button>':''}${admin()&&e.stato==='completato'?'<button class="secondary" data-edit-closure>Modifica chiusura</button>':''}${!isIntesaOrdinaryTicket(e)&&['programmato','ricevuto','da_integrare'].includes(e.stato)&&(admin()||isAssignedToMe)?`<button data-close-extra>${structured?'Chiudi definitivamente':(partialOpen?'Continua / chiudi lavoro':'Chiudi lavoro')}</button>`:''}${admin()&&e.stato==='in_attesa'?'<button data-approve-extra>Convalida</button>':''}${admin()?'<button class="secondary" data-edit-extra>Modifica</button><button class="danger-btn" data-delete-extra>Elimina</button>':''}</div>`;
+  c.querySelector('[data-extra-map]')?.addEventListener('click',()=>openExtraMaps(e,st));
   c.querySelector('[data-pdf]')?.addEventListener('click',()=>openAttachment(pdf));
   c.querySelector('[data-work-progress]')?.addEventListener('click',()=>openExtraWorkProgress(e));
   c.querySelector('[data-report-eurospin]')?.addEventListener('click',()=>openAttachment(reportEurospin));

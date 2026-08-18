@@ -685,24 +685,8 @@ async function loadAll(){
   loadAllPromise=(async()=>{
   const loadStarted=performance.now();
   startupPerf={auth:0,rollover:0,supabase:0,render:0,total:0};
-  const rolloverStarted=performance.now();
-  const rolloverKey='overgreen-rollover-ok-'+today();
-  // V112-23: il rollover resta importante, ma sullo stesso dispositivo viene eseguito
-  // una sola volta al giorno. Evita una chiamata RPC seriale ad ogni riapertura dell'app.
-  if(localStorage.getItem(rolloverKey)!=='1'){
-    try{
-      const roll=await sb.rpc('rollover_overgreen_schedules',{p_today:today()});
-      if(roll.error){
-        if(!String(roll.error.message||'').toLowerCase().includes('rollover_overgreen_schedules'))console.warn('Riporto automatico non riuscito:',roll.error.message);
-      }else{
-        // Pulisce le vecchie chiavi per non far crescere localStorage nel tempo.
-        Object.keys(localStorage).filter(k=>k.startsWith('overgreen-rollover-ok-')&&k!==rolloverKey).forEach(k=>localStorage.removeItem(k));
-        localStorage.setItem(rolloverKey,'1');
-      }
-    }catch(rollErr){console.warn('Riporto automatico non disponibile:',rollErr)}
-  }
-
-  startupPerf.rollover=performance.now()-rolloverStarted;
+  // V112-25: il rollover NON blocca più l'avvio. La dashboard viene mostrata
+  // appena terminato il caricamento dati; il riporto parte subito dopo in background.
   const supabaseStarted=performance.now();
 
   // V112-23 PERFORMANCE: prima c'erano tre blocchi di lettura Supabase consecutivi
@@ -755,9 +739,39 @@ async function loadAll(){
   renderStartupPerf();
   console.info('Overgreen diagnostica avvio',startupPerf);
 
-  // V112-23: riconciliazioni solo DOPO il primo rendering e senza bloccare loadAll.
-  // Sono operazioni di manutenzione e possono includere più UPDATE/DELETE seriali.
+  // V112-25: rollover e riconciliazioni partono DOPO il primo rendering.
+  // Nessuna di queste operazioni può più tenere l'utente sullo schermo nero.
   setTimeout(async()=>{
+    const rolloverKey='overgreen-rollover-ok-'+today();
+    if(localStorage.getItem(rolloverKey)!=='1'){
+      const rolloverStarted=performance.now();
+      try{
+        const roll=await sb.rpc('rollover_overgreen_schedules',{p_today:today()});
+        startupPerf.rollover=performance.now()-rolloverStarted;
+        renderStartupPerf();
+        if(roll.error){
+          if(!String(roll.error.message||'').toLowerCase().includes('rollover_overgreen_schedules'))console.warn('Riporto automatico non riuscito:',roll.error.message);
+        }else{
+          Object.keys(localStorage).filter(k=>k.startsWith('overgreen-rollover-ok-')&&k!==rolloverKey).forEach(k=>localStorage.removeItem(k));
+          localStorage.setItem(rolloverKey,'1');
+          // Il rollover può aver creato/spostato programmazioni: ricarichiamo SOLO i dati
+          // coinvolti, senza rifare l'intero loadAll e senza bloccare l'interfaccia.
+          const [sch2,sm2,si2]=await Promise.all([
+            sb.from('schedules').select('*').order('giorno'),
+            sb.from('schedule_members').select('*'),
+            sb.from('schedule_items').select('*').order('posizione')
+          ]);
+          if(!sch2.error)schedules=sch2.data||[];
+          if(!sm2.error)scheduleMembers=sm2.data||[];
+          if(!si2.error)scheduleItems=si2.data||[];
+          renderSchedules();renderDashboard();
+        }
+      }catch(rollErr){
+        startupPerf.rollover=performance.now()-rolloverStarted;
+        renderStartupPerf();
+        console.warn('Riporto automatico non disponibile:',rollErr);
+      }
+    }
     try{
       await reconcileProgrammingConsistency();
       await reconcileStandaloneExtrasInBackground();

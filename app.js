@@ -783,6 +783,10 @@ async function reconcileProgrammingConsistency(){
     const {error}=await sb.from('extras').update({schedule_item_id:null}).eq('id',e.id);
     if(error)console.warn('Scollegamento extra orfano non riuscito:',e.id,error.message);else e.schedule_item_id=null;
   }
+  const standaloneToReconcile=extras.filter(e=>!e.schedule_item_id&&!['completato','in_attesa'].includes(e.stato)&&e.giorno_intervento&&extraWorkers.some(w=>w.extra_id===e.id));
+  for(const e of standaloneToReconcile){
+    try{await ensureStandaloneExtraInProgramming(e)}catch(err){console.warn('Allineamento extra standalone alla programmazione non riuscito:',e.id,err.message)}
+  }
   const emptySchedules=schedules.filter(s=>!scheduleItems.some(i=>i.schedule_id===s.id)&&!extras.some(e=>e.schedule_id===s.id&&e.stato!=='completato'));
   for(const sch of emptySchedules){
     let r=await sb.from('schedule_members').delete().eq('schedule_id',sch.id);
@@ -873,6 +877,11 @@ function renderDashboard(){
       const section=document.createElement('section');section.className='dashboard-worker-group';
       section.innerHTML=`<h3>${esc(group.label)} <span>${group.jobs.length}</span></h3><div></div>`;
       const list=section.querySelector('div');
+      group.jobs.sort((a,b)=>{
+        const pa=a.kind==='ordinary'?(Number(a.row.item.posizione)||999999):extraRoutePosition(a.extra);
+        const pb=b.kind==='ordinary'?(Number(b.row.item.posizione)||999999):extraRoutePosition(b.extra);
+        return pa-pb;
+      });
       for(const job of group.jobs){
         if(job.kind==='ordinary'){
           const row=job.row,st=stores.find(x=>x.id===row.item.store_id),linked=linkedExtrasForScheduleItem(row.item.id),done=itemDone(row.item),c=document.createElement('article');
@@ -910,7 +919,15 @@ function renderDashboard(){
           const e=job.extra,st=stores.find(s=>s.id===e.store_id),done=extraIsDone(e),urgent=e.urgente===true||e.priorita==='urgente'||elapsedDaysFrom(extraRequestDate(e))>=7,c=document.createElement('article');
           c.className=`dashboard-line-job standalone-extra ${extraCategoryClass(e)} ${done?'is-done':urgent?'is-urgent':'is-open'}`;
           const extraNotes=[e.descrizione,e.note_lorenzo].filter(v=>String(v||'').trim());
-          c.innerHTML=`<div class="job-main"><span class="job-kind">EXTRA</span>${clientBadge(e)}<span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span><strong>${esc(st?.nome||e.nome_esterno||'Extra')}</strong>${(st?.indirizzo||st?.citta||e.indirizzo_esterno)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo||e.indirizzo_esterno,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${esc(e.titolo)} · ${done?'Completato':urgent?'Urgente':'Da eseguire'}</small>${extraNotes.length?`<div class="dashboard-job-notes"><strong>${done?'Descrizione / note':'Descrizione'}</strong>${extraNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}</div><div class="actions"><button data-open-extra>Apri extra</button></div>`;c.dataset.routeAddress=routeAddressForExtra(e,st);c.querySelector('[data-open-extra]').onclick=()=>openExtraById(e.id);list.appendChild(c)
+          const requestPdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');
+          const canClose=!done&&!isIntesaOrdinaryTicket(e)&&['programmato','ricevuto','da_integrare'].includes(e.stato)&&(admin()||myExtraIds.has(e.id));
+          const hasMap=!!(st?.indirizzo||st?.citta||e.indirizzo_esterno||e.nome_esterno);
+          c.innerHTML=`<div class="job-main"><span class="job-kind">EXTRA</span>${clientBadge(e)}<span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span><strong>${esc(st?.nome||e.nome_esterno||'Extra')}</strong>${(st?.indirizzo||st?.citta||e.indirizzo_esterno)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo||e.indirizzo_esterno,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${esc(e.titolo)} · ${done?'Completato':urgent?'Urgente':'Da eseguire'}</small>${extraNotes.length?`<div class="dashboard-job-notes"><strong>${done?'Descrizione / note':'Descrizione'}</strong>${extraNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}</div><div class="actions">${hasMap?'<button class="secondary" data-map-extra>Maps</button>':''}${requestPdf?'<button class="secondary" data-pdf-extra>Apri PDF</button>':''}${canClose?'<button data-close-extra-dashboard>✓ Eseguito</button>':''}<button class="secondary" data-open-extra>Apri extra</button></div>`;
+          c.dataset.routeAddress=routeAddressForExtra(e,st);
+          c.querySelector('[data-map-extra]')?.addEventListener('click',()=>openGoogleMaps(st?.indirizzo||e.indirizzo_esterno,st?.nome||e.nome_esterno||e.titolo,st?.citta||''));
+          c.querySelector('[data-pdf-extra]')?.addEventListener('click',()=>openAttachment(requestPdf));
+          c.querySelector('[data-close-extra-dashboard]')?.addEventListener('click',()=>openExtraClosureDialog(e));
+          c.querySelector('[data-open-extra]').onclick=()=>openExtraById(e.id);list.appendChild(c)
         }
       }
       box.appendChild(section);
@@ -2408,32 +2425,17 @@ async function moveScheduleItem(item,direction){
   let r=await sb.from('schedule_items').update({posizione:p2}).eq('id',item.id);if(r.error)return alert(r.error.message);r=await sb.from('schedule_items').update({posizione:p1}).eq('id',swap.id);if(r.error)return alert(r.error.message);toast('Ordine aggiornato');await loadAll();
 }
 
-async function persistScheduleOrder(scheduleId,orderedItems){
-  if(!admin()||!scheduleId||!Array.isArray(orderedItems)||!orderedItems.length)return;
-
-  const valid=orderedItems.filter(item=>item?.schedule_id===scheduleId);
-  if(!valid.length)return;
-
-  // Gli interventi già completati sono "congelati": mantengono il numero
-  // che avevano durante il giro. Riordinando i lavori ancora aperti,
-  // questi ripartono sempre dopo l'ultima posizione già completata.
-  const completed=scheduleItems.filter(item=>
-    item.schedule_id===scheduleId &&
-    effectiveScheduleState(item)==='completato' &&
-    !valid.some(v=>v.id===item.id)
-  );
-  const lastCompletedPosition=completed.reduce((max,item)=>Math.max(max,Number(item.posizione)||0),0);
-
-  for(let index=0;index<valid.length;index++){
-    const item=valid[index],wanted=lastCompletedPosition+index+1;
-    if(Number(item.posizione)===wanted)continue;
-    const {error}=await sb
-      .from('schedule_items')
-      .update({posizione:wanted})
-      .eq('id',item.id)
-      .eq('schedule_id',scheduleId);
-    if(error)throw error;
-    item.posizione=wanted;
+async function persistScheduleOrder(scheduleId,orderedJobs){
+  if(!admin()||!scheduleId||!Array.isArray(orderedJobs)||!orderedJobs.length)return;
+  for(let index=0;index<orderedJobs.length;index++){
+    const job=orderedJobs[index],wanted=index+1;
+    if(job.kind==='ordinary'){
+      if(Number(job.row.posizione)===wanted)continue;
+      const {error}=await sb.from('schedule_items').update({posizione:wanted}).eq('id',job.row.id).eq('schedule_id',scheduleId);if(error)throw error;job.row.posizione=wanted;
+    }else{
+      if(Number(job.row.posizione_giro)===wanted)continue;
+      const {error}=await sb.from('extras').update({posizione_giro:wanted}).eq('id',job.row.id).eq('schedule_id',scheduleId);if(error)throw error;job.row.posizione_giro=wanted;
+    }
   }
 }
 function enableScheduleDrag(container,schedule){
@@ -2442,7 +2444,7 @@ function enableScheduleDrag(container,schedule){
   // riordinare quella porzione produrrebbe posizioni ambigue sul giro completo.
   if(scheduleClientFilter!=='all')return;
   let dragging=null,placeholder=null,startY=0,startTop=0,pointerId=null,moved=false;
-  const rows=()=>[...container.querySelectorAll('.schedule-item[data-schedule-item-id]')];
+  const rows=()=>[...container.querySelectorAll('.schedule-item[data-schedule-item-id], .schedule-item[data-schedule-extra-id]')];
   const cleanup=()=>{
     if(dragging){dragging.classList.remove('dragging');dragging.style.transform='';dragging.style.width='';dragging.style.zIndex='';}
     placeholder?.remove();dragging=null;placeholder=null;pointerId=null;moved=false;
@@ -2451,7 +2453,7 @@ function enableScheduleDrag(container,schedule){
   container.querySelectorAll('[data-drag-handle]').forEach(handle=>{
     handle.addEventListener('pointerdown',ev=>{
       if(ev.button!==undefined&&ev.button!==0)return;
-      const row=handle.closest('.schedule-item[data-schedule-item-id]');if(!row)return;
+      const row=handle.closest('.schedule-item[data-schedule-item-id], .schedule-item[data-schedule-extra-id]');if(!row)return;
       ev.preventDefault();ev.stopPropagation();
       pointerId=ev.pointerId;handle.setPointerCapture?.(pointerId);
       const rect=row.getBoundingClientRect();startY=ev.clientY;startTop=rect.top;
@@ -2484,19 +2486,15 @@ function enableScheduleDrag(container,schedule){
       if(!didMove)return;
 
       const orderedRows=rows();
-      const orderedItems=orderedRows
-        .map(r=>scheduleItems.find(i=>i.id===r.dataset.scheduleItemId))
-        .filter(Boolean);
+      const orderedJobs=orderedRows.map(r=>{
+        if(r.dataset.scheduleItemId){const row=scheduleItems.find(i=>i.id===r.dataset.scheduleItemId);return row?{kind:'ordinary',row}:null}
+        if(r.dataset.scheduleExtraId){const row=extras.find(e=>e.id===r.dataset.scheduleExtraId);return row?{kind:'extra',row}:null}
+        return null;
+      }).filter(Boolean);
 
       try{
-        await persistScheduleOrder(schedule.id,orderedItems);
-
-        // Mostra i numeri reali salvati. Se durante il giro esistono già
-        // interventi completati, la numerazione dei rimanenti non riparte da 1.
-        orderedRows.forEach((r,i)=>{
-          const n=r.querySelector('.schedule-order-number');
-          if(n)n.textContent=String(orderedItems[i]?.posizione??i+1);
-        });
+        await persistScheduleOrder(schedule.id,orderedJobs);
+        orderedRows.forEach((r,i)=>{const n=r.querySelector('.schedule-order-number');if(n)n.textContent=String(i+1);const b=r.querySelector('.schedule-next-visit strong');if(r.dataset.scheduleExtraId&&b)b.textContent=`🔧 Extra standalone della giornata · posizione ${i+1}`;});
 
         toast('Ordine del giro salvato');
         renderDashboard();
@@ -2603,21 +2601,29 @@ function renderSchedules(){
   renderScheduleUnplannedSummary();
   let list=visibleSchedules().filter(scheduleMatchesDate);
   if(scheduleWorkerFilter!=='all')list=list.filter(s=>scheduleMembers.some(m=>m.schedule_id===s.id&&m.profile_id===scheduleWorkerFilter));
-  if(scheduleClientFilter!=='all')list=list.filter(s=>scheduleItems.some(i=>i.schedule_id===s.id&&scheduleClientMatchesStore(stores.find(st=>st.id===i.store_id))));
+  if(scheduleClientFilter!=='all')list=list.filter(s=>scheduleItems.some(i=>i.schedule_id===s.id&&scheduleClientMatchesStore(stores.find(st=>st.id===i.store_id)))||extras.some(e=>e.schedule_id===s.id&&!e.schedule_item_id&&clientType(e)===scheduleClientFilter&&!['completato'].includes(e.stato)));
   list.sort((a,b)=>String(a.giorno).localeCompare(String(b.giorno)));
   for(const s of list){
     let items=scheduleItems.filter(i=>i.schedule_id===s.id&&effectiveScheduleState(i)!=='completato').sort((a,b)=>(a.posizione||0)-(b.posizione||0));
     if(scheduleClientFilter!=='all')items=items.filter(i=>scheduleClientMatchesStore(stores.find(st=>st.id===i.store_id)));
-    if(!items.length)continue;
+    let scheduleExtras=extrasForSchedule(s.id).filter(e=>!e.schedule_item_id).filter(e=>admin()||assignedExtraIds().has(e.id));
+    if(scheduleWorkerFilter!=='all')scheduleExtras=scheduleExtras.filter(e=>extraWorkers.some(w=>w.extra_id===e.id&&w.profile_id===scheduleWorkerFilter));
+    if(scheduleClientFilter!=='all')scheduleExtras=scheduleExtras.filter(e=>clientType(e)===scheduleClientFilter);
+    if(!items.length&&!scheduleExtras.length)continue;
     const members=scheduleMembers.filter(m=>m.schedule_id===s.id).map(m=>profiles.find(p=>p.id===m.profile_id)?.nome).filter(Boolean);
     const c=document.createElement('article');c.className='card schedule-day-card';
-    c.innerHTML=`<div class="schedule-card-head"><div><span class="schedule-date-label">${fmt(s.giorno)}</span><h3>${esc(members.join(' + ')||'Squadra non indicata')}</h3>${s.nota_generale?`<p class="muted">${esc(s.nota_generale)}</p>`:''}${s.auto_rollover?'<p class="muted"><strong>↪ Continuazione automatica attiva</strong></p>':''}</div>${admin()?'<div class="actions schedule-head-actions"><button class="secondary" data-edit-team>Squadra</button><button class="secondary" data-edit-note>Nota giornata</button><button class="secondary" data-add-stores>+ Sedi</button><button class="secondary" data-duplicate>Duplica</button></div>':''}</div><div class="schedule-progress-label">${items.length+extrasForSchedule(s.id).length} lavor${items.length+extrasForSchedule(s.id).length===1?'o':'i'} da eseguire</div>`;
+    c.innerHTML=`<div class="schedule-card-head"><div><span class="schedule-date-label">${fmt(s.giorno)}</span><h3>${esc(members.join(' + ')||'Squadra non indicata')}</h3>${s.nota_generale?`<p class="muted">${esc(s.nota_generale)}</p>`:''}${s.auto_rollover?'<p class="muted"><strong>↪ Continuazione automatica attiva</strong></p>':''}</div>${admin()?'<div class="actions schedule-head-actions"><button class="secondary" data-edit-team>Squadra</button><button class="secondary" data-edit-note>Nota giornata</button><button class="secondary" data-add-stores>+ Sedi</button><button class="secondary" data-duplicate>Duplica</button></div>':''}</div><div class="schedule-progress-label">${items.length+scheduleExtras.length} lavor${items.length+scheduleExtras.length===1?'o':'i'} da eseguire</div>`;
     c.querySelector('[data-edit-team]')?.addEventListener('click',()=>openEditScheduleTeam(s));
     c.querySelector('[data-edit-note]')?.addEventListener('click',()=>editScheduleDayNote(s));
     c.querySelector('[data-add-stores]')?.addEventListener('click',()=>openAddScheduleItems(s));
     c.querySelector('[data-duplicate]')?.addEventListener('click',()=>openDuplicateSchedule(s));
-    for(const [displayIndex,item] of items.entries()){if(item.tipo==='ordinario'){
-      const st=stores.find(x=>x.id===item.store_id),r=document.createElement('div');
+    const routeJobs=[
+      ...items.filter(item=>item.tipo==='ordinario').map(item=>({kind:'ordinary',position:Number(item.posizione)||999999,item})),
+      ...scheduleExtras.map(extra=>({kind:'extra',position:extraRoutePosition(extra),extra}))
+    ].sort((a,b)=>a.position-b.position||String(a.kind==='ordinary'?a.item.id:a.extra.id).localeCompare(String(b.kind==='ordinary'?b.item.id:b.extra.id)));
+    for(const [displayIndex,job] of routeJobs.entries()){
+      if(job.kind==='ordinary'){
+      const item=job.item,st=stores.find(x=>x.id===item.store_id),r=document.createElement('div');
       const effectiveState=effectiveScheduleState(item);
       r.className=`schedule-item schedule-item-compact ${effectiveState}`;
       r.dataset.routeAddress=routeAddressForStore(st);
@@ -2626,19 +2632,18 @@ function renderSchedules(){
       r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${displayIndex+1}</div><div class="schedule-item-copy">${scheduleClientBadge(st)}<strong data-store-detail>${esc(st?.nome||'Sede')}</strong><small>${esc(st?.citta||st?.indirizzo||'')} · ${stato}</small></div>${admin()&&scheduleClientFilter==='all'?'<button type="button" class="drag-handle" data-drag-handle title="Tieni premuto e trascina" aria-label="Trascina per cambiare ordine">☰</button>':''}</div>${effectiveState==='da_fare'&&String(st?.next_visit_note||'').trim()?`<div class="schedule-next-visit"><strong>⚠️ Da fare in questo passaggio</strong><p>${esc(st.next_visit_note)}</p></div>`:''}${linked.length?`<div class="linked-extra-reminder compact-linked"><strong>Extra collegati (${linked.length})</strong>${linked.map(e=>`<span class="linked-extra-category ${extraCategoryClass(e)}"><b>${esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}</span>`).join('')}</div>`:''}<div class="actions schedule-item-actions"><button class="secondary" data-map>Maps</button>${effectiveState==='da_fare'?`<button data-done>${openMultiDayIntervention(st?.id)?'Continua intervento':'Eseguito'}</button>`:''}${admin()&&effectiveState==='da_fare'?'<button class="danger-btn" data-delete-scheduled>Elimina</button>':''}</div>`;
       r.querySelector('[data-store-detail]').onclick=()=>showStoreDetail(st);r.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);
       r.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,item.id));r.querySelector('[data-delete-scheduled]')?.addEventListener('click',()=>deleteScheduleItem(item,st));c.appendChild(r)
-    }}
-    const scheduleExtras=extrasForSchedule(s.id).filter(e=>admin()||assignedExtraIds().has(e.id));
-    for(const e of scheduleExtras){
-      if(scheduleWorkerFilter!=='all'&&!extraWorkers.some(w=>w.extra_id===e.id&&w.profile_id===scheduleWorkerFilter))continue;
-      if(scheduleClientFilter!=='all'&&clientType(e)!==scheduleClientFilter)continue;
-      const r=extraCard(e);r.classList.add('schedule-extra-card','schedule-item');r.dataset.scheduleExtraId=e.id;
-      const badge=document.createElement('div');badge.className='schedule-next-visit';badge.innerHTML='<strong>🔧 Extra standalone della giornata</strong>';
-      r.prepend(badge);
-      if(admin()){
-        const actions=r.querySelector('.actions')||r;
-        const remove=document.createElement('button');remove.type='button';remove.className='danger-btn';remove.textContent='Togli dalla giornata';remove.onclick=()=>unlinkExtraFromSchedule(e);actions.appendChild(remove);
+      }else{
+        const e=job.extra,r=extraCard(e);r.classList.add('schedule-extra-card','schedule-item');r.dataset.scheduleExtraId=e.id;
+        const badge=document.createElement('div');badge.className='schedule-next-visit';badge.innerHTML=`<strong>🔧 Extra standalone della giornata · posizione ${displayIndex+1}</strong>`;
+        r.prepend(badge);
+        if(admin()&&scheduleClientFilter==='all'){
+          const heading=r.querySelector('.extra-card-heading')||r;
+          const handle=document.createElement('button');handle.type='button';handle.className='drag-handle';handle.dataset.dragHandle='';handle.title='Tieni premuto e trascina';handle.setAttribute('aria-label','Trascina per cambiare ordine');handle.textContent='☰';heading.appendChild(handle);
+          const actions=r.querySelector('.actions')||r;
+          const remove=document.createElement('button');remove.type='button';remove.className='danger-btn';remove.textContent='Togli dalla giornata';remove.onclick=()=>unlinkExtraFromSchedule(e);actions.appendChild(remove);
+        }
+        c.appendChild(r);
       }
-      c.appendChild(r);
     }
     enableScheduleDrag(c,s);
     $('scheduleList').appendChild(c);
@@ -2662,11 +2667,11 @@ function extrasForSchedule(scheduleId){
 async function unlinkExtraFromSchedule(extra){
   if(!admin()||!extra)return;
   if(!confirm(`Togliere “${extra.titolo||'Extra'}” da questa programmazione? L’extra resterà aperto.`))return;
-  const r=await sb.from('extras').update({schedule_id:null,giorno_intervento:null}).eq('id',extra.id);
+  const r=await sb.from('extras').update({schedule_id:null,giorno_intervento:null,posizione_giro:null}).eq('id',extra.id);
   if(r.error)return alert(r.error.message);
   const wr=await sb.from('extra_workers').delete().eq('extra_id',extra.id);
   if(wr.error)return alert(wr.error.message);
-  extra.schedule_id=null;extra.giorno_intervento=null;
+  extra.schedule_id=null;extra.giorno_intervento=null;extra.posizione_giro=null;
   extraWorkers=extraWorkers.filter(w=>w.extra_id!==extra.id);
   toast('Extra tolto dalla programmazione');
   await loadAll();
@@ -2924,6 +2929,43 @@ function extraSearchText(e){
 function extraIsScheduled(e){
   const hasDate=!!e.giorno_intervento,hasWorker=extraWorkers.some(w=>w.extra_id===e.id);
   return e.stato!=='completato'&&e.stato!=='in_attesa'&&((!!e.schedule_id)||(hasDate&&hasWorker));
+}
+
+function extraRoutePosition(e){return Number(e?.posizione_giro)||999999}
+function scheduleOpenOrdinaryItems(scheduleId){return scheduleItems.filter(i=>i.schedule_id===scheduleId&&effectiveScheduleState(i)!=='completato')}
+function scheduleOpenStandaloneExtras(scheduleId){return extras.filter(e=>e.schedule_id===scheduleId&&!['completato','in_attesa'].includes(e.stato)&&!e.schedule_item_id)}
+function nextScheduleRoutePosition(scheduleId){
+  const ordinary=scheduleItems.filter(i=>i.schedule_id===scheduleId).map(i=>Number(i.posizione)||0);
+  const standalone=extras.filter(e=>e.schedule_id===scheduleId).map(e=>Number(e.posizione_giro)||0);
+  return Math.max(0,...ordinary,...standalone)+1;
+}
+function sameMemberSet(scheduleId,workerIds){
+  const a=scheduleMembers.filter(m=>m.schedule_id===scheduleId).map(m=>m.profile_id).sort();
+  const b=[...new Set(workerIds||[])].sort();
+  return a.length===b.length&&a.every((v,i)=>v===b[i]);
+}
+async function ensureStandaloneExtraInProgramming(extra,workerIds=null){
+  if(!admin()||!extra||extra.schedule_item_id||['completato','in_attesa'].includes(extra.stato))return extra?.schedule_id||null;
+  const day=extra.giorno_intervento;
+  const workers=workerIds||extraWorkers.filter(w=>w.extra_id===extra.id).map(w=>w.profile_id);
+  if(!day||!workers.length)return null;
+  let schedule=extra.schedule_id?schedules.find(s=>s.id===extra.schedule_id):null;
+  if(!schedule){
+    schedule=schedules.find(s=>s.giorno===day&&sameMemberSet(s.id,workers))||null;
+    if(!schedule){
+      const {data,error}=await sb.from('schedules').insert({giorno:day,nota_generale:null,creato_da:profile.id,auto_rollover:true}).select().single();
+      if(error)throw error;
+      schedule=data;schedules.push(schedule);
+      const mr=await sb.from('schedule_members').insert(workers.map(profile_id=>({schedule_id:schedule.id,profile_id})));
+      if(mr.error)throw mr.error;
+      scheduleMembers.push(...workers.map(profile_id=>({schedule_id:schedule.id,profile_id})));
+    }
+  }
+  const wantedPosition=Number(extra.posizione_giro)||nextScheduleRoutePosition(schedule.id);
+  const {error}=await sb.from('extras').update({schedule_id:schedule.id,giorno_intervento:day,posizione_giro:wantedPosition}).eq('id',extra.id);
+  if(error)throw error;
+  extra.schedule_id=schedule.id;extra.posizione_giro=wantedPosition;
+  return schedule.id;
 }
 function renderExtras(){
   const root=$('extrasList');if(!root)return;root.innerHTML='';
@@ -3298,7 +3340,7 @@ $('addScheduleItemsForm').onsubmit=async e=>{
   }
 
   for(const extraId of extraIds){
-    let r=await sb.from('extras').update({schedule_id:scheduleId,giorno_intervento:sch?.giorno||today()}).eq('id',extraId);if(r.error)return alert(r.error.message);
+    let r=await sb.from('extras').update({schedule_id:scheduleId,giorno_intervento:sch?.giorno||today(),posizione_giro:nextScheduleRoutePosition(scheduleId)}).eq('id',extraId);if(r.error)return alert(r.error.message);
     r=await sb.from('extra_workers').delete().eq('extra_id',extraId);if(r.error)return alert(r.error.message);
     if(members.length){r=await sb.from('extra_workers').insert(members.map(profile_id=>({extra_id:extraId,profile_id})));if(r.error)return alert(r.error.message)}
   }
@@ -3336,7 +3378,7 @@ $('scheduleForm').onsubmit=async e=>{
   }
 
   for(const extraId of selectedExtraIds){
-    let u=await sb.from('extras').update({schedule_id:schedule.id,giorno_intervento:day}).eq('id',extraId);
+    let u=await sb.from('extras').update({schedule_id:schedule.id,giorno_intervento:day,posizione_giro:nextScheduleRoutePosition(schedule.id)}).eq('id',extraId);
     if(u.error)return alert('Impossibile programmare un extra: '+u.error.message);
     u=await sb.from('extra_workers').delete().eq('extra_id',extraId);if(u.error)return alert(u.error.message);
     u=await sb.from('extra_workers').insert(members.map(profile_id=>({extra_id:extraId,profile_id})));if(u.error)return alert(u.error.message);
@@ -3720,7 +3762,7 @@ $('extraWorkProgressForm')?.addEventListener('submit',e=>{e.preventDefault();sav
 async function signedWorkPhotoUrl(p){const {data,error}=await sb.storage.from('documenti').createSignedUrl(p.storage_path,900);if(error)throw error;return data.signedUrl}
 async function fetchWorkPhotoBytes(p){const url=await signedWorkPhotoUrl(p),res=await fetch(url);if(!res.ok)throw new Error('Foto non disponibile');return new Uint8Array(await res.arrayBuffer())}
 
-$('extraForm').onsubmit=async e=>{e.preventDefault();const workers=[...$('extraWorkers').querySelectorAll('input:checked')].map(x=>x.value),external=$('extraDestination').value==='external',pdf=$('extraPdf').files[0],closureMode=$('extraClosureProfile').value;if(!pdf)return alert('Allega il PDF della richiesta.');const duplicateTarget=findExistingExtraByTarget($('extraTargetNumber').value);if(duplicateTarget){showDuplicateTargetWarning(duplicateTarget);const st=stores.find(s=>s.id===duplicateTarget.store_id);return alert(`Target ${$('extraTargetNumber').value.trim()} già presente${st?.nome?` su ${st.nome}`:''}. Apri l’extra esistente invece di crearne un duplicato.`);}const structuredRows=$('extraStructured')?.checked?workEditorRows('extraWorkItemsEditor'):[];if($('extraStructured')?.checked&&!structuredRows.length)return alert('Aggiungi almeno una lavorazione.');if(!external){const chosen=stores.find(s=>s.id===$('extraStore').value);if(!chosen)return alert('Seleziona una sede valida.');if((chosen.client_type||'eurospin')!==$('extraClient').value)return alert('La sede selezionata non appartiene al cliente scelto.');}if(closureMode==='intesa_ordinario'||closureMode==='eurospin_ordinario'){const expected=closureMode==='intesa_ordinario'?'intesa':'eurospin';if($('extraClient').value!==expected)return alert('Il modello di chiusura non corrisponde al cliente selezionato.');if(external)return alert(closureMode==='intesa_ordinario'?'Il ticket Intesa incluso nell’ordinario deve essere collegato a una filiale.':'Il target Eurospin incluso nell’ordinario deve essere collegato a un punto vendita.');if(!$('extraWithOrdinary').checked)return alert('Per questa modalità attiva “Da fare insieme al passaggio ordinario”.');}const payload={client_type:$('extraClient').value,closure_profile:$('extraClosureProfile').value,deadline_at:$('extraDeadline').value?new Date($('extraDeadline').value).toISOString():null,store_id:external?null:$('extraStore').value,nome_esterno:external?$('extraExternalName').value.trim():null,indirizzo_esterno:external?$('extraExternalAddress').value.trim():null,titolo:$('extraTitle').value.trim(),numero_target:$('extraTargetNumber').value.trim()||null,categoria_target:$('extraCategory').value,descrizione:$('extraDescription').value.trim()||null,data_richiesta:$('extraRequestDate').value,giorno_intervento:$('extraDate').value||null,note_lorenzo:null,stato:'programmato',con_ordinario:$('extraWithOrdinary').checked,creato_da:profile.id};const {data,error}=await sb.from('extras').insert(payload).select().single();if(error){const msg=String(error.message||error);if((msg.includes("numero_target")||msg.includes("categoria_target"))&&msg.includes("schema cache"))return alert("Database non aggiornato: esegui MIGRAZIONE-V74.sql su Supabase, poi riprova.");if(msg.includes("con_ordinario")&&msg.includes("schema cache"))return alert("Database non aggiornato: esegui MIGRAZIONE-V59.sql su Supabase, poi riprova.");return alert(msg)}if(structuredRows.length){try{await createExtraWorkItems(data.id,structuredRows)}catch(workErr){await sb.from('extras').delete().eq('id',data.id);return alert('Impossibile creare le lavorazioni. Esegui la migrazione V108 su Supabase.\n'+workErr.message)}}if(workers.length){const r=await sb.from('extra_workers').insert(workers.map(profile_id=>({extra_id:data.id,profile_id})));if(r.error)return alert(r.error.message)}const path=`extra/${data.id}/richiesta-${Date.now()}.pdf`;try{await uploadFile(path,pdf);await addAttachment({tipo:'pdf_richiesta',extra_id:data.id,storage_path:path,nome_file:pdf.name,mime_type:pdf.type,dimensione_bytes:pdf.size,caricato_da:profile.id})}catch(err){return alert('Extra creato, ma PDF non caricato: '+err.message)}$('extraDialog').close();toast(workers.length?'Extra creato':'Extra creato · da programmare e assegnare');await loadAll()};
+$('extraForm').onsubmit=async e=>{e.preventDefault();const workers=[...$('extraWorkers').querySelectorAll('input:checked')].map(x=>x.value),external=$('extraDestination').value==='external',pdf=$('extraPdf').files[0],closureMode=$('extraClosureProfile').value;if(!pdf)return alert('Allega il PDF della richiesta.');const duplicateTarget=findExistingExtraByTarget($('extraTargetNumber').value);if(duplicateTarget){showDuplicateTargetWarning(duplicateTarget);const st=stores.find(s=>s.id===duplicateTarget.store_id);return alert(`Target ${$('extraTargetNumber').value.trim()} già presente${st?.nome?` su ${st.nome}`:''}. Apri l’extra esistente invece di crearne un duplicato.`);}const structuredRows=$('extraStructured')?.checked?workEditorRows('extraWorkItemsEditor'):[];if($('extraStructured')?.checked&&!structuredRows.length)return alert('Aggiungi almeno una lavorazione.');if(!external){const chosen=stores.find(s=>s.id===$('extraStore').value);if(!chosen)return alert('Seleziona una sede valida.');if((chosen.client_type||'eurospin')!==$('extraClient').value)return alert('La sede selezionata non appartiene al cliente scelto.');}if(closureMode==='intesa_ordinario'||closureMode==='eurospin_ordinario'){const expected=closureMode==='intesa_ordinario'?'intesa':'eurospin';if($('extraClient').value!==expected)return alert('Il modello di chiusura non corrisponde al cliente selezionato.');if(external)return alert(closureMode==='intesa_ordinario'?'Il ticket Intesa incluso nell’ordinario deve essere collegato a una filiale.':'Il target Eurospin incluso nell’ordinario deve essere collegato a un punto vendita.');if(!$('extraWithOrdinary').checked)return alert('Per questa modalità attiva “Da fare insieme al passaggio ordinario”.');}const payload={client_type:$('extraClient').value,closure_profile:$('extraClosureProfile').value,deadline_at:$('extraDeadline').value?new Date($('extraDeadline').value).toISOString():null,store_id:external?null:$('extraStore').value,nome_esterno:external?$('extraExternalName').value.trim():null,indirizzo_esterno:external?$('extraExternalAddress').value.trim():null,titolo:$('extraTitle').value.trim(),numero_target:$('extraTargetNumber').value.trim()||null,categoria_target:$('extraCategory').value,descrizione:$('extraDescription').value.trim()||null,data_richiesta:$('extraRequestDate').value,giorno_intervento:$('extraDate').value||null,note_lorenzo:null,stato:'programmato',con_ordinario:$('extraWithOrdinary').checked,creato_da:profile.id};const {data,error}=await sb.from('extras').insert(payload).select().single();if(error){const msg=String(error.message||error);if((msg.includes("numero_target")||msg.includes("categoria_target"))&&msg.includes("schema cache"))return alert("Database non aggiornato: esegui MIGRAZIONE-V74.sql su Supabase, poi riprova.");if(msg.includes("con_ordinario")&&msg.includes("schema cache"))return alert("Database non aggiornato: esegui MIGRAZIONE-V59.sql su Supabase, poi riprova.");return alert(msg)}if(structuredRows.length){try{await createExtraWorkItems(data.id,structuredRows)}catch(workErr){await sb.from('extras').delete().eq('id',data.id);return alert('Impossibile creare le lavorazioni. Esegui la migrazione V108 su Supabase.\n'+workErr.message)}}if(workers.length){const r=await sb.from('extra_workers').insert(workers.map(profile_id=>({extra_id:data.id,profile_id})));if(r.error)return alert(r.error.message)}if(payload.giorno_intervento&&workers.length){try{extraWorkers.push(...workers.map(profile_id=>({extra_id:data.id,profile_id})));await ensureStandaloneExtraInProgramming(data,workers)}catch(err){return alert('Extra creato, ma inserimento nella programmazione non riuscito: '+err.message)}}const path=`extra/${data.id}/richiesta-${Date.now()}.pdf`;try{await uploadFile(path,pdf);await addAttachment({tipo:'pdf_richiesta',extra_id:data.id,storage_path:path,nome_file:pdf.name,mime_type:pdf.type,dimensione_bytes:pdf.size,caricato_da:profile.id})}catch(err){return alert('Extra creato, ma PDF non caricato: '+err.message)}$('extraDialog').close();toast(workers.length?'Extra creato':'Extra creato · da programmare e assegnare');await loadAll()};
 $('extraEditDestination').onchange=toggleExtraEditDestination;
 $('extraEditStoreSearch')?.addEventListener('input',()=>renderExtraEditStoreOptions());
 $('extraEditForm').onsubmit=async e=>{
@@ -3732,6 +3774,9 @@ $('extraEditForm').onsubmit=async e=>{
   let r=await sb.from('extras').update(payload).eq('id',id);if(r.error)return alert(r.error.message);
   r=await sb.from('extra_workers').delete().eq('extra_id',id);if(r.error)return alert(r.error.message);
   if(workers.length){r=await sb.from('extra_workers').insert(workers.map(profile_id=>({extra_id:id,profile_id})));if(r.error)return alert(r.error.message)}
+  const editedExtra=extras.find(x=>x.id===id)||{id,...payload};Object.assign(editedExtra,payload);extraWorkers=extraWorkers.filter(w=>w.extra_id!==id).concat(workers.map(profile_id=>({extra_id:id,profile_id})));
+  if(payload.giorno_intervento&&workers.length){try{await ensureStandaloneExtraInProgramming(editedExtra,workers)}catch(err){return alert('Dati salvati, ma inserimento nella programmazione non riuscito: '+err.message)}}
+  else if(editedExtra.schedule_id&&!editedExtra.schedule_item_id){r=await sb.from('extras').update({schedule_id:null,posizione_giro:null}).eq('id',id);if(r.error)return alert(r.error.message);editedExtra.schedule_id=null;editedExtra.posizione_giro=null}
   const pdf=$('extraEditPdf').files[0];if(pdf){const old=attachments.find(a=>a.extra_id===id&&a.tipo==='pdf_richiesta');if(old){await sb.storage.from('documenti').remove([old.storage_path]);await sb.from('attachments').delete().eq('id',old.id)}const path=`extra/${id}/richiesta-${Date.now()}.pdf`;try{await uploadFile(path,pdf);await addAttachment({tipo:'pdf_richiesta',extra_id:id,storage_path:path,nome_file:pdf.name,mime_type:pdf.type,dimensione_bytes:pdf.size,caricato_da:profile.id})}catch(err){return alert('Dati salvati, ma nuovo PDF non caricato: '+err.message)}}
   await syncExtraWorkItemsFromEditor(id);$('extraEditDialog').close();toast('Extra aggiornato');await loadAll();
 };

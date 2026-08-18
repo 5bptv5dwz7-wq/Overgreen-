@@ -681,41 +681,77 @@ async function signOut(){await writeClientAudit('LOGOUT','auth','Uscita dall’a
 async function loadAll(){
   if(loadAllPromise)return loadAllPromise;
   loadAllPromise=(async()=>{
-  // V100: prima di leggere i dati, riporta a oggi i lavori rimasti aperti
-  // nelle programmazioni con continuazione automatica. La funzione SQL è
-  // SECURITY DEFINER, quindi può essere richiamata anche dal dipendente.
-  try{
-    const roll=await sb.rpc('rollover_overgreen_schedules',{p_today:today()});
-    if(roll.error&&!String(roll.error.message||'').toLowerCase().includes('rollover_overgreen_schedules'))console.warn('Riporto automatico non riuscito:',roll.error.message);
-  }catch(rollErr){console.warn('Riporto automatico non disponibile:',rollErr)}
-  const [p,s,i,sch,sm,si,e,ew,iw,a]=await Promise.all([
-    sb.from('profiles').select('*').order('nome'),sb.from('stores').select('*').eq('attivo',true),sb.from('interventions').select('*').order('created_at',{ascending:false}),sb.from('schedules').select('*').order('giorno'),sb.from('schedule_members').select('*'),sb.from('schedule_items').select('*').order('posizione'),sb.from('extras').select('*').order('giorno_intervento'),sb.from('extra_workers').select('*'),sb.from('intervention_workers').select('*'),sb.from('attachments').select('*').order('created_at',{ascending:false})
+  const loadStarted=performance.now();
+  const rolloverKey='overgreen-rollover-ok-'+today();
+  // V112-23: il rollover resta importante, ma sullo stesso dispositivo viene eseguito
+  // una sola volta al giorno. Evita una chiamata RPC seriale ad ogni riapertura dell'app.
+  if(localStorage.getItem(rolloverKey)!=='1'){
+    try{
+      const roll=await sb.rpc('rollover_overgreen_schedules',{p_today:today()});
+      if(roll.error){
+        if(!String(roll.error.message||'').toLowerCase().includes('rollover_overgreen_schedules'))console.warn('Riporto automatico non riuscito:',roll.error.message);
+      }else{
+        // Pulisce le vecchie chiavi per non far crescere localStorage nel tempo.
+        Object.keys(localStorage).filter(k=>k.startsWith('overgreen-rollover-ok-')&&k!==rolloverKey).forEach(k=>localStorage.removeItem(k));
+        localStorage.setItem(rolloverKey,'1');
+      }
+    }catch(rollErr){console.warn('Riporto automatico non disponibile:',rollErr)}
+  }
+
+  // V112-23 PERFORMANCE: prima c'erano tre blocchi di lettura Supabase consecutivi
+  // (dati principali -> lavorazioni -> giri salvati). Ora tutte le letture partono
+  // contemporaneamente: l'avvio paga un solo round-trip di rete invece di tre.
+  const [p,s,i,sch,sm,si,e,ew,iw,a,wi,wp,wn,sr,sri]=await Promise.all([
+    sb.from('profiles').select('*').order('nome'),
+    sb.from('stores').select('*').eq('attivo',true),
+    sb.from('interventions').select('*').order('created_at',{ascending:false}),
+    sb.from('schedules').select('*').order('giorno'),
+    sb.from('schedule_members').select('*'),
+    sb.from('schedule_items').select('*').order('posizione'),
+    sb.from('extras').select('*').order('giorno_intervento'),
+    sb.from('extra_workers').select('*'),
+    sb.from('intervention_workers').select('*'),
+    sb.from('attachments').select('*').order('created_at',{ascending:false}),
+    sb.from('extra_work_items').select('*').order('posizione'),
+    sb.from('extra_work_item_photos').select('*').order('created_at'),
+    sb.from('extra_work_item_notes').select('*').order('created_at'),
+    sb.from('saved_routes').select('*').order('nome'),
+    sb.from('saved_route_items').select('*').order('posizione')
   ]);
   for(const r of [p,s,i,sch,sm,si,e,ew,iw,a])if(r.error)throw r.error;
-  profiles=p.data;stores=s.data;interventions=i.data;schedules=sch.data;scheduleMembers=sm.data;scheduleItems=si.data;extras=e.data;extraWorkers=ew.data;interventionWorkers=iw.data;attachments=a.data;
-  try{
-    const [wi,wp,wn]=await Promise.all([
-      sb.from('extra_work_items').select('*').order('posizione'),
-      sb.from('extra_work_item_photos').select('*').order('created_at'),
-      sb.from('extra_work_item_notes').select('*').order('created_at')
-    ]);
-    if(wi.error)throw wi.error;if(wp.error)throw wp.error;if(wn.error)throw wn.error;
-    extraWorkItems=wi.data||[];extraWorkItemPhotos=wp.data||[];extraWorkItemNotes=wn.data||[];
-  }catch(workErr){extraWorkItems=[];extraWorkItemPhotos=[];extraWorkItemNotes=[];console.warn('Lavorazioni multiple non disponibili:',workErr?.message||workErr)}
+  profiles=p.data||[];stores=s.data||[];interventions=i.data||[];schedules=sch.data||[];scheduleMembers=sm.data||[];scheduleItems=si.data||[];extras=e.data||[];extraWorkers=ew.data||[];interventionWorkers=iw.data||[];attachments=a.data||[];
 
-  try{const [sr,sri]=await Promise.all([sb.from('saved_routes').select('*').order('nome'),sb.from('saved_route_items').select('*').order('posizione')]);if(!sr.error)savedRoutes=sr.data||[];else console.warn('Giri salvati non disponibili:',sr.error.message);if(!sri.error)savedRouteItems=sri.data||[];else console.warn('Elementi giri salvati non disponibili:',sri.error.message)}catch(routeErr){console.warn('Caricamento giri salvati non riuscito:',routeErr)}
+  if(!wi.error&&!wp.error&&!wn.error){
+    extraWorkItems=wi.data||[];extraWorkItemPhotos=wp.data||[];extraWorkItemNotes=wn.data||[];
+  }else{
+    extraWorkItems=[];extraWorkItemPhotos=[];extraWorkItemNotes=[];
+    console.warn('Lavorazioni multiple non disponibili:',wi.error?.message||wp.error?.message||wn.error?.message||'errore sconosciuto');
+  }
+  if(!sr.error)savedRoutes=sr.data||[];else{savedRoutes=[];console.warn('Giri salvati non disponibili:',sr.error.message)}
+  if(!sri.error)savedRouteItems=sri.data||[];else{savedRouteItems=[];console.warn('Elementi giri salvati non disponibili:',sri.error.message)}
+
   realProfile=profiles.find(x=>x.id===session.user.id);if(!realProfile)throw new Error('Profilo non trovato');
   const impersonatedId=sessionStorage.getItem(IMPERSONATE_PROFILE_KEY);
   const impersonatedTarget=realProfile.ruolo==='admin'&&impersonatedId?profiles.find(x=>x.id===impersonatedId&&x.attivo!==false&&x.ruolo!=='admin'):null;
   if(impersonatedId&&!impersonatedTarget)sessionStorage.removeItem(IMPERSONATE_PROFILE_KEY);
   profile=impersonatedTarget||realProfile;
-  await reconcileProgrammingConsistency();
   syncImpersonationUi();
+
+  // Prima mostriamo l'interfaccia. Le manutenzioni correttive non devono più
+  // tenere l'utente davanti a uno schermo vuoto/nero.
   renderStores();renderWorkers();renderReportFilters();renderPending();renderScheduleFilters();renderSchedules();renderExtras();renderDashboard();if($('statsView'))renderStats();ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();processUploadQueue();
-  // V112-22: l'eventuale recupero dei vecchi extra standalone parte dopo il rendering,
-  // così non prolunga lo schermo nero in avvio.
-  setTimeout(()=>reconcileStandaloneExtrasInBackground(),0);
   const lastUpdate=$('syncStatus');if(lastUpdate)lastUpdate.textContent='Ultimo aggiornamento dati: '+new Date().toLocaleTimeString('it-IT');
+  console.info(`Overgreen avvio dati: ${Math.round(performance.now()-loadStarted)} ms`);
+
+  // V112-23: riconciliazioni solo DOPO il primo rendering e senza bloccare loadAll.
+  // Sono operazioni di manutenzione e possono includere più UPDATE/DELETE seriali.
+  setTimeout(async()=>{
+    try{
+      await reconcileProgrammingConsistency();
+      await reconcileStandaloneExtrasInBackground();
+      renderSchedules();renderDashboard();
+    }catch(err){console.warn('Manutenzione programmazione in background non riuscita:',err?.message||err)}
+  },50);
   })();
   try{return await loadAllPromise}finally{loadAllPromise=null}
 }

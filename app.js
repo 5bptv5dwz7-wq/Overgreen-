@@ -16,8 +16,58 @@ let session=null,profile=null,realProfile=null,profiles=[],managedUsers=[],store
 let combinedExtraClosureQueue=[];
 let storeFilter='all',storeClientFilter='all',extraClientFilter='all',scheduleClientFilter='all',scheduleWorkerFilter='all',scheduleDateFilter='all',scheduleExactDate=null;
 let loadAllPromise=null,currentHistoryStoreId=null;
-let startupPerf={auth:0,rollover:0,supabase:0,render:0,total:0};
-function renderStartupPerf(){const el=$('startupPerf');if(!el)return;const p=startupPerf;el.innerHTML=`Avvio: <strong>${(p.total/1000).toFixed(2)} s</strong> · Supabase ${(p.supabase/1000).toFixed(2)} s · render ${(p.render/1000).toFixed(2)} s${p.rollover?` · rollover ${(p.rollover/1000).toFixed(2)} s`:''}`;el.title='Tocca per vedere i tempi dettagliati';el.onclick=()=>alert(`Diagnostica avvio\nTotale: ${Math.round(p.total)} ms\nSupabase: ${Math.round(p.supabase)} ms\nRendering: ${Math.round(p.render)} ms\nRollover: ${Math.round(p.rollover)} ms`)}
+// V112-26: diagnostica dal vero inizio della navigazione, non solo da loadAll().
+const APP_BOOT_MARK=performance.now();
+let startupPerf={auth:0,rollover:0,supabase:0,render:0,total:0,pageToApp:APP_BOOT_MARK,loadAllStart:0,pdfLibLoad:0,pdfJsLoad:0};
+function startupResourceTiming(){
+  const entries=performance.getEntriesByType('resource')||[];
+  const find=part=>entries.filter(e=>String(e.name||'').includes(part)).sort((a,b)=>(b.responseEnd||0)-(a.responseEnd||0))[0];
+  const sup=find('supabase-js'),cfgEntry=find('config.js'),appEntry=find('app.js');
+  return {supabaseScript:sup?.duration||0,config:cfgEntry?.duration||0,appScript:appEntry?.duration||0};
+}
+function renderStartupPerf(){
+  const el=$('startupPerf');if(!el)return;const p=startupPerf,r=startupResourceTiming();
+  el.innerHTML=`Avvio reale: <strong>${(p.total/1000).toFixed(2)} s</strong> · prima app ${(p.pageToApp/1000).toFixed(2)} s · Supabase dati ${(p.supabase/1000).toFixed(2)} s · render ${(p.render/1000).toFixed(2)} s${p.rollover?` · rollover bg ${(p.rollover/1000).toFixed(2)} s`:''}`;
+  el.title='Tocca per vedere i tempi dettagliati';
+  el.onclick=()=>alert(`Diagnostica avvio completo
+Totale reale: ${Math.round(p.total)} ms
+Prima di app.js: ${Math.round(p.pageToApp)} ms
+Attesa prima di loadAll: ${Math.max(0,Math.round((p.loadAllStart||0)-p.pageToApp))} ms
+Supabase dati: ${Math.round(p.supabase)} ms
+Rendering: ${Math.round(p.render)} ms
+Rollover background: ${Math.round(p.rollover)} ms
+
+Download script
+Supabase JS: ${Math.round(r.supabaseScript)} ms
+config.js: ${Math.round(r.config)} ms
+app.js: ${Math.round(r.appScript)} ms
+
+PDF-Lib: ${p.pdfLibLoad?Math.round(p.pdfLibLoad)+' ms (lazy)':'non caricato'}
+PDF.js: ${p.pdfJsLoad?Math.round(p.pdfJsLoad)+' ms (lazy)':'non caricato'}`)
+}
+
+const PDF_LIB_URL='https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+const PDF_JS_URL='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+const PDF_JS_WORKER_URL='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+let pdfLibLoadPromise=null,pdfJsLoadPromise=null;
+function loadExternalScriptOnce(src,ready){
+  if(ready())return Promise.resolve();
+  return new Promise((resolve,reject)=>{
+    const existing=[...document.scripts].find(x=>x.src===src);
+    if(existing){existing.addEventListener('load',()=>ready()?resolve():reject(new Error('Libreria caricata ma non disponibile')), {once:true});existing.addEventListener('error',()=>reject(new Error('Impossibile caricare la libreria')), {once:true});return}
+    const script=document.createElement('script');script.src=src;script.async=true;script.onload=()=>ready()?resolve():reject(new Error('Libreria caricata ma non disponibile'));script.onerror=()=>reject(new Error('Impossibile caricare la libreria'));document.head.appendChild(script)
+  });
+}
+async function ensurePdfLib(){
+  if(window.PDFLib)return window.PDFLib;
+  if(!pdfLibLoadPromise){const t=performance.now();pdfLibLoadPromise=loadExternalScriptOnce(PDF_LIB_URL,()=>!!window.PDFLib).then(()=>{startupPerf.pdfLibLoad=performance.now()-t;renderStartupPerf();return window.PDFLib}).catch(err=>{pdfLibLoadPromise=null;throw err})}
+  return pdfLibLoadPromise;
+}
+async function ensurePdfJs(){
+  if(window.pdfjsLib){window.pdfjsLib.GlobalWorkerOptions.workerSrc=PDF_JS_WORKER_URL;return window.pdfjsLib}
+  if(!pdfJsLoadPromise){const t=performance.now();pdfJsLoadPromise=loadExternalScriptOnce(PDF_JS_URL,()=>!!window.pdfjsLib).then(()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc=PDF_JS_WORKER_URL;startupPerf.pdfJsLoad=performance.now()-t;renderStartupPerf();return window.pdfjsLib}).catch(err=>{pdfJsLoadPromise=null;throw err})}
+  return pdfJsLoadPromise;
+}
 let historyEditPhotoFiles=[];
 let donePhotoFiles=[];
 let closeExtraPhotoFiles=[];
@@ -684,7 +734,7 @@ async function loadAll(){
   if(loadAllPromise)return loadAllPromise;
   loadAllPromise=(async()=>{
   const loadStarted=performance.now();
-  startupPerf={auth:0,rollover:0,supabase:0,render:0,total:0};
+  startupPerf={...startupPerf,auth:0,rollover:0,supabase:0,render:0,total:0,loadAllStart:loadStarted};
   // V112-25: il rollover NON blocca più l'avvio. La dashboard viene mostrata
   // appena terminato il caricamento dati; il riporto parte subito dopo in background.
   const supabaseStarted=performance.now();
@@ -735,7 +785,7 @@ async function loadAll(){
   renderStores();renderWorkers();renderReportFilters();renderPending();renderScheduleFilters();renderSchedules();renderExtras();renderDashboard();if($('statsView'))renderStats();ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();processUploadQueue();
   const lastUpdate=$('syncStatus');if(lastUpdate)lastUpdate.textContent='Ultimo aggiornamento dati: '+new Date().toLocaleTimeString('it-IT');
   startupPerf.render=performance.now()-renderStarted;
-  startupPerf.total=performance.now()-loadStarted;
+  startupPerf.total=performance.now();
   renderStartupPerf();
   console.info('Overgreen diagnostica avvio',startupPerf);
 
@@ -1755,7 +1805,7 @@ function reportLinkedExtraKind(e){
   return clientType(e)==='intesa'?'Ticket Intesa':clientType(e)==='eurospin'?'Target Eurospin':'Extra associato';
 }
 async function createSingleClientReportFile(kind,row){
-  if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
+  await ensurePdfLib();
   const {PDFDocument,StandardFonts,rgb}=PDFLib,isOrd=kind==='ordinary',st=stores.find(s=>s.id===row.store_id),names=reportWorkerNames(kind,row.id),pics=attachments.filter(a=>a.tipo==='foto_generica'&&(isOrd?a.intervention_id===row.id:a.extra_id===row.id)),linkedOrdinaryExtras=isOrd?ordinaryIncludedExtrasForReport(row):[];
   const title=isOrd?(st?.nome||'Intervento ordinario'):(row.titolo||'Lavoro extra');
   const place=isOrd?([st?.indirizzo,st?.citta].filter(Boolean).join(', ')):(st?([st.nome,st.indirizzo,st.citta].filter(Boolean).join(', ')):[row.nome_esterno,row.indirizzo_esterno].filter(Boolean).join(', '));
@@ -1904,7 +1954,7 @@ async function previewSingleClientReport(kind,row){
 }
 
 async function createStoreInterventionsReportFile(store,rows){
-  if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
+  await ensurePdfLib();
   const selected=[...(rows||[])].filter(Boolean).sort((a,b)=>String(a.data_intervento||'').localeCompare(String(b.data_intervento||'')));
   if(!selected.length)throw new Error('Seleziona almeno un intervento.');
   const {PDFDocument}=PDFLib,merged=await PDFDocument.create();
@@ -1935,7 +1985,7 @@ async function downloadStoreInterventionsReport(store,rows){
 }
 
 async function createDailyReportFile(mode='compact'){
-  if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
+  await ensurePdfLib();
   const {PDFDocument,StandardFonts,rgb}=PDFLib,data=dailyReportData(),counts=reportCounts(data);
   const typeLabel=({all:'Tutti i lavori',ordinary:'Interventi ordinari',extra:'Lavori extra'})[$('reportType')?.value||'all'];
   const workerLabel=$('reportWorker')?.selectedOptions?.[0]?.textContent||'Tutti i dipendenti';
@@ -2861,6 +2911,7 @@ async function embedUprightImage(targetDoc,bytes,mime='image/jpeg'){
   return targetDoc.embedJpg(normalized);
 }
 async function appendAttachmentAsFullPage(targetDoc,a){
+  await ensurePdfLib();
   const bytes=await fetchAttachmentBytes(a),mime=String(a.mime_type||'').toLowerCase(),name=String(a.nome_file||'').toLowerCase();
   if(mime.includes('pdf')||name.endsWith('.pdf')){const source=await PDFLib.PDFDocument.load(bytes);if(!source.getPageCount())throw new Error(`${attachmentLabel(a)} è vuoto`);const [page]=await targetDoc.copyPages(source,[0]);targetDoc.addPage(page);return}
   let image;try{image=await embedUprightImage(targetDoc,bytes,mime)}catch{throw new Error(`${attachmentLabel(a)} deve essere PDF, JPG o PNG`)}
@@ -2868,7 +2919,7 @@ async function appendAttachmentAsFullPage(targetDoc,a){
 }
 
 async function generateComplexExtraReportPdf(e,button){
- const items=workItemsForExtra(e.id);if(!items.length)return alert('Questo extra non ha lavorazioni strutturate.');if(!window.PDFLib)return alert('La libreria PDF non è ancora caricata.');const old=button?.textContent;if(button){button.disabled=true;button.textContent='Genero report…'}
+ const items=workItemsForExtra(e.id);if(!items.length)return alert('Questo extra non ha lavorazioni strutturate.');try{await ensurePdfLib()}catch(err){return alert('Impossibile caricare la libreria PDF: '+err.message)}const old=button?.textContent;if(button){button.disabled=true;button.textContent='Genero report…'}
  try{const {PDFDocument,StandardFonts,rgb}=PDFLib,doc=await PDFDocument.create(),bold=await doc.embedFont(StandardFonts.HelveticaBold),regular=await doc.embedFont(StandardFonts.Helvetica),green=rgb(.03,.36,.19),muted=rgb(.35,.43,.39),st=stores.find(s=>s.id===e.store_id),margin=42,pageW=595.28,pageH=841.89,w=pageW-margin*2;let page=doc.addPage([pageW,pageH]),y=790;
  page.drawText('OVERGREEN',{x:margin,y,size:22,font:bold,color:green});page.drawText('REPORT LAVORAZIONI E DOCUMENTAZIONE FOTOGRAFICA',{x:margin,y:y-28,size:10.5,font:bold,color:muted});y-=62;
  const fields=[['LAVORO',e.titolo],['CLIENTE',clientLabel(e)],['LUOGO',st?.nome||e.nome_esterno||'Non indicato'],['INDIRIZZO',st?.indirizzo||e.indirizzo_esterno||'Non indicato'],['RICHIESTA',fmt(extraRequestDate(e))],['ESECUZIONE',fmt(e.giorno_intervento)],['TARGET / TICKET',e.numero_target||'Non indicato']];for(const [label,value] of fields){page.drawText(label,{x:margin,y,size:8,font:bold,color:muted});const lines=wrapPdfText(pdfSafeText(value),regular,10.5,w-110);lines.slice(0,2).forEach((line,i)=>page.drawText(line,{x:margin+110,y:y-i*14,size:10.5,font:regular}));y-=27}
@@ -2881,7 +2932,7 @@ async function generateComplexExtraReportPdf(e,button){
 async function generateExtraClosurePdf(e,button){
   const reportEurospin=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),reportOvergreen=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen'),requestFile=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');
   if(!requestFile||!reportOvergreen||!reportEurospin)return alert('Per generare la chiusura servono il file richiesta, il file Overgreen e il file Eurospin.');
-  if(!window.PDFLib)return alert('La libreria PDF non è ancora caricata. Aggiorna la pagina e riprova.');
+  try{await ensurePdfLib()}catch(err){return alert('Impossibile caricare la libreria PDF: '+err.message)}
   const old=button?.textContent;if(button){button.disabled=true;button.textContent='Generazione…'}
   try{
     const {PDFDocument,StandardFonts,rgb}=PDFLib,doc=await PDFDocument.create(),page=doc.addPage([595.28,841.89]),bold=await doc.embedFont(StandardFonts.HelveticaBold),regular=await doc.embedFont(StandardFonts.Helvetica),green=rgb(.03,.36,.19),muted=rgb(.35,.43,.39),st=stores.find(s=>s.id===e.store_id),names=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean),pics=attachments.filter(a=>a.extra_id===e.id&&a.tipo==='foto_generica');
@@ -3555,7 +3606,7 @@ function normalizePdfTextItems(items){
 }
 async function readPdfText(file){
   if(!file)throw new Error('PDF non selezionato');
-  if(!window.pdfjsLib)throw new Error('Lettore PDF non disponibile');
+  await ensurePdfJs();
   const bytes=new Uint8Array(await file.arrayBuffer());
   const pdf=await pdfjsLib.getDocument({data:bytes}).promise;
   let text='';

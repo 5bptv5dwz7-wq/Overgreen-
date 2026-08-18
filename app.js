@@ -16,6 +16,8 @@ let session=null,profile=null,realProfile=null,profiles=[],managedUsers=[],store
 let combinedExtraClosureQueue=[];
 let storeFilter='all',storeClientFilter='all',extraClientFilter='all',scheduleClientFilter='all',scheduleWorkerFilter='all',scheduleDateFilter='all',scheduleExactDate=null;
 let loadAllPromise=null,currentHistoryStoreId=null;
+let startupPerf={auth:0,rollover:0,supabase:0,render:0,total:0};
+function renderStartupPerf(){const el=$('startupPerf');if(!el)return;const p=startupPerf;el.innerHTML=`Avvio: <strong>${(p.total/1000).toFixed(2)} s</strong> · Supabase ${(p.supabase/1000).toFixed(2)} s · render ${(p.render/1000).toFixed(2)} s${p.rollover?` · rollover ${(p.rollover/1000).toFixed(2)} s`:''}`;el.title='Tocca per vedere i tempi dettagliati';el.onclick=()=>alert(`Diagnostica avvio\nTotale: ${Math.round(p.total)} ms\nSupabase: ${Math.round(p.supabase)} ms\nRendering: ${Math.round(p.render)} ms\nRollover: ${Math.round(p.rollover)} ms`)}
 let historyEditPhotoFiles=[];
 let donePhotoFiles=[];
 let closeExtraPhotoFiles=[];
@@ -682,6 +684,8 @@ async function loadAll(){
   if(loadAllPromise)return loadAllPromise;
   loadAllPromise=(async()=>{
   const loadStarted=performance.now();
+  startupPerf={auth:0,rollover:0,supabase:0,render:0,total:0};
+  const rolloverStarted=performance.now();
   const rolloverKey='overgreen-rollover-ok-'+today();
   // V112-23: il rollover resta importante, ma sullo stesso dispositivo viene eseguito
   // una sola volta al giorno. Evita una chiamata RPC seriale ad ogni riapertura dell'app.
@@ -697,6 +701,9 @@ async function loadAll(){
       }
     }catch(rollErr){console.warn('Riporto automatico non disponibile:',rollErr)}
   }
+
+  startupPerf.rollover=performance.now()-rolloverStarted;
+  const supabaseStarted=performance.now();
 
   // V112-23 PERFORMANCE: prima c'erano tre blocchi di lettura Supabase consecutivi
   // (dati principali -> lavorazioni -> giri salvati). Ora tutte le letture partono
@@ -718,6 +725,7 @@ async function loadAll(){
     sb.from('saved_routes').select('*').order('nome'),
     sb.from('saved_route_items').select('*').order('posizione')
   ]);
+  startupPerf.supabase=performance.now()-supabaseStarted;
   for(const r of [p,s,i,sch,sm,si,e,ew,iw,a])if(r.error)throw r.error;
   profiles=p.data||[];stores=s.data||[];interventions=i.data||[];schedules=sch.data||[];scheduleMembers=sm.data||[];scheduleItems=si.data||[];extras=e.data||[];extraWorkers=ew.data||[];interventionWorkers=iw.data||[];attachments=a.data||[];
 
@@ -737,11 +745,15 @@ async function loadAll(){
   profile=impersonatedTarget||realProfile;
   syncImpersonationUi();
 
+  const renderStarted=performance.now();
   // Prima mostriamo l'interfaccia. Le manutenzioni correttive non devono più
   // tenere l'utente davanti a uno schermo vuoto/nero.
   renderStores();renderWorkers();renderReportFilters();renderPending();renderScheduleFilters();renderSchedules();renderExtras();renderDashboard();if($('statsView'))renderStats();ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();processUploadQueue();
   const lastUpdate=$('syncStatus');if(lastUpdate)lastUpdate.textContent='Ultimo aggiornamento dati: '+new Date().toLocaleTimeString('it-IT');
-  console.info(`Overgreen avvio dati: ${Math.round(performance.now()-loadStarted)} ms`);
+  startupPerf.render=performance.now()-renderStarted;
+  startupPerf.total=performance.now()-loadStarted;
+  renderStartupPerf();
+  console.info('Overgreen diagnostica avvio',startupPerf);
 
   // V112-23: riconciliazioni solo DOPO il primo rendering e senza bloccare loadAll.
   // Sono operazioni di manutenzione e possono includere più UPDATE/DELETE seriali.

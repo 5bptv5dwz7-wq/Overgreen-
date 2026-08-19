@@ -595,7 +595,7 @@ function auditHumanDescription(r){
 
   return r.description||`${auditActionLabel(action)} · ${auditEntityLabel(t)}`;
 }
-async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V112-20'}})}catch(e){console.warn('audit',e)}}
+async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V112-27'}})}catch(e){console.warn('audit',e)}}
 function auditViewOpen(name){if(!session?.user?.id)return;const labels={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:'Programmazione',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',audit:'Log attività',settings:'Impostazioni'};if(labels[name])writeClientAudit('VIEW','navigation',`Aperta pagina ${labels[name]}`,{view:name})}
 function renderAuditUsers(){const sel=$('auditUser');if(!sel)return;const cur=sel.value||'all';sel.innerHTML='<option value="all">Tutti gli utenti</option>';[...profiles].sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.nome||p.email||p.id;sel.appendChild(o)});if([...sel.options].some(o=>o.value===cur))sel.value=cur}
 async function openAuditView(){if(!admin())return setView('dashboard');renderAuditUsers();await loadAuditLogs(true)}
@@ -4068,7 +4068,30 @@ $('closeExtraForm').onsubmit=async e=>{
 
 
 function isRecoverableJwtError(err){const m=String(err?.message||err||'').toLowerCase();return m.includes('jwt issued at future')||m.includes('jwt expired')||m.includes('invalid refresh token')||m.includes('refresh token not found')}
-async function resetBrokenSession(){try{await sb.auth.signOut({scope:'local'})}catch{};localStorage.removeItem('sb-'+new URL(cfg.supabaseUrl).hostname.split('.')[0]+'-auth-token');sessionStorage.clear();realProfile=null;profile=null;session=null;$('app').classList.add('hidden');$('loginScreen').classList.remove('hidden');const box=$('loginError');if(box){box.textContent='La sessione era scaduta o non valida. Accedi di nuovo.';box.classList.remove('hidden')}}
+function isRefreshTokenFatal(err){const m=String(err?.message||err||'').toLowerCase();return m.includes('invalid refresh token')||m.includes('refresh token not found')||m.includes('refresh_token_not_found')}
+let authRecoveryPromise=null;
+async function recoverSupabaseSession(){
+  if(authRecoveryPromise)return authRecoveryPromise;
+  authRecoveryPromise=(async()=>{
+    try{
+      // Un access token appena scaduto è normale: prima di espellere l'utente
+      // chiediamo a Supabase di rinnovarlo usando il refresh token persistito.
+      const {data,error}=await sb.auth.refreshSession();
+      if(error)throw error;
+      if(!data?.session)throw new Error('Sessione non rinnovabile');
+      session=data.session;
+      return true;
+    }catch(err){
+      console.warn('Rinnovo sessione non riuscito',err);
+      if(isRefreshTokenFatal(err))return false;
+      // Per errori temporanei (rete, clock, server) non distruggiamo le credenziali.
+      // Il normale autoRefresh di Supabase potrà riprovare alla successiva attività.
+      throw err;
+    }finally{authRecoveryPromise=null}
+  })();
+  return authRecoveryPromise;
+}
+async function resetBrokenSession(){try{await sb.auth.signOut({scope:'local'})}catch{};localStorage.removeItem('sb-'+new URL(cfg.supabaseUrl).hostname.split('.')[0]+'-auth-token');sessionStorage.removeItem(IMPERSONATE_PROFILE_KEY);realProfile=null;profile=null;session=null;$('app').classList.add('hidden');$('loginScreen').classList.remove('hidden');const box=$('loginError');if(box){box.textContent='Le credenziali salvate non sono più valide. Accedi di nuovo.';box.classList.remove('hidden')}}
 
 document.querySelectorAll('[data-stats-days]').forEach(b=>b.addEventListener('click',()=>setStatsDays(b.dataset.statsDays)));$('statsClient')?.addEventListener('change',renderStats);$('statsType')?.addEventListener('change',renderStats);$('statsSiteType')?.addEventListener('change',renderStats);$('statsStartDate')?.addEventListener('change',renderStats);$('statsEndDate')?.addEventListener('change',renderStats);$('statsRefresh')?.addEventListener('click',async()=>{await loadAll();renderStats();toast('Statistiche aggiornate')});
 const refreshReportAndPdfCache=()=>{renderDailyReport();prewarmDailyReportPdfs()};$('reportDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportStartDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportEndDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportMonth')?.addEventListener('change',refreshReportAndPdfCache);document.querySelectorAll('[data-report-mode]').forEach(b=>b.addEventListener('click',()=>{setReportMode(b.dataset.reportMode);prewarmDailyReportPdfs()}));$('reportType')?.addEventListener('change',refreshReportAndPdfCache);$('reportWorker')?.addEventListener('change',refreshReportAndPdfCache);$('reportRefresh')?.addEventListener('click',async()=>{await loadAll();dailyReportPdfCache.clear();dailyReportPdfPending.clear();renderDailyReport();prewarmDailyReportPdfs();toast('Report aggiornato')});$('shareDailyReport')?.addEventListener('click',shareDailyReport);$('exportDailyReportCompact')?.addEventListener('click',()=>exportDailyReportPdf('compact'));$('exportDailyReportFull')?.addEventListener('click',()=>exportDailyReportPdf('full'));
@@ -4083,7 +4106,26 @@ sb.auth.onAuthStateChange(async(event,s)=>{
     // riportare l'utente alla Dashboard. Ripristina l'ultima sezione aperta.
     const savedView=localStorage.getItem(CURRENT_VIEW_KEY)||currentView||'dashboard';
     setView(savedView);
-  }catch(err){console.error(err);if(isRecoverableJwtError(err))return resetBrokenSession();alert('Errore collegamento: '+err.message)}
+  }catch(err){
+    console.error(err);
+    if(isRecoverableJwtError(err)){
+      try{
+        const recovered=await recoverSupabaseSession();
+        if(!recovered)return resetBrokenSession();
+        await loadAll();
+        const savedView=localStorage.getItem(CURRENT_VIEW_KEY)||currentView||'dashboard';
+        setView(savedView);
+        return;
+      }catch(refreshErr){
+        console.error('Recupero sessione fallito',refreshErr);
+        // Non cancellare una sessione valida per un problema temporaneo di rete/clock.
+        if(isRefreshTokenFatal(refreshErr))return resetBrokenSession();
+        alert('Connessione temporaneamente non disponibile. Riprova tra poco senza rifare il login.');
+        return;
+      }
+    }
+    alert('Errore collegamento: '+err.message)
+  }
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(console.error));

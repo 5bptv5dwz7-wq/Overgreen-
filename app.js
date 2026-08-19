@@ -595,7 +595,7 @@ function auditHumanDescription(r){
 
   return r.description||`${auditActionLabel(action)} · ${auditEntityLabel(t)}`;
 }
-async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V112-28'}})}catch(e){console.warn('audit',e)}}
+async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V112-29'}})}catch(e){console.warn('audit',e)}}
 function auditViewOpen(name){if(!session?.user?.id)return;const labels={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:'Programmazione',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'};if(labels[name])writeClientAudit('VIEW','navigation',`Aperta pagina ${labels[name]}`,{view:name})}
 function renderAuditUsers(){const sel=$('auditUser');if(!sel)return;const cur=sel.value||'all';sel.innerHTML='<option value="all">Tutti gli utenti</option>';[...profiles].sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.nome||p.email||p.id;sel.appendChild(o)});if([...sel.options].some(o=>o.value===cur))sel.value=cur}
 async function openAuditView(){if(!admin())return setView('dashboard');renderAuditUsers();await loadAuditLogs(true)}
@@ -2718,7 +2718,17 @@ async function saveScheduleActivity(){
   const payload={schedule_id:scheduleId,tipo:$('activityType').value,titolo:$('activityTitle').value.trim(),ora:$('activityTime').value||null,indirizzo:$('activityAddress').value.trim()||null,note:$('activityNotes').value.trim()||null,contact_id:$('activityContact').value||null,store_id:$('activityStore').value||null,stato:'da_fare',creato_da:profile.id};
   if(!payload.titolo)return alert('Inserisci un titolo per l’attività.');
   let r;if(id)r=await sb.from('schedule_activities').update({...payload,stato:scheduleActivities.find(a=>a.id===id)?.stato||'da_fare'}).eq('id',id);else r=await sb.from('schedule_activities').insert({...payload,posizione:nextScheduleRoutePosition(scheduleId)});
-  if(r.error){if(String(r.error.message||'').includes('schedule_activities'))return alert('Prima esegui MIGRAZIONE-V112-28.sql su Supabase.');return alert(r.error.message)}
+  if(r.error){
+    console.error('V112-29 - errore salvataggio attività:',{error:r.error,payload,id,scheduleId});
+    const parts=[
+      'Errore salvataggio attività',
+      r.error.message||'Errore sconosciuto',
+      r.error.details?'Dettagli: '+r.error.details:null,
+      r.error.hint?'Hint: '+r.error.hint:null,
+      r.error.code?'Codice: '+r.error.code:null
+    ].filter(Boolean);
+    return alert(parts.join('\n\n'));
+  }
   $('activityDialog').close();toast(id?'Attività aggiornata':'Attività aggiunta alla giornata');await loadAll();
 }
 async function completeScheduleActivity(a){const r=await sb.from('schedule_activities').update({stato:'completato',completed_at:new Date().toISOString()}).eq('id',a.id);if(r.error)return alert(r.error.message);toast('Attività completata');await loadAll()}

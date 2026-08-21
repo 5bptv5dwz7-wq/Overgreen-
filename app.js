@@ -23,6 +23,43 @@ let donePhotoFiles=[];
 let closeExtraPhotoFiles=[];
 let activityCompletePhotoFiles=[];
 
+// ---- V112-32 · Notifiche push amministratore ----
+const PUSH_VAPID_PUBLIC_KEY='BM3FEPZCRG5loYcyvHDGmdrDD_9K4FNYcEymmh6mHjiDlIGvTq75Emu17YMDdcWZg4s6MenD-c76yUd7y0UhUnI';
+let notificationDeepLinkHandled=false;
+function pushKeyBytes(base64String){const padding='='.repeat((4-base64String.length%4)%4),base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/'),raw=atob(base64);return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)))}
+async function currentPushSubscription(){if(!('serviceWorker' in navigator))return null;const reg=await navigator.serviceWorker.ready;return reg.pushManager.getSubscription()}
+async function refreshPushSettingsUi(){
+  const status=$('pushNotificationStatus'),btn=$('pushNotificationToggle');if(!status||!btn)return;
+  if(!admin()){status.textContent='Disponibile solo per amministratori.';btn.classList.add('hidden');return}
+  if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window)){status.textContent='Questo dispositivo/browser non supporta le notifiche push.';btn.disabled=true;return}
+  try{const sub=await currentPushSubscription();const enabled=!!sub&&Notification.permission==='granted';status.textContent=enabled?'🟢 Notifiche attive su questo dispositivo':Notification.permission==='denied'?'🔴 Notifiche bloccate nelle impostazioni del dispositivo':'⚪ Notifiche non attive';btn.textContent=enabled?'Disattiva notifiche':'Attiva notifiche';btn.dataset.enabled=enabled?'1':'0'}catch(err){status.textContent='Stato notifiche non disponibile';console.warn(err)}
+}
+function ensurePushSettingsUi(){
+  const host=$('cloudAccountSettings')?.parentElement||$('settingsView');if(!host||$('pushSettingsCard'))return;
+  const card=document.createElement('section');card.id='pushSettingsCard';card.className='panel admin-only';card.innerHTML=`<h2>🔔 Notifiche chiusure</h2><p class="muted">Ricevi una push quando un dipendente chiude un intervento ordinario o un extra.</p><p id="pushNotificationStatus" class="muted">Verifica in corso…</p><button id="pushNotificationToggle" type="button" class="secondary">Attiva notifiche</button><p class="muted">Su iPhone la web app deve essere aggiunta alla schermata Home.</p>`;host.appendChild(card);
+  $('pushNotificationToggle').onclick=toggleAdminPushNotifications;refreshPushSettingsUi();
+}
+async function toggleAdminPushNotifications(){
+  const btn=$('pushNotificationToggle');if(!btn||!admin())return;btn.disabled=true;
+  try{
+    const reg=await navigator.serviceWorker.ready;let sub=await reg.pushManager.getSubscription();
+    if(sub){const endpoint=sub.endpoint;await sub.unsubscribe();const r=await sb.from('push_subscriptions').delete().eq('endpoint',endpoint).eq('user_id',session.user.id);if(r.error)throw r.error;toast('Notifiche disattivate');return}
+    const permission=await Notification.requestPermission();if(permission!=='granted')throw new Error('Autorizzazione alle notifiche non concessa.');
+    sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:pushKeyBytes(PUSH_VAPID_PUBLIC_KEY)});
+    const json=sub.toJSON(),payload={user_id:session.user.id,profile_id:profile.id,endpoint:sub.endpoint,p256dh:json.keys?.p256dh,auth:json.keys?.auth,user_agent:navigator.userAgent,active:true,last_seen_at:new Date().toISOString()};
+    const r=await sb.from('push_subscriptions').upsert(payload,{onConflict:'endpoint'});if(r.error){await sub.unsubscribe();throw r.error}
+    toast('Notifiche attivate');
+  }catch(err){alert(err.message||String(err))}finally{btn.disabled=false;refreshPushSettingsUi()}
+}
+async function notifyAdminClosure(kind,id,photoCount=0){
+  if(profile?.ruolo==='admin'||!id)return;
+  try{const {data,error}=await sb.functions.invoke('notify-admin-closure',{body:{kind,id,photo_count:Number(photoCount)||0}});if(error)throw error;if(data?.error)throw new Error(data.error)}catch(err){console.warn('Notifica push non inviata:',err?.message||err)}
+}
+function handleNotificationDeepLink(){
+  if(notificationDeepLinkHandled)return;const u=new URL(location.href),kind=u.searchParams.get('notificationKind'),id=u.searchParams.get('notificationId');if(!kind||!id)return;notificationDeepLinkHandled=true;
+  setTimeout(()=>{try{if(kind==='extra')openExtraById(id);else if(kind==='intervention'){const i=interventions.find(x=>x.id===id),st=stores.find(x=>x.id===i?.store_id);if(st)showHistory(st)}}catch(e){console.warn('Apertura notifica fallita',e)}finally{u.searchParams.delete('notificationKind');u.searchParams.delete('notificationId');history.replaceState(null,'',u.pathname+u.search+u.hash)}},350);
+}
+
 // ---- Coda persistente per caricamenti in background ----
 const UPLOAD_DB='overgreen-upload-queue-v1', UPLOAD_STORE='jobs';
 let uploadWorkerRunning=false;
@@ -206,7 +243,7 @@ let currentView=localStorage.getItem(CURRENT_VIEW_KEY)||'dashboard';
 function setView(name){
   if(!$(name+'View'))name='dashboard';
   currentView=name;localStorage.setItem(CURRENT_VIEW_KEY,name);
-  document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');$('pageTitle').textContent={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'}[name];if(name==='dashboard')renderDashboard();if(name==='stores')renderStores();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='reports')renderDailyReport();if(name==='stats')renderStats();if(name==='signatures')openSignatureSheetsView();if(name==='archive')openCompanyArchive();if(name==='contacts')renderWorkContacts();if(name==='audit'&&admin())openAuditView();if(name!=='audit')auditViewOpen(name);if(name==='settings'){ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin())loadSupabaseUsage();}}
+  document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');$('pageTitle').textContent={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'}[name];if(name==='dashboard')renderDashboard();if(name==='stores')renderStores();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='reports')renderDailyReport();if(name==='stats')renderStats();if(name==='signatures')openSignatureSheetsView();if(name==='archive')openCompanyArchive();if(name==='contacts')renderWorkContacts();if(name==='audit'&&admin())openAuditView();if(name!=='audit')auditViewOpen(name);if(name==='settings'){ensureCloudSettingsUi();ensurePushSettingsUi();refreshPushSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin())loadSupabaseUsage();}}
 
 
 function syncImpersonationUi(){
@@ -741,7 +778,7 @@ async function loadAll(){
   const renderStarted=performance.now();
   // Prima mostriamo l'interfaccia. Le manutenzioni correttive non devono più
   // tenere l'utente davanti a uno schermo vuoto/nero.
-  renderStores();renderWorkers();renderReportFilters();renderPending();renderScheduleFilters();renderSchedules();renderExtras();renderWorkContacts();renderDashboard();if($('statsView'))renderStats();ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();processUploadQueue();
+  renderStores();renderWorkers();renderReportFilters();renderPending();renderScheduleFilters();renderSchedules();renderExtras();renderWorkContacts();renderDashboard();if($('statsView'))renderStats();ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();processUploadQueue();handleNotificationDeepLink();
   const lastUpdate=$('syncStatus');if(lastUpdate)lastUpdate.textContent='Ultimo aggiornamento dati: '+new Date().toLocaleTimeString('it-IT');
   startupPerf.render=performance.now()-renderStarted;
   startupPerf.total=performance.now()-loadStarted;
@@ -3519,6 +3556,7 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
     if(!continueAnotherDay&&linkedIncludedExtras.length){const includedState=admin()?'completato':'in_attesa',now=new Date().toISOString(),r=await sb.from('extras').update({stato:includedState,giorno_intervento:day,closed_by:profile.id,closed_at:admin()?now:null,convalidato_da:admin()?profile.id:null,convalidato_il:admin()?now:null}).in('id',linkedIncludedExtras.map(e=>e.id));if(r.error)throw new Error('Intervento salvato, ma aggiornamento ticket/target incluso non riuscito: '+r.error.message)}
     donePhotoFiles=[];renderDonePhotoSelection();$('doneDialog').close();toast(continueAnotherDay?'Giornata salvata · intervento ancora aperto':files.length?`Intervento salvato · ${files.length} foto in caricamento`:admin()?'Intervento convalidato':'Inviato a Lorenzo');renderSchedules();renderDashboard();
     try{await loadAll()}catch(refreshErr){console.warn('Aggiornamento dati non riuscito dopo il salvataggio:',refreshErr)}
+    if(!continueAnotherDay)notifyAdminClosure('intervention',data.id,files.length);
     if(files.length)enqueueInterventionPhotos(data.id,files).catch(err=>{console.error(err);toast('⚠️ Foto in attesa di sincronizzazione')});
     if(!continueAnotherDay&&linkedExtrasToClose.length){combinedExtraClosureQueue=linkedExtrasToClose.map(x=>({id:x.id}));setTimeout(()=>openNextCombinedExtraClosure(),250)}
   }catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=oldText}
@@ -4118,6 +4156,7 @@ async function saveExtraPartial(){
     
     const {error}=await sb.from('extras').update({stato:'da_integrare',note_lorenzo:notes,closed_by:null,closed_at:null}).eq('id',id);
     if(error)throw error;
+    notifyAdminClosure('extra',id,photos.length);
     $('closeExtraDialog').close();$('closeExtraForm').reset();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
     toast(`Parziale salvato · extra ancora aperto${photos.length?' · '+photos.length+' foto':''}${overgreenFile?' · file Overgreen':''}`);
     await loadAll();

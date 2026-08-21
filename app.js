@@ -596,7 +596,7 @@ function auditHumanDescription(r){
 
   return r.description||`${auditActionLabel(action)} · ${auditEntityLabel(t)}`;
 }
-async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V112-30'}})}catch(e){console.warn('audit',e)}}
+async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V112-31'}})}catch(e){console.warn('audit',e)}}
 function auditViewOpen(name){if(!session?.user?.id)return;const labels={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:'Programmazione',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'};if(labels[name])writeClientAudit('VIEW','navigation',`Aperta pagina ${labels[name]}`,{view:name})}
 function renderAuditUsers(){const sel=$('auditUser');if(!sel)return;const cur=sel.value||'all';sel.innerHTML='<option value="all">Tutti gli utenti</option>';[...profiles].sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.nome||p.email||p.id;sel.appendChild(o)});if([...sel.options].some(o=>o.value===cur))sel.value=cur}
 async function openAuditView(){if(!admin())return setView('dashboard');renderAuditUsers();await loadAuditLogs(true)}
@@ -3437,8 +3437,21 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
   try{
     const workers=admin()?[...$('doneWorkers').querySelectorAll('input:checked')].map(x=>x.value):[profile.id];
     if(!workers.length)throw new Error('Seleziona chi ha eseguito.');
-    const files=[...donePhotoFiles],storeId=$('doneStoreId').value,scheduleItemId=$('doneScheduleItemId').value||null;
-    const linkedToClose=scheduleItemId?linkedExtrasForScheduleItem(scheduleItemId):[];const linkedIncludedExtras=linkedToClose.filter(isOrdinaryIncludedExtra);const linkedEurospinTargets=linkedIncludedExtras.filter(isEurospinOrdinaryTarget);const linkedExtrasToClose=linkedToClose.filter(e=>!isOrdinaryIncludedExtra(e));
+    const files=[...donePhotoFiles],storeId=$('doneStoreId').value;
+    let scheduleItemId=$('doneScheduleItemId').value||null;
+    const originalScheduleItemId=scheduleItemId;
+    const linkedToClose=originalScheduleItemId?linkedExtrasForScheduleItem(originalScheduleItemId):[];const linkedIncludedExtras=linkedToClose.filter(isOrdinaryIncludedExtra);const linkedEurospinTargets=linkedIncludedExtras.filter(isEurospinOrdinaryTarget);const linkedExtrasToClose=linkedToClose.filter(e=>!isOrdinaryIncludedExtra(e));
+    // V112-31: una schermata rimasta aperta può contenere un schedule_item_id già rimosso
+    // da una chiusura precedente. Verifica il riferimento prima di usarlo nell'intervento.
+    if(scheduleItemId){
+      const {data:liveScheduleItem,error:liveScheduleItemError}=await sb.from('schedule_items').select('id').eq('id',scheduleItemId).maybeSingle();
+      if(liveScheduleItemError)throw liveScheduleItemError;
+      if(!liveScheduleItem){
+        console.warn('V112-31: schedule_item_id non più esistente; salvo l’intervento senza collegamento:',scheduleItemId);
+        scheduleItemId=null;
+        $('doneScheduleItemId').value='';
+      }
+    }
     const existingOpen=await fetchOpenMultiDayIntervention(storeId);
     if(scheduleItemId&&!existingOpen){
       const localDuplicate=interventions.some(i=>interventionHasScheduleItem(i,scheduleItemId)&&['in_attesa','convalidato'].includes(i.stato)&&!i.multi_day_open);
@@ -3477,7 +3490,22 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
     }else{
       const initialNote=continueAnotherDay&&dayNote?`[${fmt(day)}] ${dayNote}`:(dayNote||null);
       const payload={store_id:storeId,schedule_item_id:scheduleItemId,data_intervento:day,data_fine:day,note:initialNote,next_visit_note:nextVisitNote||null,multi_day_open:continueAnotherDay,schedule_item_ids:scheduleItemId?[scheduleItemId]:[],stato:admin()?'convalidato':'in_attesa',inserito_da:profile.id,convalidato_da:admin()?profile.id:null,convalidato_il:admin()?new Date().toISOString():null,closed_by:continueAnotherDay?null:profile.id,closed_at:continueAnotherDay?null:new Date().toISOString()};
-      const r=await sb.from('interventions').insert(payload).select().single();if(r.error)throw r.error;data=r.data;
+      let r=await sb.from('interventions').insert(payload).select().single();
+      // V112-31: seconda rete di sicurezza contro una race condition. Se la voce di
+      // programmazione sparisce tra il controllo sopra e l'INSERT, ritenta senza FK.
+      if(r.error&&scheduleItemId&&(
+        String(r.error.message||'').includes('interventions_schedule_item_id_fkey')||
+        String(r.error.details||'').includes('interventions_schedule_item_id_fkey')||
+        String(r.error.code||'')==='23503'
+      )){
+        console.warn('V112-31: schedule_item_id rimosso durante il salvataggio; ritento senza collegamento.',scheduleItemId);
+        payload.schedule_item_id=null;
+        payload.schedule_item_ids=[];
+        scheduleItemId=null;
+        $('doneScheduleItemId').value='';
+        r=await sb.from('interventions').insert(payload).select().single();
+      }
+      if(r.error)throw r.error;data=r.data;
       const ir=await sb.from('intervention_workers').insert(workers.map(profile_id=>({intervention_id:data.id,profile_id})));if(ir.error)throw ir.error;interventions.unshift(data);
     }
     if(scheduleItemId){

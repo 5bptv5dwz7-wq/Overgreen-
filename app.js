@@ -23,8 +23,8 @@ let donePhotoFiles=[];
 let closeExtraPhotoFiles=[];
 let activityCompletePhotoFiles=[];
 
-// ---- V112-32 · Notifiche push amministratore ----
-const PUSH_VAPID_PUBLIC_KEY='BM3FEPZCRG5loYcyvHDGmdrDD_9K4FNYcEymmh6mHjiDlIGvTq75Emu17YMDdcWZg4s6MenD-c76yUd7y0UhUnI';
+// ---- V112-33 · Notifiche push amministratore ----
+const PUSH_VAPID_PUBLIC_KEY='BDOq-eaSnfxLf1MBpFqfu02KfKS6G166bX02n-etWusn2JGZjpWVqDlMN3nuH7hf2ts13EZCV4UJ_hm2IevChQo';
 let notificationDeepLinkHandled=false;
 function pushKeyBytes(base64String){const padding='='.repeat((4-base64String.length%4)%4),base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/'),raw=atob(base64);return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)))}
 async function currentPushSubscription(){if(!('serviceWorker' in navigator))return null;const reg=await navigator.serviceWorker.ready;return reg.pushManager.getSubscription()}

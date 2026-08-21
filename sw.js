@@ -1,9 +1,9 @@
-const CACHE='overgreen-v112-32';
+const CACHE='overgreen-v112-33';
 self.addEventListener('install',e=>e.waitUntil(self.skipWaiting()));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(fetch(e.request,{cache:'no-store'}).catch(()=>caches.match(e.request)));});
 
-// V112-32 — ricezione notifiche Web Push anche con app chiusa.
+// V112-33 — ricezione notifiche Web Push anche con app chiusa.
 self.addEventListener('push',event=>{
   let data={};
   try{data=event.data?event.data.json():{}}catch{data={body:event.data?.text?.()||'Nuova attività completata'}}

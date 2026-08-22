@@ -23,7 +23,7 @@ let donePhotoFiles=[];
 let closeExtraPhotoFiles=[];
 let activityCompletePhotoFiles=[];
 
-// ---- V112-33 · Notifiche push amministratore ----
+// ---- V112-34 · Notifiche push amministratore + deep link PWA corretto ----
 const PUSH_VAPID_PUBLIC_KEY='BDOq-eaSnfxLf1MBpFqfu02KfKS6G166bX02n-etWusn2JGZjpWVqDlMN3nuH7hf2ts13EZCV4UJ_hm2IevChQo';
 let notificationDeepLinkHandled=false;
 function pushKeyBytes(base64String){const padding='='.repeat((4-base64String.length%4)%4),base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/'),raw=atob(base64);return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)))}
@@ -633,7 +633,7 @@ function auditHumanDescription(r){
 
   return r.description||`${auditActionLabel(action)} · ${auditEntityLabel(t)}`;
 }
-async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V112-31'}})}catch(e){console.warn('audit',e)}}
+async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V112-34'}})}catch(e){console.warn('audit',e)}}
 function auditViewOpen(name){if(!session?.user?.id)return;const labels={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:'Programmazione',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'};if(labels[name])writeClientAudit('VIEW','navigation',`Aperta pagina ${labels[name]}`,{view:name})}
 function renderAuditUsers(){const sel=$('auditUser');if(!sel)return;const cur=sel.value||'all';sel.innerHTML='<option value="all">Tutti gli utenti</option>';[...profiles].sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.nome||p.email||p.id;sel.appendChild(o)});if([...sel.options].some(o=>o.value===cur))sel.value=cur}
 async function openAuditView(){if(!admin())return setView('dashboard');renderAuditUsers();await loadAuditLogs(true)}

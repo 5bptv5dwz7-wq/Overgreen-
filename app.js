@@ -23,7 +23,7 @@ let donePhotoFiles=[];
 let closeExtraPhotoFiles=[];
 let activityCompletePhotoFiles=[];
 
-// ---- V112-36 · Push + sincronizzazione foto robusta ----
+// ---- V112-37 · Upload foto senza dipendenza da navigator.onLine ----
 const PUSH_VAPID_PUBLIC_KEY='BDOq-eaSnfxLf1MBpFqfu02KfKS6G166bX02n-etWusn2JGZjpWVqDlMN3nuH7hf2ts13EZCV4UJ_hm2IevChQo';
 let notificationDeepLinkHandled=false;
 function pushKeyBytes(base64String){const padding='='.repeat((4-base64String.length%4)%4),base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/'),raw=atob(base64);return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)))}
@@ -82,7 +82,7 @@ async function flushReadyClosureNotifications(interventionId=null){
   }
 }
 
-// ---- V112-36 · Coda persistente + upload immediato verificato ----
+// ---- V112-37 · Coda persistente + upload reale Supabase ----
 const UPLOAD_DB='overgreen-upload-queue-v1', UPLOAD_STORE='jobs';
 let uploadWorkerRunning=false,uploadWorkerPromise=null;
 function openUploadDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(UPLOAD_DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(UPLOAD_STORE))r.result.createObjectStore(UPLOAD_STORE,{keyPath:'id'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
@@ -94,7 +94,7 @@ async function markInterventionPhotoUpload(interventionId,status,errorText=null)
   if(!interventionId)return;
   const payload={photo_upload_status:status,photo_upload_error:errorText||null,photo_upload_updated_at:new Date().toISOString()};
   const r=await sb.from('interventions').update(payload).eq('id',interventionId);
-  if(r.error)console.warn('V112-36: stato upload foto non aggiornato',r.error.message);
+  if(r.error)console.warn('V112-37: stato upload foto non aggiornato',r.error.message);
   const local=interventions.find(i=>i.id===interventionId);if(local)Object.assign(local,payload);
 }
 async function enqueueInterventionPhotos(interventionId,files){
@@ -112,16 +112,16 @@ async function uploadInterventionPhotoJob(job){
   const interventionId=job.interventionId;
   let file=job.file;
   if(!file)throw new Error('FILE_LOCALE_MANCANTE: la foto non è più disponibile nella coda del dispositivo');
-  console.info('V112-36 FOTO',job.id,'compress_start',interventionId,file.size||0);
+  console.info('V112-37 FOTO',job.id,'compress_start',interventionId,file.size||0);
   file=await compressImage(file);
-  console.info('V112-36 FOTO',job.id,'compress_ok',file.size||0);
+  console.info('V112-37 FOTO',job.id,'compress_ok',file.size||0);
   const safe=(file.name||job.fileName||'foto.jpg').replace(/[^a-zA-Z0-9._-]/g,'-');
   const path=`interventi/${interventionId}/${job.id}-${safe}`;
   job.lastStage='storage_upload';await putUploadJob(job);
-  console.info('V112-36 FOTO',job.id,'storage_upload_start',path);
+  console.info('V112-37 FOTO',job.id,'storage_upload_start',path);
   const up=await sb.storage.from('documenti').upload(path,file,{upsert:true,cacheControl:'3600',contentType:file.type||job.mimeType||'image/jpeg'});
   if(up.error)throw new Error(`STORAGE_UPLOAD: ${up.error.message||up.error}`);
-  console.info('V112-36 FOTO',job.id,'storage_upload_ok',path);
+  console.info('V112-37 FOTO',job.id,'storage_upload_ok',path);
   job.lastStage='attachment_insert';await putUploadJob(job);
   let added;
   try{
@@ -131,14 +131,14 @@ async function uploadInterventionPhotoJob(job){
     throw new Error(`ATTACHMENT_INSERT: ${err?.message||err}`);
   }
   if(!added){try{await sb.storage.from('documenti').remove([path])}catch{};throw new Error('ATTACHMENT_INSERT: nessuna riga restituita da Supabase')}
-  console.info('V112-36 FOTO',job.id,'attachment_insert_ok',added.id);
+  console.info('V112-37 FOTO',job.id,'attachment_insert_ok',added.id);
   if(!attachments.some(a=>a.id===added.id||a.storage_path===added.storage_path))attachments.push(added);
   await deleteUploadJob(job.id);
   return added;
 }
 async function processUploadQueue(){
   if(uploadWorkerPromise)return uploadWorkerPromise;
-  if(!navigator.onLine||!session){updateSyncUi();return {processed:0,offline:!navigator.onLine}}
+  if(!session){updateSyncUi();return {processed:0,noSession:true}}
   uploadWorkerPromise=(async()=>{
     uploadWorkerRunning=true;updateSyncUi();let processed=0,failed=0;
     try{
@@ -156,7 +156,7 @@ async function processUploadQueue(){
           toast('✓ Foto sincronizzata');
         }catch(err){
           job.retries=(job.retries||0)+1;job.lastError=err?.message||String(err);job.failedAt=new Date().toISOString();await putUploadJob(job);failed++;
-          console.error('V112-36 FOTO FALLITA',{job_id:job.id,intervention_id:job.interventionId,stage:job.lastStage,retries:job.retries,error:job.lastError});
+          console.error('V112-37 FOTO FALLITA',{job_id:job.id,intervention_id:job.interventionId,stage:job.lastStage,retries:job.retries,error:job.lastError});
           await markInterventionPhotoUpload(job.interventionId,job.retries>=3?'error':'pending',job.lastError);
         }
       }
@@ -166,10 +166,10 @@ async function processUploadQueue(){
           if(st.ready){await markInterventionPhotoUpload(id,'synced',null);await flushReadyClosureNotifications(id)}
           const intervention=interventions.find(i=>i.id===id);
           if(intervention&&$('historyDialog')?.open&&currentHistoryStoreId===intervention.store_id){const store=stores.find(x=>x.id===intervention.store_id);if(store)await showHistory(store,true)}
-        }catch(syncErr){console.warn('V112-36: verifica finale foto fallita',syncErr?.message||syncErr)}
+        }catch(syncErr){console.warn('V112-37: verifica finale foto fallita',syncErr?.message||syncErr)}
       }
       return {processed,failed};
-    }finally{uploadWorkerRunning=false;updateSyncUi();try{const pending=(await getUploadJobs()).some(j=>(j.retries||0)<3);if(pending&&navigator.onLine)setTimeout(()=>processUploadQueue(),3000)}catch{}}
+    }finally{uploadWorkerRunning=false;updateSyncUi();try{const pending=(await getUploadJobs()).some(j=>(j.retries||0)<3);if(pending)setTimeout(()=>processUploadQueue(),3000)}catch{}}
   })();
   try{return await uploadWorkerPromise}finally{uploadWorkerPromise=null;flushReadyClosureNotifications().catch(()=>{})}
 }
@@ -177,11 +177,14 @@ async function retryUploads(){const jobs=await getUploadJobs();for(const j of jo
 async function updateSyncUi(){
   let jobs=[];try{jobs=await getUploadJobs()}catch{}
   const failed=jobs.filter(j=>(j.retries||0)>=3).length;
-  const text=uploadWorkerRunning?`⬆️ ${jobs.length} foto in caricamento…`:failed?`⚠️ ${failed} foto NON sincronizzate · premi per riprovare`:jobs.length?`☁️ ${jobs.length} foto in coda`:'🟢 Tutto sincronizzato';
+  const first=jobs[0]||null;
+  const stageLabel=first?.lastStage==='storage_upload'?'upload Storage':first?.lastStage==='attachment_insert'?'registrazione foto':first?.lastStage==='queued'?'preparazione':'sincronizzazione';
+  const text=uploadWorkerRunning?`⬆️ ${jobs.length} foto · ${stageLabel}…`:failed?`⚠️ ${failed} foto NON sincronizzate · premi per riprovare`:jobs.length?`☁️ ${jobs.length} foto in coda · nuovo tentativo automatico`:'🟢 Tutto sincronizzato';
   const background=$('backgroundSyncStatus');if(background)background.textContent=text;
   const badge=$('syncFloatingBadge');if(badge){badge.textContent=text;badge.classList.toggle('hidden',!jobs.length&&!uploadWorkerRunning);badge.classList.toggle('sync-error',!!failed);badge.onclick=failed?()=>retryUploads().catch(e=>alert(e.message)):null}
 }
 window.addEventListener('online',()=>processUploadQueue());
+// V112-37: navigator.onLine non blocca più gli upload; ogni tentativo verifica davvero Supabase.
 function ensureCloudSettingsUi(){
   const host=$('settingsView')||$('settingsScreen');if(!host)return;
   const wrap=host.querySelector('.settings-content')||host;
@@ -701,7 +704,7 @@ function auditHumanDescription(r){
 
   return r.description||`${auditActionLabel(action)} · ${auditEntityLabel(t)}`;
 }
-async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V112-36'}})}catch(e){console.warn('audit',e)}}
+async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V112-37'}})}catch(e){console.warn('audit',e)}}
 function auditViewOpen(name){if(!session?.user?.id)return;const labels={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:'Programmazione',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'};if(labels[name])writeClientAudit('VIEW','navigation',`Aperta pagina ${labels[name]}`,{view:name})}
 function renderAuditUsers(){const sel=$('auditUser');if(!sel)return;const cur=sel.value||'all';sel.innerHTML='<option value="all">Tutti gli utenti</option>';[...profiles].sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.nome||p.email||p.id;sel.appendChild(o)});if([...sel.options].some(o=>o.value===cur))sel.value=cur}
 async function openAuditView(){if(!admin())return setView('dashboard');renderAuditUsers();await loadAuditLogs(true)}
@@ -3627,7 +3630,7 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
     let photoSync=null;
     if(files.length){
       btn.textContent=`Sincronizzo ${files.length} foto…`;
-      try{photoSync=await enqueueInterventionPhotos(data.id,files)}catch(photoErr){console.error('V112-36: sincronizzazione immediata fallita',photoErr);photoSync={ready:false,error:photoErr?.message||String(photoErr)}}
+      try{photoSync=await enqueueInterventionPhotos(data.id,files)}catch(photoErr){console.error('V112-37: sincronizzazione immediata fallita',photoErr);photoSync={ready:false,error:photoErr?.message||String(photoErr)}}
     }
     if(!continueAnotherDay&&!files.length){const ok=await notifyAdminClosure('intervention',data.id,0);if(ok)await sb.from('interventions').update({photo_sync_notified_at:new Date().toISOString(),foto_sincronizzate:priorPhotoCount,photo_upload_status:'none',photo_upload_error:null,photo_upload_updated_at:new Date().toISOString()}).eq('id',data.id)}
     if(!continueAnotherDay&&files.length&&photoSync?.ready)await flushReadyClosureNotifications(data.id);

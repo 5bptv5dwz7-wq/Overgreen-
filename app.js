@@ -23,7 +23,7 @@ let donePhotoFiles=[];
 let closeExtraPhotoFiles=[];
 let activityCompletePhotoFiles=[];
 
-// ---- V112-35 · Notifiche push amministratore + deep link PWA corretto ----
+// ---- V112-36 · Push + sincronizzazione foto robusta ----
 const PUSH_VAPID_PUBLIC_KEY='BDOq-eaSnfxLf1MBpFqfu02KfKS6G166bX02n-etWusn2JGZjpWVqDlMN3nuH7hf2ts13EZCV4UJ_hm2IevChQo';
 let notificationDeepLinkHandled=false;
 function pushKeyBytes(base64String){const padding='='.repeat((4-base64String.length%4)%4),base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/'),raw=atob(base64);return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)))}
@@ -53,7 +53,7 @@ async function toggleAdminPushNotifications(){
 }
 async function notifyAdminClosure(kind,id,photoCount=0){
   if(profile?.ruolo==='admin'||!id)return false;
-  try{const {data,error}=await sb.functions.invoke('notify-admin-closure',{body:{kind,id,photo_count:Number(photoCount)||0}});if(error)throw error;if(data?.error)throw new Error(data.error);return true}catch(err){console.warn('Notifica push non inviata:',err?.message||err);return false}
+  try{const {data,error}=await sb.functions.invoke('notify-admin-closure',{body:{kind,id,photo_count:Number(photoCount)||0}});if(error)throw error;if(data?.error)throw new Error(data.error);if(data?.waiting_photos||Number(data?.sent)===0)return false;return true}catch(err){console.warn('Notifica push non inviata:',err?.message||err);return false}
 }
 function handleNotificationDeepLink(){
   if(notificationDeepLinkHandled)return;const u=new URL(location.href),kind=u.searchParams.get('notificationKind'),id=u.searchParams.get('notificationId');if(!kind||!id)return;notificationDeepLinkHandled=true;
@@ -82,61 +82,106 @@ async function flushReadyClosureNotifications(interventionId=null){
   }
 }
 
-// ---- Coda persistente per caricamenti in background ----
+// ---- V112-36 · Coda persistente + upload immediato verificato ----
 const UPLOAD_DB='overgreen-upload-queue-v1', UPLOAD_STORE='jobs';
-let uploadWorkerRunning=false;
+let uploadWorkerRunning=false,uploadWorkerPromise=null;
 function openUploadDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(UPLOAD_DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(UPLOAD_STORE))r.result.createObjectStore(UPLOAD_STORE,{keyPath:'id'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
 async function queueTx(mode,fn){const db=await openUploadDb();return new Promise((resolve,reject)=>{const tx=db.transaction(UPLOAD_STORE,mode),st=tx.objectStore(UPLOAD_STORE);let out;try{out=fn(st)}catch(e){reject(e);return}tx.oncomplete=()=>resolve(out);tx.onerror=()=>reject(tx.error)})}
 async function getUploadJobs(){const db=await openUploadDb();return new Promise((resolve,reject)=>{const tx=db.transaction(UPLOAD_STORE,'readonly'),r=tx.objectStore(UPLOAD_STORE).getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error)})}
 async function putUploadJob(job){await queueTx('readwrite',st=>st.put(job));updateSyncUi()}
 async function deleteUploadJob(id){await queueTx('readwrite',st=>st.delete(id));updateSyncUi()}
+async function markInterventionPhotoUpload(interventionId,status,errorText=null){
+  if(!interventionId)return;
+  const payload={photo_upload_status:status,photo_upload_error:errorText||null,photo_upload_updated_at:new Date().toISOString()};
+  const r=await sb.from('interventions').update(payload).eq('id',interventionId);
+  if(r.error)console.warn('V112-36: stato upload foto non aggiornato',r.error.message);
+  const local=interventions.find(i=>i.id===interventionId);if(local)Object.assign(local,payload);
+}
 async function enqueueInterventionPhotos(interventionId,files){
+  if(!files?.length)return {queued:0};
+  await markInterventionPhotoUpload(interventionId,'pending',null);
   for(let n=0;n<files.length;n++){
     const f=files[n];
-    await putUploadJob({id:crypto.randomUUID(),kind:'intervention-photo',interventionId,actorProfileId:profile?.id||null,file:f,fileName:f.name||`foto-${n+1}.jpg`,mimeType:f.type||'image/jpeg',createdAt:Date.now(),retries:0,lastError:''});
+    await putUploadJob({id:crypto.randomUUID(),kind:'intervention-photo',interventionId,actorProfileId:profile?.id||null,file:f,fileName:f.name||`foto-${n+1}.jpg`,mimeType:f.type||'image/jpeg',createdAt:Date.now()+n,retries:0,lastError:'',lastStage:'queued'});
   }
-  processUploadQueue();
+  await processUploadQueue();
+  const state=await interventionPhotoSyncState(interventionId);
+  return {queued:files.length,...state};
+}
+async function uploadInterventionPhotoJob(job){
+  const interventionId=job.interventionId;
+  let file=job.file;
+  if(!file)throw new Error('FILE_LOCALE_MANCANTE: la foto non è più disponibile nella coda del dispositivo');
+  console.info('V112-36 FOTO',job.id,'compress_start',interventionId,file.size||0);
+  file=await compressImage(file);
+  console.info('V112-36 FOTO',job.id,'compress_ok',file.size||0);
+  const safe=(file.name||job.fileName||'foto.jpg').replace(/[^a-zA-Z0-9._-]/g,'-');
+  const path=`interventi/${interventionId}/${job.id}-${safe}`;
+  job.lastStage='storage_upload';await putUploadJob(job);
+  console.info('V112-36 FOTO',job.id,'storage_upload_start',path);
+  const up=await sb.storage.from('documenti').upload(path,file,{upsert:true,cacheControl:'3600',contentType:file.type||job.mimeType||'image/jpeg'});
+  if(up.error)throw new Error(`STORAGE_UPLOAD: ${up.error.message||up.error}`);
+  console.info('V112-36 FOTO',job.id,'storage_upload_ok',path);
+  job.lastStage='attachment_insert';await putUploadJob(job);
+  let added;
+  try{
+    added=await addAttachment({tipo:'foto_generica',intervention_id:interventionId,storage_path:path,nome_file:file.name||job.fileName,mime_type:file.type||job.mimeType,dimensione_bytes:file.size,caricato_da:job.actorProfileId||profile.id});
+  }catch(err){
+    try{await sb.storage.from('documenti').remove([path])}catch{}
+    throw new Error(`ATTACHMENT_INSERT: ${err?.message||err}`);
+  }
+  if(!added){try{await sb.storage.from('documenti').remove([path])}catch{};throw new Error('ATTACHMENT_INSERT: nessuna riga restituita da Supabase')}
+  console.info('V112-36 FOTO',job.id,'attachment_insert_ok',added.id);
+  if(!attachments.some(a=>a.id===added.id||a.storage_path===added.storage_path))attachments.push(added);
+  await deleteUploadJob(job.id);
+  return added;
 }
 async function processUploadQueue(){
-  if(uploadWorkerRunning||!navigator.onLine||!session)return;
-  uploadWorkerRunning=true;updateSyncUi();
-  try{
-    const jobs=(await getUploadJobs()).sort((a,b)=>a.createdAt-b.createdAt);
-    for(const job of jobs){
-      try{
-        let file=job.file;
-        if(job.kind==='intervention-photo')file=await compressImage(file);
-        const safe=(file.name||job.fileName||'file').replace(/[^a-zA-Z0-9._-]/g,'-');
-        const path=`interventi/${job.interventionId}/${Date.now()}-${safe}`;
-        await uploadFile(path,file);
-        const added=await addAttachment({tipo:'foto_generica',intervention_id:job.interventionId,storage_path:path,nome_file:file.name||job.fileName,mime_type:file.type||job.mimeType,dimensione_bytes:file.size,caricato_da:job.actorProfileId||profile.id});
-        if(added&&!attachments.some(a=>a.storage_path===added.storage_path))attachments.push(added);
-        await deleteUploadJob(job.id);
-        try{await interventionPhotoSyncState(job.interventionId);await flushReadyClosureNotifications(job.interventionId)}catch(syncErr){console.warn('Verifica sincronizzazione foto fallita:',syncErr?.message||syncErr)}
-        toast('✓ Foto sincronizzata');
-        const intervention=interventions.find(i=>i.id===job.interventionId);
-        if(intervention&&$('historyDialog')?.open&&currentHistoryStoreId===intervention.store_id){
-          const st=stores.find(x=>x.id===intervention.store_id);
-          if(st)await showHistory(st,true);
+  if(uploadWorkerPromise)return uploadWorkerPromise;
+  if(!navigator.onLine||!session){updateSyncUi();return {processed:0,offline:!navigator.onLine}}
+  uploadWorkerPromise=(async()=>{
+    uploadWorkerRunning=true;updateSyncUi();let processed=0,failed=0;
+    try{
+      const jobs=(await getUploadJobs()).sort((a,b)=>a.createdAt-b.createdAt);
+      const touched=new Set();
+      for(const job of jobs){
+        if(job.kind!=='intervention-photo')continue;
+        touched.add(job.interventionId);
+        if((job.retries||0)>=3){failed++;continue}
+        try{
+          await markInterventionPhotoUpload(job.interventionId,'syncing',null);
+          await uploadInterventionPhotoJob(job);processed++;
+          const st=await interventionPhotoSyncState(job.interventionId);
+          if(st.ready)await markInterventionPhotoUpload(job.interventionId,'synced',null);
+          toast('✓ Foto sincronizzata');
+        }catch(err){
+          job.retries=(job.retries||0)+1;job.lastError=err?.message||String(err);job.failedAt=new Date().toISOString();await putUploadJob(job);failed++;
+          console.error('V112-36 FOTO FALLITA',{job_id:job.id,intervention_id:job.interventionId,stage:job.lastStage,retries:job.retries,error:job.lastError});
+          await markInterventionPhotoUpload(job.interventionId,job.retries>=3?'error':'pending',job.lastError);
         }
-      }catch(err){
-        job.retries=(job.retries||0)+1;job.lastError=err?.message||String(err);await putUploadJob(job);
-        if(job.retries>=3)break;
       }
-    }
-  }finally{uploadWorkerRunning=false;updateSyncUi();flushReadyClosureNotifications().catch(()=>{})}
+      for(const id of touched){
+        try{
+          const st=await interventionPhotoSyncState(id);
+          if(st.ready){await markInterventionPhotoUpload(id,'synced',null);await flushReadyClosureNotifications(id)}
+          const intervention=interventions.find(i=>i.id===id);
+          if(intervention&&$('historyDialog')?.open&&currentHistoryStoreId===intervention.store_id){const store=stores.find(x=>x.id===intervention.store_id);if(store)await showHistory(store,true)}
+        }catch(syncErr){console.warn('V112-36: verifica finale foto fallita',syncErr?.message||syncErr)}
+      }
+      return {processed,failed};
+    }finally{uploadWorkerRunning=false;updateSyncUi();try{const pending=(await getUploadJobs()).some(j=>(j.retries||0)<3);if(pending&&navigator.onLine)setTimeout(()=>processUploadQueue(),3000)}catch{}}
+  })();
+  try{return await uploadWorkerPromise}finally{uploadWorkerPromise=null;flushReadyClosureNotifications().catch(()=>{})}
 }
-async function retryUploads(){const jobs=await getUploadJobs();for(const j of jobs){j.retries=0;j.lastError='';await putUploadJob(j)}processUploadQueue()}
+async function retryUploads(){const jobs=await getUploadJobs();for(const j of jobs){j.retries=0;j.lastError='';j.lastStage='queued';await putUploadJob(j);await markInterventionPhotoUpload(j.interventionId,'pending',null)}return processUploadQueue()}
 async function updateSyncUi(){
   let jobs=[];try{jobs=await getUploadJobs()}catch{}
   const failed=jobs.filter(j=>(j.retries||0)>=3).length;
-  const text=uploadWorkerRunning?`⬆️ ${jobs.length} foto in caricamento…`:failed?`⚠️ ${failed} caricamenti da riprovare`:jobs.length?`☁️ ${jobs.length} foto in coda`:'🟢 Tutto sincronizzato';
-  const background=$('backgroundSyncStatus');if(background)background.textContent=text
-  const badge=$('syncFloatingBadge');if(badge){badge.textContent=text;badge.classList.toggle('hidden',!jobs.length&&!uploadWorkerRunning)}
+  const text=uploadWorkerRunning?`⬆️ ${jobs.length} foto in caricamento…`:failed?`⚠️ ${failed} foto NON sincronizzate · premi per riprovare`:jobs.length?`☁️ ${jobs.length} foto in coda`:'🟢 Tutto sincronizzato';
+  const background=$('backgroundSyncStatus');if(background)background.textContent=text;
+  const badge=$('syncFloatingBadge');if(badge){badge.textContent=text;badge.classList.toggle('hidden',!jobs.length&&!uploadWorkerRunning);badge.classList.toggle('sync-error',!!failed);badge.onclick=failed?()=>retryUploads().catch(e=>alert(e.message)):null}
 }
-window.addEventListener('online',processUploadQueue);
-
-// ---- Impostazioni account e dipendenti ----
+window.addEventListener('online',()=>processUploadQueue());
 function ensureCloudSettingsUi(){
   const host=$('settingsView')||$('settingsScreen');if(!host)return;
   const wrap=host.querySelector('.settings-content')||host;
@@ -656,7 +701,7 @@ function auditHumanDescription(r){
 
   return r.description||`${auditActionLabel(action)} · ${auditEntityLabel(t)}`;
 }
-async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V112-35'}})}catch(e){console.warn('audit',e)}}
+async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V112-36'}})}catch(e){console.warn('audit',e)}}
 function auditViewOpen(name){if(!session?.user?.id)return;const labels={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:'Programmazione',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'};if(labels[name])writeClientAudit('VIEW','navigation',`Aperta pagina ${labels[name]}`,{view:name})}
 function renderAuditUsers(){const sel=$('auditUser');if(!sel)return;const cur=sel.value||'all';sel.innerHTML='<option value="all">Tutti gli utenti</option>';[...profiles].sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.nome||p.email||p.id;sel.appendChild(o)});if([...sel.options].some(o=>o.value===cur))sel.value=cur}
 async function openAuditView(){if(!admin())return setView('dashboard');renderAuditUsers();await loadAuditLogs(true)}
@@ -3535,7 +3580,7 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
       const tagged=dayNote?`[${fmt(day)}] ${dayNote}`:'';
       const mergedNotes=[previousNotes,tagged].filter(Boolean).join('\n');
       const ids=[...(existingOpen.schedule_item_ids||[])];if(scheduleItemId&&!ids.includes(scheduleItemId))ids.push(scheduleItemId);
-      const update={data_fine:day,note:mergedNotes||null,next_visit_note:nextVisitNote||null,multi_day_open:continueAnotherDay,schedule_item_ids:ids,closed_by:continueAnotherDay?null:profile.id,closed_at:continueAnotherDay?null:new Date().toISOString(),stato:continueAnotherDay?existingOpen.stato:(admin()?'convalidato':'in_attesa'),convalidato_da:continueAnotherDay?existingOpen.convalidato_da:(admin()?profile.id:null),convalidato_il:continueAnotherDay?existingOpen.convalidato_il:(admin()?new Date().toISOString():null),foto_attese:priorPhotoCount+files.length,foto_sincronizzate:priorPhotoCount,photo_sync_notified_at:continueAnotherDay?existingOpen.photo_sync_notified_at:null};
+      const update={data_fine:day,note:mergedNotes||null,next_visit_note:nextVisitNote||null,multi_day_open:continueAnotherDay,schedule_item_ids:ids,closed_by:continueAnotherDay?null:profile.id,closed_at:continueAnotherDay?null:new Date().toISOString(),stato:continueAnotherDay?existingOpen.stato:(admin()?'convalidato':'in_attesa'),convalidato_da:continueAnotherDay?existingOpen.convalidato_da:(admin()?profile.id:null),convalidato_il:continueAnotherDay?existingOpen.convalidato_il:(admin()?new Date().toISOString():null),foto_attese:priorPhotoCount+files.length,foto_sincronizzate:priorPhotoCount,photo_sync_notified_at:continueAnotherDay?existingOpen.photo_sync_notified_at:null,photo_upload_status:files.length?'pending':(priorPhotoCount?'synced':'none'),photo_upload_error:null,photo_upload_updated_at:new Date().toISOString()};
       const r=await sb.from('interventions').update(update).eq('id',existingOpen.id).select().single();if(r.error)throw r.error;data=r.data;
       if(!continueAnotherDay){
         const {data:stillOpen,error:verifyError}=await sb.from('interventions').select('id').eq('store_id',storeId).eq('multi_day_open',true);
@@ -3551,7 +3596,7 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
       const idx=interventions.findIndex(x=>x.id===data.id);if(idx>=0)interventions[idx]=data;
     }else{
       const initialNote=continueAnotherDay&&dayNote?`[${fmt(day)}] ${dayNote}`:(dayNote||null);
-      const payload={store_id:storeId,schedule_item_id:scheduleItemId,data_intervento:day,data_fine:day,note:initialNote,next_visit_note:nextVisitNote||null,multi_day_open:continueAnotherDay,schedule_item_ids:scheduleItemId?[scheduleItemId]:[],stato:admin()?'convalidato':'in_attesa',inserito_da:profile.id,convalidato_da:admin()?profile.id:null,convalidato_il:admin()?new Date().toISOString():null,closed_by:continueAnotherDay?null:profile.id,closed_at:continueAnotherDay?null:new Date().toISOString(),foto_attese:files.length,foto_sincronizzate:0,photo_sync_notified_at:null};
+      const payload={store_id:storeId,schedule_item_id:scheduleItemId,data_intervento:day,data_fine:day,note:initialNote,next_visit_note:nextVisitNote||null,multi_day_open:continueAnotherDay,schedule_item_ids:scheduleItemId?[scheduleItemId]:[],stato:admin()?'convalidato':'in_attesa',inserito_da:profile.id,convalidato_da:admin()?profile.id:null,convalidato_il:admin()?new Date().toISOString():null,closed_by:continueAnotherDay?null:profile.id,closed_at:continueAnotherDay?null:new Date().toISOString(),foto_attese:files.length,foto_sincronizzate:0,photo_sync_notified_at:null,photo_upload_status:files.length?'pending':'none',photo_upload_error:null,photo_upload_updated_at:new Date().toISOString()};
       let r=await sb.from('interventions').insert(payload).select().single();
       // V112-31: seconda rete di sicurezza contro una race condition. Se la voce di
       // programmazione sparisce tra il controllo sopra e l'INSERT, ritenta senza FK.
@@ -3579,11 +3624,17 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
     }
     if(!continueAnotherDay&&admin()){const r=await sb.from('stores').update({ultimo_passaggio:day,next_visit_note:nextVisitNote||null}).eq('id',storeId);if(r.error)throw r.error}
     if(!continueAnotherDay&&linkedIncludedExtras.length){const includedState=admin()?'completato':'in_attesa',now=new Date().toISOString(),r=await sb.from('extras').update({stato:includedState,giorno_intervento:day,closed_by:profile.id,closed_at:admin()?now:null,convalidato_da:admin()?profile.id:null,convalidato_il:admin()?now:null}).in('id',linkedIncludedExtras.map(e=>e.id));if(r.error)throw new Error('Intervento salvato, ma aggiornamento ticket/target incluso non riuscito: '+r.error.message)}
-    donePhotoFiles=[];renderDonePhotoSelection();$('doneDialog').close();toast(continueAnotherDay?'Giornata salvata · intervento ancora aperto':files.length?`Intervento salvato · ${files.length} foto in caricamento`:admin()?'Intervento convalidato':'Inviato a Lorenzo');renderSchedules();renderDashboard();
+    let photoSync=null;
+    if(files.length){
+      btn.textContent=`Sincronizzo ${files.length} foto…`;
+      try{photoSync=await enqueueInterventionPhotos(data.id,files)}catch(photoErr){console.error('V112-36: sincronizzazione immediata fallita',photoErr);photoSync={ready:false,error:photoErr?.message||String(photoErr)}}
+    }
+    if(!continueAnotherDay&&!files.length){const ok=await notifyAdminClosure('intervention',data.id,0);if(ok)await sb.from('interventions').update({photo_sync_notified_at:new Date().toISOString(),foto_sincronizzate:priorPhotoCount,photo_upload_status:'none',photo_upload_error:null,photo_upload_updated_at:new Date().toISOString()}).eq('id',data.id)}
+    if(!continueAnotherDay&&files.length&&photoSync?.ready)await flushReadyClosureNotifications(data.id);
+    donePhotoFiles=[];renderDonePhotoSelection();$('doneDialog').close();
+    if(files.length&&!photoSync?.ready){toast('⚠️ Intervento salvato, ma alcune foto NON sono sincronizzate');const extraErr=photoSync?.error?`\n\nErrore: ${photoSync.error}`:'';alert(`Intervento salvato, ma le foto non sono ancora tutte su Supabase.\n\nNon serve rifare l’intervento: le foto restano nella coda del telefono e Overgreen ritenterà automaticamente.\n\nApri Impostazioni → Sincronizzazione se compare “foto NON sincronizzate”.${extraErr}`)}else toast(continueAnotherDay?'Giornata salvata · intervento ancora aperto':files.length?`Intervento salvato · ${photoSync?.actual||files.length}/${photoSync?.expected||files.length} foto sincronizzate`:admin()?'Intervento convalidato':'Inviato a Lorenzo');
     try{await loadAll()}catch(refreshErr){console.warn('Aggiornamento dati non riuscito dopo il salvataggio:',refreshErr)}
-    if(files.length)enqueueInterventionPhotos(data.id,files).catch(err=>{console.error(err);toast('⚠️ Foto in attesa di sincronizzazione')});
-    if(!continueAnotherDay&&!files.length){const ok=await notifyAdminClosure('intervention',data.id,0);if(ok)await sb.from('interventions').update({photo_sync_notified_at:new Date().toISOString(),foto_sincronizzate:priorPhotoCount}).eq('id',data.id)}
-    if(!continueAnotherDay&&files.length)flushReadyClosureNotifications(data.id).catch(()=>{});
+    renderSchedules();renderDashboard();
     if(!continueAnotherDay&&linkedExtrasToClose.length){combinedExtraClosureQueue=linkedExtrasToClose.map(x=>({id:x.id}));setTimeout(()=>openNextCombinedExtraClosure(),250)}
   }catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=oldText}
 }

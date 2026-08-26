@@ -23,6 +23,7 @@ let donePhotoFiles=[];
 let closeExtraPhotoFiles=[];
 let activityCompletePhotoFiles=[];
 
+// ---- V112-38 · Extra già creati aggiungibili/spostabili nelle giornate esistenti ----
 // ---- V112-37 · Upload foto senza dipendenza da navigator.onLine ----
 const PUSH_VAPID_PUBLIC_KEY='BDOq-eaSnfxLf1MBpFqfu02KfKS6G166bX02n-etWusn2JGZjpWVqDlMN3nuH7hf2ts13EZCV4UJ_hm2IevChQo';
 let notificationDeepLinkHandled=false;
@@ -704,7 +705,7 @@ function auditHumanDescription(r){
 
   return r.description||`${auditActionLabel(action)} · ${auditEntityLabel(t)}`;
 }
-async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V112-37'}})}catch(e){console.warn('audit',e)}}
+async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V112-38'}})}catch(e){console.warn('audit',e)}}
 function auditViewOpen(name){if(!session?.user?.id)return;const labels={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:'Programmazione',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'};if(labels[name])writeClientAudit('VIEW','navigation',`Aperta pagina ${labels[name]}`,{view:name})}
 function renderAuditUsers(){const sel=$('auditUser');if(!sel)return;const cur=sel.value||'all';sel.innerHTML='<option value="all">Tutti gli utenti</option>';[...profiles].sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.nome||p.email||p.id;sel.appendChild(o)});if([...sel.options].some(o=>o.value===cur))sel.value=cur}
 async function openAuditView(){if(!admin())return setView('dashboard');renderAuditUsers();await loadAuditLogs(true)}
@@ -2736,9 +2737,15 @@ function renderAddSchedulePicker(){
   const selected=new Set([...box.querySelectorAll('input:checked')].map(x=>x.value));box.innerHTML='';
   const available=stores.filter(st=>!already.has(st.id)&&[st.nome,st.citta,st.indirizzo,storeSiteTypeLabel(st)].some(v=>String(v||'').toLowerCase().includes(q))).sort((a,b)=>String(a.nome||'').localeCompare(String(b.nome||''),'it'));
   for(const st of available){const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${st.id}" ${selected.has(st.id)?'checked':''}><span><strong>${esc(st.nome)}</strong><br><small>${esc([storeSiteTypeLabel(st),st.citta,st.indirizzo].filter(Boolean).join(' · '))}</small></span>`;box.appendChild(l)}
-  const standalone=standaloneExtrasForPlanner().filter(e=>!q||schedulePlannerExtraSearchText(e).includes(q)).sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||''),'it'));
-  for(const e of standalone){const value=`extra:${e.id}`,l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${value}" ${selected.has(value)?'checked':''}><span><strong>🔧 ${esc(e.titolo||'Extra')}</strong><br><small>${esc([clientLabel(e),e.numero_target?`Target/Ticket ${e.numero_target}`:null,e.nome_esterno||e.indirizzo_esterno||'Extra senza sede'].filter(Boolean).join(' · '))}</small></span>`;box.appendChild(l)}
-  if(!available.length&&!standalone.length)box.innerHTML='<p class="muted">Nessun altro lavoro disponibile.</p>';
+  const existingExtras=existingExtrasForSchedulePicker(scheduleId).filter(e=>!q||schedulePlannerExtraSearchText(e).includes(q)).sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||''),'it'));
+  for(const e of existingExtras){
+    const value=`extra:${e.id}`,l=document.createElement('label'),st=stores.find(s=>s.id===e.store_id),oldSchedule=e.schedule_id?schedules.find(s=>s.id===e.schedule_id):null;
+    const oldDate=oldSchedule?.giorno||e.giorno_intervento||null;
+    const placement=oldSchedule?`⚠ Già programmato il ${fmt(oldDate)} · verrà spostato in questa giornata`:oldDate?`Data attuale ${fmt(oldDate)} · verrà assegnato a questa giornata`:'Extra aperto · non ancora programmato';
+    l.innerHTML=`<input type="checkbox" value="${value}" ${selected.has(value)?'checked':''}><span><strong>🔧 ${esc(e.titolo||'Extra')}</strong><br><small>${esc([clientLabel(e),e.numero_target?`Target/Ticket ${e.numero_target}`:null,st?.nome||e.nome_esterno||e.indirizzo_esterno||'Extra senza sede'].filter(Boolean).join(' · '))}</small><br><small class="muted">${esc(placement)}</small></span>`;
+    box.appendChild(l)
+  }
+  if(!available.length&&!existingExtras.length)box.innerHTML='<p class="muted">Nessun altro lavoro disponibile.</p>';
 }
 function extraMatchesScheduleDate(e){
   if(scheduleExactDate)return e.giorno_intervento===scheduleExactDate;
@@ -2959,8 +2966,21 @@ async function unlinkExtraFromSchedule(extra){
 function standaloneExtrasForPlanner(){
   return extras.filter(e=>!e.schedule_id&&!e.schedule_item_id&&!e.con_ordinario&&!['completato','in_attesa'].includes(e.stato)&&!extraIsScheduled(e));
 }
+// V112-38: nella modifica di una giornata già creata devono essere selezionabili anche
+// gli extra già esistenti che hanno già data/operatori o che sono programmati in un'altra giornata.
+// Restano esclusi solo gli extra inclusi nell'ordinario, quelli già chiusi/in attesa e quelli
+// collegati direttamente a uno schedule_item ordinario.
+function existingExtrasForSchedulePicker(scheduleId){
+  return extras.filter(e=>
+    !e.schedule_item_id &&
+    !e.con_ordinario &&
+    !['completato','in_attesa'].includes(e.stato) &&
+    e.schedule_id!==scheduleId
+  );
+}
 function schedulePlannerExtraSearchText(e){
-  return [e.titolo,e.numero_target,e.descrizione,e.nome_esterno,e.indirizzo_esterno,clientLabel(e),extraCategoryLabel(e)].filter(Boolean).join(' ').toLowerCase();
+  const st=stores.find(s=>s.id===e.store_id);
+  return [e.titolo,e.numero_target,e.descrizione,e.nome_esterno,e.indirizzo_esterno,clientLabel(e),extraCategoryLabel(e),st?.nome,st?.citta,st?.indirizzo].filter(Boolean).join(' ').toLowerCase();
 }
 function renderSchedulePicker(){
   const q=String($('scheduleSearch')?.value||'').trim().toLowerCase(),w=$('scheduleStores');if(!w)return;
@@ -3653,6 +3673,17 @@ $('addScheduleItemsForm').onsubmit=async e=>{
   const siblings=scheduleItems.filter(i=>i.schedule_id===scheduleId),maxPosition=siblings.reduce((m,i)=>Math.max(m,Number(i.posizione)||0),0);
   const sch=schedules.find(x=>x.id===scheduleId),members=scheduleMembers.filter(m=>m.schedule_id===scheduleId).map(m=>m.profile_id);
   let linkedCount=0;
+
+  // V112-38: se l'extra era già assegnato a un'altra giornata/data, lo spostamento deve essere esplicito.
+  const movingExtras=extraIds.map(id=>extras.find(x=>x.id===id)).filter(Boolean).filter(ex=>{
+    if(ex.schedule_id&&ex.schedule_id!==scheduleId)return true;
+    return !!(ex.giorno_intervento&&sch?.giorno&&ex.giorno_intervento!==sch.giorno&&extraIsScheduled(ex));
+  });
+  if(movingExtras.length){
+    const lines=movingExtras.slice(0,8).map(ex=>{const oldSch=ex.schedule_id?schedules.find(s=>s.id===ex.schedule_id):null;const d=oldSch?.giorno||ex.giorno_intervento;return `• ${ex.titolo||'Extra'}${d?` · ${fmt(d)}`:''}`});
+    if(movingExtras.length>8)lines.push(`• …e altri ${movingExtras.length-8}`);
+    if(!confirm(`Hai selezionato ${movingExtras.length===1?'un extra già programmato':'degli extra già programmati'}.\n\n${lines.join('\n')}\n\nVuoi spostar${movingExtras.length===1?'lo':'li'} nella giornata del ${fmt(sch?.giorno)} e assegnar${movingExtras.length===1?'lo':'li'} alla squadra di questa giornata?`))return;
+  }
 
   if(storeIds.length){
     const {data:inserted,error}=await sb.from('schedule_items').insert(storeIds.map((store_id,i)=>({schedule_id:scheduleId,tipo:'ordinario',store_id,posizione:maxPosition+i+1,stato:'da_fare'}))).select();

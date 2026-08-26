@@ -23,7 +23,7 @@ let donePhotoFiles=[];
 let closeExtraPhotoFiles=[];
 let activityCompletePhotoFiles=[];
 
-// ---- V112-34 · Notifiche push amministratore + deep link PWA corretto ----
+// ---- V112-35 · Notifiche push amministratore + deep link PWA corretto ----
 const PUSH_VAPID_PUBLIC_KEY='BDOq-eaSnfxLf1MBpFqfu02KfKS6G166bX02n-etWusn2JGZjpWVqDlMN3nuH7hf2ts13EZCV4UJ_hm2IevChQo';
 let notificationDeepLinkHandled=false;
 function pushKeyBytes(base64String){const padding='='.repeat((4-base64String.length%4)%4),base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/'),raw=atob(base64);return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)))}
@@ -52,12 +52,34 @@ async function toggleAdminPushNotifications(){
   }catch(err){alert(err.message||String(err))}finally{btn.disabled=false;refreshPushSettingsUi()}
 }
 async function notifyAdminClosure(kind,id,photoCount=0){
-  if(profile?.ruolo==='admin'||!id)return;
-  try{const {data,error}=await sb.functions.invoke('notify-admin-closure',{body:{kind,id,photo_count:Number(photoCount)||0}});if(error)throw error;if(data?.error)throw new Error(data.error)}catch(err){console.warn('Notifica push non inviata:',err?.message||err)}
+  if(profile?.ruolo==='admin'||!id)return false;
+  try{const {data,error}=await sb.functions.invoke('notify-admin-closure',{body:{kind,id,photo_count:Number(photoCount)||0}});if(error)throw error;if(data?.error)throw new Error(data.error);return true}catch(err){console.warn('Notifica push non inviata:',err?.message||err);return false}
 }
 function handleNotificationDeepLink(){
   if(notificationDeepLinkHandled)return;const u=new URL(location.href),kind=u.searchParams.get('notificationKind'),id=u.searchParams.get('notificationId');if(!kind||!id)return;notificationDeepLinkHandled=true;
   setTimeout(()=>{try{if(kind==='extra')openExtraById(id);else if(kind==='intervention'){const i=interventions.find(x=>x.id===id),st=stores.find(x=>x.id===i?.store_id);if(st)showHistory(st)}}catch(e){console.warn('Apertura notifica fallita',e)}finally{u.searchParams.delete('notificationKind');u.searchParams.delete('notificationId');history.replaceState(null,'',u.pathname+u.search+u.hash)}},350);
+}
+
+// V112-35: una chiusura ordinaria con foto diventa notificabile/convalidabile solo
+// quando il numero di foto realmente registrate su Supabase raggiunge quello atteso.
+async function interventionPhotoSyncState(interventionId){
+  const [ir,ar]=await Promise.all([
+    sb.from('interventions').select('id,stato,closed_by,foto_attese,foto_sincronizzate,photo_sync_notified_at').eq('id',interventionId).maybeSingle(),
+    sb.from('attachments').select('id',{count:'exact',head:true}).eq('intervention_id',interventionId).eq('tipo','foto_generica')
+  ]);
+  if(ir.error)throw ir.error;if(ar.error)throw ar.error;
+  const expected=Math.max(0,Number(ir.data?.foto_attese)||0),actual=Math.max(0,Number(ar.count)||0);
+  if(ir.data&&Number(ir.data.foto_sincronizzate)!==actual){const u=await sb.from('interventions').update({foto_sincronizzate:actual}).eq('id',interventionId);if(u.error)console.warn('Contatore foto non aggiornato:',u.error.message)}
+  return {intervention:ir.data,expected,actual,ready:actual>=expected};
+}
+async function flushReadyClosureNotifications(interventionId=null){
+  if(!session||!profile||profile.ruolo==='admin')return;
+  let q=sb.from('interventions').select('id,stato,closed_by,foto_attese,foto_sincronizzate,photo_sync_notified_at').eq('closed_by',profile.id).eq('stato','in_attesa').is('photo_sync_notified_at',null);
+  if(interventionId)q=q.eq('id',interventionId);
+  const {data,error}=await q;if(error){console.warn('Controllo notifiche foto fallito:',error.message);return}
+  for(const i of data||[]){
+    try{const st=await interventionPhotoSyncState(i.id);if(!st.ready)continue;const ok=await notifyAdminClosure('intervention',i.id,st.actual);if(ok){const r=await sb.from('interventions').update({photo_sync_notified_at:new Date().toISOString(),foto_sincronizzate:st.actual}).eq('id',i.id).is('photo_sync_notified_at',null);if(r.error)console.warn('Flag notifica foto non aggiornato:',r.error.message)}}catch(err){console.warn('Notifica intervento pronta non inviata:',err?.message||err)}
+  }
 }
 
 // ---- Coda persistente per caricamenti in background ----
@@ -90,6 +112,7 @@ async function processUploadQueue(){
         const added=await addAttachment({tipo:'foto_generica',intervention_id:job.interventionId,storage_path:path,nome_file:file.name||job.fileName,mime_type:file.type||job.mimeType,dimensione_bytes:file.size,caricato_da:job.actorProfileId||profile.id});
         if(added&&!attachments.some(a=>a.storage_path===added.storage_path))attachments.push(added);
         await deleteUploadJob(job.id);
+        try{await interventionPhotoSyncState(job.interventionId);await flushReadyClosureNotifications(job.interventionId)}catch(syncErr){console.warn('Verifica sincronizzazione foto fallita:',syncErr?.message||syncErr)}
         toast('✓ Foto sincronizzata');
         const intervention=interventions.find(i=>i.id===job.interventionId);
         if(intervention&&$('historyDialog')?.open&&currentHistoryStoreId===intervention.store_id){
@@ -101,7 +124,7 @@ async function processUploadQueue(){
         if(job.retries>=3)break;
       }
     }
-  }finally{uploadWorkerRunning=false;updateSyncUi()}
+  }finally{uploadWorkerRunning=false;updateSyncUi();flushReadyClosureNotifications().catch(()=>{})}
 }
 async function retryUploads(){const jobs=await getUploadJobs();for(const j of jobs){j.retries=0;j.lastError='';await putUploadJob(j)}processUploadQueue()}
 async function updateSyncUi(){
@@ -633,7 +656,7 @@ function auditHumanDescription(r){
 
   return r.description||`${auditActionLabel(action)} · ${auditEntityLabel(t)}`;
 }
-async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V112-34'}})}catch(e){console.warn('audit',e)}}
+async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V112-35'}})}catch(e){console.warn('audit',e)}}
 function auditViewOpen(name){if(!session?.user?.id)return;const labels={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:'Programmazione',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'};if(labels[name])writeClientAudit('VIEW','navigation',`Aperta pagina ${labels[name]}`,{view:name})}
 function renderAuditUsers(){const sel=$('auditUser');if(!sel)return;const cur=sel.value||'all';sel.innerHTML='<option value="all">Tutti gli utenti</option>';[...profiles].sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.nome||p.email||p.id;sel.appendChild(o)});if([...sel.options].some(o=>o.value===cur))sel.value=cur}
 async function openAuditView(){if(!admin())return setView('dashboard');renderAuditUsers();await loadAuditLogs(true)}
@@ -2392,9 +2415,9 @@ async function renderPending(){
   const total=p.length+pendingExtras.length;$('pendingBadge').textContent=total;$('pendingBadge').classList.toggle('hidden',!total);$('pendingList').innerHTML='';
   if(!total){$('pendingList').innerHTML='<p class="muted">Nessun lavoro da convalidare.</p>';return}
   for(const i of p){
-    const s=stores.find(x=>x.id===i.store_id),names=await workerNames(i.id),pics=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica');
+    const s=stores.find(x=>x.id===i.store_id),names=await workerNames(i.id),pics=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica'),expected=Math.max(0,Number(i.foto_attese)||0),syncPending=expected>pics.length;
     const c=document.createElement('article');c.className='card pending pending-review';
-    c.innerHTML=`<div class="pending-review-head"><div><h3>${esc(s?.nome||'Intervento')}</h3><p class="muted">${fmt(i.data_intervento)} · 🕒 ${esc(closureText(i))}</p></div><span class="badge-state">In attesa</span></div><div class="pending-review-section"><strong>Chi ha eseguito</strong><p>${names.length?names.map(esc).join(' · '):'Operatore non indicato'}</p></div><div class="pending-review-section"><strong>Note del dipendente</strong><div class="history-note ${i.note?'':'muted'}">${esc(i.note||'Nessuna nota inserita')}</div>${i.next_visit_note?`<div class="pending-next-visit"><strong>⚠️ Da riportare al prossimo passaggio</strong>${esc(i.next_visit_note)}</div>`:''}</div><div class="pending-review-section"><div class="pending-photo-head"><strong>Foto allegate</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-pending-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div><div class="actions"><button data-ok>Convalida</button><button class="danger-btn" data-no>Rifiuta</button></div>`;
+    c.innerHTML=`<div class="pending-review-head"><div><h3>${esc(s?.nome||'Intervento')}</h3><p class="muted">${fmt(i.data_intervento)} · 🕒 ${esc(closureText(i))}</p></div><span class="badge-state">In attesa</span></div><div class="pending-review-section"><strong>Chi ha eseguito</strong><p>${names.length?names.map(esc).join(' · '):'Operatore non indicato'}</p></div><div class="pending-review-section"><strong>Note del dipendente</strong><div class="history-note ${i.note?'':'muted'}">${esc(i.note||'Nessuna nota inserita')}</div>${i.next_visit_note?`<div class="pending-next-visit"><strong>⚠️ Da riportare al prossimo passaggio</strong>${esc(i.next_visit_note)}</div>`:''}</div><div class="pending-review-section"><div class="pending-photo-head"><strong>Foto allegate</strong><span>${expected?`${pics.length}/${expected}`:pics.length}</span></div>${syncPending?`<div class="pending-next-visit"><strong>☁️ Foto ancora in sincronizzazione</strong>Ricevute ${pics.length} di ${expected}. La convalida resta bloccata finché non arrivano tutte.</div>`:''}<div class="pending-review-photos" data-pending-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div><div class="actions"><button data-ok ${syncPending?'disabled':''}>${syncPending?'Attendo foto…':'Convalida'}</button><button class="danger-btn" data-no>Rifiuta</button></div>`;
     c.querySelector('[data-ok]').onclick=()=>approveIntervention(i);c.querySelector('[data-no]').onclick=()=>rejectIntervention(i);$('pendingList').appendChild(c);
     if(pics.length){
       const box=c.querySelector('[data-pending-photos]');box.innerHTML='';
@@ -2410,7 +2433,7 @@ async function renderPending(){
     c.querySelector('[data-re]')?.addEventListener('click',()=>openAttachment(re));c.querySelector('[data-ro]')?.addEventListener('click',()=>openAttachment(ro));c.querySelector('[data-ok]').onclick=()=>approveExtra(e);$('pendingList').appendChild(c);if(pics.length)hydrateExtraPhotos(c,pics);
   }
 }
-async function approveIntervention(i){const now=new Date().toISOString();const {error}=await sb.from('interventions').update({stato:'convalidato',convalidato_da:profile.id,convalidato_il:now}).eq('id',i.id);if(error)return alert(error.message);const {error:e2}=await sb.from('stores').update({ultimo_passaggio:interventionEndDate(i),next_visit_note:i.next_visit_note||null}).eq('id',i.store_id);if(e2)return alert(e2.message);const ids=[...(i.schedule_item_ids||[])];if(i.schedule_item_id&&!ids.includes(i.schedule_item_id))ids.push(i.schedule_item_id);if(ids.length){await sb.from('schedule_items').update({stato:'completato'}).in('id',ids);const linkedTickets=extras.filter(e=>ids.includes(e.schedule_item_id)&&isOrdinaryIncludedExtra(e)&&e.stato!=='completato');if(linkedTickets.length){const r=await sb.from('extras').update({stato:'completato',convalidato_da:profile.id,convalidato_il:now,closed_at:now}).in('id',linkedTickets.map(e=>e.id));if(r.error)return alert('Intervento convalidato, ma ticket/target incluso non aggiornato: '+r.error.message)}}toast('Intervento convalidato');await loadAll()}
+async function approveIntervention(i){try{const sync=await interventionPhotoSyncState(i.id);if(sync.expected>sync.actual){alert(`Impossibile convalidare: sono state ricevute ${sync.actual} foto su ${sync.expected} attese.\n\nAttendi che il telefono del dipendente completi la sincronizzazione e premi Aggiorna.`);return}}catch(err){alert('Impossibile verificare le foto prima della convalida: '+(err?.message||err));return}const now=new Date().toISOString();const {error}=await sb.from('interventions').update({stato:'convalidato',convalidato_da:profile.id,convalidato_il:now}).eq('id',i.id);if(error)return alert(error.message);const {error:e2}=await sb.from('stores').update({ultimo_passaggio:interventionEndDate(i),next_visit_note:i.next_visit_note||null}).eq('id',i.store_id);if(e2)return alert(e2.message);const ids=[...(i.schedule_item_ids||[])];if(i.schedule_item_id&&!ids.includes(i.schedule_item_id))ids.push(i.schedule_item_id);if(ids.length){await sb.from('schedule_items').update({stato:'completato'}).in('id',ids);const linkedTickets=extras.filter(e=>ids.includes(e.schedule_item_id)&&isOrdinaryIncludedExtra(e)&&e.stato!=='completato');if(linkedTickets.length){const r=await sb.from('extras').update({stato:'completato',convalidato_da:profile.id,convalidato_il:now,closed_at:now}).in('id',linkedTickets.map(e=>e.id));if(r.error)return alert('Intervento convalidato, ma ticket/target incluso non aggiornato: '+r.error.message)}}toast('Intervento convalidato');await loadAll()}
 async function rejectIntervention(i){const reason=prompt('Motivo del rifiuto','')||'';const {error}=await sb.from('interventions').update({stato:'rifiutato',motivo_rifiuto:reason,convalidato_da:profile.id,convalidato_il:new Date().toISOString()}).eq('id',i.id);if(error)return alert(error.message);const ids=[...(i.schedule_item_ids||[])];if(i.schedule_item_id&&!ids.includes(i.schedule_item_id))ids.push(i.schedule_item_id);const lastId=ids[ids.length-1];if(lastId)await sb.from('schedule_items').update({stato:'da_fare'}).eq('id',lastId);if(ids.length){const linkedTickets=extras.filter(e=>ids.includes(e.schedule_item_id)&&isOrdinaryIncludedExtra(e));if(linkedTickets.length)await sb.from('extras').update({stato:'programmato',closed_by:null,closed_at:null,convalidato_da:null,convalidato_il:null}).in('id',linkedTickets.map(e=>e.id))}toast('Intervento rifiutato');await loadAll()}
 
 async function reopenOrdinaryIntervention(item,store){
@@ -3505,12 +3528,14 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
     }
     const day=$('doneDate').value,dayNote=$('doneNotes').value.trim();
     let data;
-    if(existingOpen){
+    let priorPhotoCount=0;
+    if(existingOpen){const pc=await sb.from('attachments').select('id',{count:'exact',head:true}).eq('intervention_id',existingOpen.id).eq('tipo','foto_generica');if(pc.error)throw pc.error;priorPhotoCount=Number(pc.count)||0;
+
       const previousNotes=String(existingOpen.note||'').trim();
       const tagged=dayNote?`[${fmt(day)}] ${dayNote}`:'';
       const mergedNotes=[previousNotes,tagged].filter(Boolean).join('\n');
       const ids=[...(existingOpen.schedule_item_ids||[])];if(scheduleItemId&&!ids.includes(scheduleItemId))ids.push(scheduleItemId);
-      const update={data_fine:day,note:mergedNotes||null,next_visit_note:nextVisitNote||null,multi_day_open:continueAnotherDay,schedule_item_ids:ids,closed_by:continueAnotherDay?null:profile.id,closed_at:continueAnotherDay?null:new Date().toISOString(),stato:continueAnotherDay?existingOpen.stato:(admin()?'convalidato':'in_attesa'),convalidato_da:continueAnotherDay?existingOpen.convalidato_da:(admin()?profile.id:null),convalidato_il:continueAnotherDay?existingOpen.convalidato_il:(admin()?new Date().toISOString():null)};
+      const update={data_fine:day,note:mergedNotes||null,next_visit_note:nextVisitNote||null,multi_day_open:continueAnotherDay,schedule_item_ids:ids,closed_by:continueAnotherDay?null:profile.id,closed_at:continueAnotherDay?null:new Date().toISOString(),stato:continueAnotherDay?existingOpen.stato:(admin()?'convalidato':'in_attesa'),convalidato_da:continueAnotherDay?existingOpen.convalidato_da:(admin()?profile.id:null),convalidato_il:continueAnotherDay?existingOpen.convalidato_il:(admin()?new Date().toISOString():null),foto_attese:priorPhotoCount+files.length,foto_sincronizzate:priorPhotoCount,photo_sync_notified_at:continueAnotherDay?existingOpen.photo_sync_notified_at:null};
       const r=await sb.from('interventions').update(update).eq('id',existingOpen.id).select().single();if(r.error)throw r.error;data=r.data;
       if(!continueAnotherDay){
         const {data:stillOpen,error:verifyError}=await sb.from('interventions').select('id').eq('store_id',storeId).eq('multi_day_open',true);
@@ -3526,7 +3551,7 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
       const idx=interventions.findIndex(x=>x.id===data.id);if(idx>=0)interventions[idx]=data;
     }else{
       const initialNote=continueAnotherDay&&dayNote?`[${fmt(day)}] ${dayNote}`:(dayNote||null);
-      const payload={store_id:storeId,schedule_item_id:scheduleItemId,data_intervento:day,data_fine:day,note:initialNote,next_visit_note:nextVisitNote||null,multi_day_open:continueAnotherDay,schedule_item_ids:scheduleItemId?[scheduleItemId]:[],stato:admin()?'convalidato':'in_attesa',inserito_da:profile.id,convalidato_da:admin()?profile.id:null,convalidato_il:admin()?new Date().toISOString():null,closed_by:continueAnotherDay?null:profile.id,closed_at:continueAnotherDay?null:new Date().toISOString()};
+      const payload={store_id:storeId,schedule_item_id:scheduleItemId,data_intervento:day,data_fine:day,note:initialNote,next_visit_note:nextVisitNote||null,multi_day_open:continueAnotherDay,schedule_item_ids:scheduleItemId?[scheduleItemId]:[],stato:admin()?'convalidato':'in_attesa',inserito_da:profile.id,convalidato_da:admin()?profile.id:null,convalidato_il:admin()?new Date().toISOString():null,closed_by:continueAnotherDay?null:profile.id,closed_at:continueAnotherDay?null:new Date().toISOString(),foto_attese:files.length,foto_sincronizzate:0,photo_sync_notified_at:null};
       let r=await sb.from('interventions').insert(payload).select().single();
       // V112-31: seconda rete di sicurezza contro una race condition. Se la voce di
       // programmazione sparisce tra il controllo sopra e l'INSERT, ritenta senza FK.
@@ -3556,8 +3581,9 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
     if(!continueAnotherDay&&linkedIncludedExtras.length){const includedState=admin()?'completato':'in_attesa',now=new Date().toISOString(),r=await sb.from('extras').update({stato:includedState,giorno_intervento:day,closed_by:profile.id,closed_at:admin()?now:null,convalidato_da:admin()?profile.id:null,convalidato_il:admin()?now:null}).in('id',linkedIncludedExtras.map(e=>e.id));if(r.error)throw new Error('Intervento salvato, ma aggiornamento ticket/target incluso non riuscito: '+r.error.message)}
     donePhotoFiles=[];renderDonePhotoSelection();$('doneDialog').close();toast(continueAnotherDay?'Giornata salvata · intervento ancora aperto':files.length?`Intervento salvato · ${files.length} foto in caricamento`:admin()?'Intervento convalidato':'Inviato a Lorenzo');renderSchedules();renderDashboard();
     try{await loadAll()}catch(refreshErr){console.warn('Aggiornamento dati non riuscito dopo il salvataggio:',refreshErr)}
-    if(!continueAnotherDay)notifyAdminClosure('intervention',data.id,files.length);
     if(files.length)enqueueInterventionPhotos(data.id,files).catch(err=>{console.error(err);toast('⚠️ Foto in attesa di sincronizzazione')});
+    if(!continueAnotherDay&&!files.length){const ok=await notifyAdminClosure('intervention',data.id,0);if(ok)await sb.from('interventions').update({photo_sync_notified_at:new Date().toISOString(),foto_sincronizzate:priorPhotoCount}).eq('id',data.id)}
+    if(!continueAnotherDay&&files.length)flushReadyClosureNotifications(data.id).catch(()=>{});
     if(!continueAnotherDay&&linkedExtrasToClose.length){combinedExtraClosureQueue=linkedExtrasToClose.map(x=>({id:x.id}));setTimeout(()=>openNextCombinedExtraClosure(),250)}
   }catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=oldText}
 }

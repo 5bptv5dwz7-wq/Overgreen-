@@ -1,4 +1,4 @@
-const APP_VERSION='V112-44';
+const APP_VERSION='V112-45';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -3180,7 +3180,7 @@ async function renderExtraClosureRealPreview(){
     if(seq!==extraClosurePdfPreviewSeq||ctx!==extraClosurePdfContext)return;
     const blob=new Blob([bytes],{type:'application/pdf'}),url=URL.createObjectURL(blob);
     if(extraClosurePdfPreviewUrl)URL.revokeObjectURL(extraClosurePdfPreviewUrl);
-    extraClosurePdfPreviewUrl=url;frame.src=url+'#toolbar=0&navpanes=0&view=FitH';
+    extraClosurePdfPreviewUrl=url;frame.src=url+'#toolbar=0&navpanes=0&view=Fit&zoom=page-fit';
     if(status)status.textContent='Anteprima aggiornata · modifica le opzioni sopra per vedere subito il risultato.';
   }catch(err){console.error('Anteprima PDF',err);if(status)status.textContent='Anteprima non disponibile: '+(err.message||String(err))}
 }

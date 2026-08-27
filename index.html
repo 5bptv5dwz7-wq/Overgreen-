@@ -76,7 +76,7 @@ nav [data-view].icon{
   display:inline-flex !important;
   align-items:center !important;
   justify-content:center !important;
-  font-size:1.14rem !important;
+  font-size:1.25rem !important;
   line-height:1 !important;
   white-space:nowrap !important;
 }
@@ -110,7 +110,7 @@ header .nav-actions,
   header nav,
   .topbar .nav,
   .topbar nav{
-    gap:4px !important;
+    gap:6px !important;
     padding-block:5px !important;
   }
   header [data-view].icon,
@@ -158,7 +158,7 @@ header .nav-actions,
   flex-wrap:nowrap !important;
   align-items:center !important;
   justify-content:flex-start !important;
-  gap:4px !important;
+  gap:6px !important;
   min-width:0 !important;
   width:100% !important;
   overflow-x:auto !important;
@@ -178,7 +178,7 @@ header .nav-actions,
   min-width:40px !important;
   max-width:40px !important;
   height:40px !important;
-  min-height:36px !important;
+  min-height:40px !important;
   max-height:40px !important;
   padding:0 !important;
   margin:0 !important;
@@ -343,7 +343,7 @@ header .nav-actions,
   #app > header .header-actions{
     grid-template-columns:repeat(5, minmax(38px, 1fr)) !important;
     grid-auto-rows:38px !important;
-    gap:4px !important;
+    gap:6px !important;
   }
 
   #app > header .header-actions > button.icon{
@@ -406,7 +406,7 @@ header .nav-actions,
 /* V112.11 — Statistiche */
 .stats-period-tabs,.stats-segment-tabs{display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}.stats-period-tabs::-webkit-scrollbar,.stats-segment-tabs::-webkit-scrollbar{display:none}.stats-period-tabs button,.stats-segment-tabs button{white-space:nowrap;flex:0 0 auto}.stats-period-tabs button.active,.stats-segment-tabs button.active{background:#145c35;color:#fff;border-color:#145c35}.stats-filter-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.stats-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0}.stats-kpi{background:#fff;border:1px solid #dfe6e1;border-radius:15px;padding:14px;display:grid;gap:4px;min-width:0}.stats-kpi strong{font-size:1.6rem;line-height:1;color:#133d28}.stats-kpi span{font-size:.78rem;color:#5d6d64}.stats-kpi small{font-size:.72rem;color:#6e7b74}.stats-kpi .up{color:#167647}.stats-kpi .down{color:#a14b32}.stats-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:12px}.stats-panel{background:#fff;border:1px solid #dfe6e1;border-radius:16px;padding:14px}.stats-panel h3{margin:0 0 12px}.stats-bars{display:grid;gap:9px}.stats-bar-row{display:grid;grid-template-columns:minmax(84px,130px) 1fr auto;gap:9px;align-items:center;font-size:.82rem}.stats-bar-track{height:10px;background:#edf2ef;border-radius:99px;overflow:hidden}.stats-bar-fill{height:100%;background:#267b4d;border-radius:99px;min-width:2px}.stats-bar-row strong{font-size:.82rem}.stats-trend{display:flex;align-items:flex-end;gap:4px;height:150px;padding-top:8px}.stats-trend-col{flex:1;min-width:5px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;height:100%}.stats-trend-bar{width:100%;max-width:24px;min-height:2px;background:#267b4d;border-radius:5px 5px 2px 2px}.stats-trend-col small{font-size:.58rem;color:#718078;transform:rotate(-45deg);transform-origin:center;white-space:nowrap;margin-top:8px}.stats-top-list{display:grid;gap:8px}.stats-top-item{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #edf1ee}.stats-top-item:last-child{border-bottom:0}.stats-top-item span{min-width:0}.stats-top-item small{display:block;color:#718078;margin-top:2px}.stats-empty{padding:18px;text-align:center;color:#6f7d75}.stats-range-fields{display:none;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.stats-range-fields.active{display:grid}.stats-worker-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.stats-operator-list{display:grid;gap:8px}.stats-operator-card{display:grid;grid-template-columns:34px 1fr auto;gap:11px;align-items:center;padding:11px 0;border-bottom:1px solid #edf1ee}.stats-operator-card:last-child{border-bottom:0}.stats-operator-rank{width:30px;height:30px;border-radius:50%;background:#edf4ef;display:grid;place-items:center;font-weight:800;color:#145c35}.stats-operator-main{min-width:0;display:grid;gap:3px}.stats-operator-main>strong{font-size:.92rem}.stats-operator-main>small{color:#718078}.stats-operator-split{display:flex;gap:8px;flex-wrap:wrap;margin-top:3px}.stats-operator-split span{font-size:.7rem;background:#f4f7f5;border-radius:99px;padding:3px 7px;color:#526159}.stats-operator-total{text-align:right}.stats-operator-total strong{display:block;font-size:1.3rem;color:#133d28}.stats-operator-total small{color:#718078}@media(max-width:760px){.stats-filter-grid{grid-template-columns:1fr 1fr}.stats-kpis,.stats-worker-kpis{grid-template-columns:1fr 1fr}.stats-grid{grid-template-columns:1fr}}
 
-.impersonation-bar{display:none;align-items:center;gap:10px;padding:9px 14px;background:#f3f7f4;border-bottom:1px solid #dfe8e2;position:sticky;top:0;z-index:20}.impersonation-bar:not(.hidden){display:flex}.impersonation-bar.active{background:#fff4d8;border-bottom-color:#e7c66d}.impersonation-bar strong{white-space:nowrap}.impersonation-bar select{margin:0;min-width:170px;max-width:260px;padding:8px 10px}.impersonation-bar .impersonation-state{font-size:.78rem;color:#5d6b63;flex:1}.impersonation-bar button{margin:0;padding:8px 10px}@media(max-width:760px){.impersonation-bar{flex-wrap:wrap}.impersonation-bar select{flex:1;max-width:none}.impersonation-bar .impersonation-state{order:3;flex-basis:100%}}
+.header-user-row{display:flex;align-items:center;gap:6px;min-width:0}.header-user-row #userLabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.impersonation-compact{position:relative;flex:0 0 auto}.impersonation-compact:not(.hidden){display:block}.impersonation-compact>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;border:1px solid #d8e3dc;background:#f3f7f4;color:#145c35;border-radius:999px;padding:3px 7px;font-size:.68rem;font-weight:800;white-space:nowrap;line-height:1.1}.impersonation-compact>summary::-webkit-details-marker{display:none}.impersonation-compact.active>summary{background:#fff0c7;border-color:#dfbd5b;color:#694f00}.impersonation-menu{position:absolute;left:0;top:calc(100% + 6px);z-index:120;width:min(300px,82vw);background:#fff;border:1px solid #dfe6e1;border-radius:12px;padding:10px;box-shadow:0 10px 30px rgba(0,0,0,.16);display:grid;gap:7px}.impersonation-menu select{margin:0;width:100%}.impersonation-menu .impersonation-state{font-size:.72rem;color:#5d6b63;line-height:1.25}.impersonation-menu button{margin:0}.impersonation-compact:not([open]) .impersonation-menu{display:none}@media(max-width:700px){.header-user-row{gap:4px}.impersonation-compact>summary{font-size:.63rem;padding:2px 6px}.impersonation-menu{left:auto;right:-10px;width:min(285px,86vw)}}
 </style></head><body>
 <style>
 /* V112-50 — versione app visibile senza aumentare l'altezza della testata */
@@ -429,8 +429,7 @@ header .nav-actions,
 @media(max-width:600px){#appVersion{font-size:.58rem;padding:1px 4px;margin-left:4px}}
 </style>
 <section id="loginScreen" class="auth-screen"><div class="auth-card"><div class="logo">OG</div><p class="eyebrow">OVERGREEN</p><h1>Gestione punti vendita</h1><p class="muted">Accedi con email e password.</p><form id="loginForm"><label>Email<input id="loginEmail" type="email" autocomplete="username" required></label><label>Password<input id="loginPassword" type="password" autocomplete="current-password" required></label><label class="remember-row"><input id="rememberAccess" type="checkbox" checked><span>Ricorda l'accesso su questo dispositivo</span></label><button type="submit" class="full">Accedi</button><p id="loginError" class="error hidden"></p></form></div></section>
-<div id="app" class="hidden"><header><div><p class="eyebrow">OVERGREEN <span id="appVersion" aria-label="Versione app">v112-52</span></p><h1 id="pageTitle">Sedi e clienti</h1><small id="userLabel" class="muted"></small></div><div class="header-actions"><button class="icon" data-view="dashboard" title="Dashboard">⌂</button><button class="icon" data-view="stores" title="Sedi e clienti">🏪</button><button class="icon" data-view="schedule" title="Programmazione">📅</button><button class="icon" data-view="extras" title="Extra">E</button><button class="icon admin-only" data-view="reports" title="Report giornaliero">R</button><button class="icon" data-view="stats" title="Statistiche">📊</button><button class="icon" data-view="signatures" title="Fogli firme Eurospin">✍</button><button class="icon" data-view="archive" title="Archivio aziendale">📁</button><button class="icon" data-view="contacts" title="Rubrica lavoro">📇</button><button class="icon admin-only" data-view="audit" title="Log attività">📋</button><button id="pendingBtn" class="icon admin-only" title="Convalide">✓<span id="pendingBadge" class="badge hidden">0</span></button><button class="icon" data-view="settings" title="Impostazioni">⚙</button><button id="helpBtn" class="icon help-icon" title="Istruzioni di questa schermata">?</button></div></header>
-<div id="impersonationBar" class="impersonation-bar real-admin-only hidden"><strong>👤 Vista come</strong><select id="impersonationSelect" aria-label="Scegli dipendente"><option value="admin">Vista amministratore</option></select><span id="impersonationState" class="impersonation-state">Seleziona un dipendente per vedere e usare l’app come lui</span><button id="exitImpersonationBtn" type="button" class="secondary hidden">Torna amministratore</button></div>
+<div id="app" class="hidden"><header><div><p class="eyebrow">OVERGREEN <span id="appVersion" aria-label="Versione app">v112-52</span></p><h1 id="pageTitle">Sedi e clienti</h1><div class="header-user-row"><small id="userLabel" class="muted"></small><details id="impersonationBar" class="impersonation-compact real-admin-only hidden"><summary><span id="impersonationSummary">👤 Admin</span></summary><div class="impersonation-menu"><select id="impersonationSelect" aria-label="Scegli dipendente"><option value="admin">Vista amministratore</option></select><span id="impersonationState" class="impersonation-state">Seleziona un dipendente per vedere e usare l’app come lui</span><button id="exitImpersonationBtn" type="button" class="secondary hidden">Torna amministratore</button></div></details></div></div><div class="header-actions"><button class="icon" data-view="dashboard" title="Dashboard">⌂</button><button class="icon" data-view="stores" title="Sedi e clienti">🏪</button><button class="icon" data-view="schedule" title="Programmazione">📅</button><button class="icon" data-view="extras" title="Extra">E</button><button class="icon admin-only" data-view="reports" title="Report giornaliero">R</button><button class="icon" data-view="stats" title="Statistiche">📊</button><button class="icon" data-view="signatures" title="Fogli firme Eurospin">✍</button><button class="icon" data-view="archive" title="Archivio aziendale">📁</button><button class="icon" data-view="contacts" title="Rubrica lavoro">📇</button><button class="icon admin-only" data-view="audit" title="Log attività">📋</button><button id="pendingBtn" class="icon admin-only" title="Convalide">✓<span id="pendingBadge" class="badge hidden">0</span></button><button class="icon" data-view="settings" title="Impostazioni">⚙</button><button id="helpBtn" class="icon help-icon" title="Istruzioni di questa schermata">?</button></div></header>
 <main>
 <section id="dashboardView" class="view hidden"><div class="dashboard-grid dashboard-grid-compact"><button class="dash-card" data-dash="today"><strong id="dashToday">0</strong><span>Da fare oggi</span></button><button class="dash-card success" data-dash="done"><strong id="dashDone">0</strong><span>Completati oggi</span></button><button class="dash-card scheduled" data-dash="scheduled"><strong id="dashScheduled">0</strong><span>Programmati</span></button></div>
 <div id="dashboardClientCounters" class="dashboard-client-counters admin-only">
@@ -658,39 +657,39 @@ document.addEventListener('DOMContentLoaded', function(){
 .add-work-shortcuts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 14px}.schedule-activity-card{border-left:4px solid currentColor}.activity-pill{display:inline-flex;align-items:center;width:max-content;border:1px solid rgba(0,0,0,.1);border-radius:999px;padding:3px 8px;font-size:.76rem;font-weight:700;margin-bottom:3px}.work-contact-card{display:grid;gap:9px}.contact-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.contact-head h3,.contact-head p{margin:0}.contact-links{display:flex;gap:10px;flex-wrap:wrap}.contact-links a{display:inline-flex;align-items:center;gap:5px;text-decoration:none;font-weight:700}.contact-store-picker{max-height:34vh;overflow:auto}.contact-store-picker label span{display:flex;flex-direction:column}.contact-store-picker small{color:var(--muted,#68736d)}@media(max-width:600px){.add-work-shortcuts{grid-template-columns:1fr}.schedule-head-actions{display:grid;grid-template-columns:1fr 1fr}.schedule-head-actions button{min-width:0}}
 </style>
 <style>
-/* V112-52 — interfaccia mobile ancora più compatta; non modifica i PDF */
+/* V112-51 — interfaccia mobile compatta; non modifica i PDF */
 @media (max-width: 700px){
-  #app{font-size:.84rem}
-  #app > header{gap:5px !important;padding-top:3px !important;padding-bottom:3px !important}
-  #app > header > div:first-child h1{font-size:1.20rem !important;line-height:1.02 !important}
-  #app > header > div:first-child .eyebrow{font-size:.64rem !important;line-height:1 !important}
-  #app > header > div:first-child small{font-size:.67rem !important}
-  #app > header .header-actions{gap:3px !important;padding:0 !important}
+  #app{font-size:.90rem}
+  #app > header{gap:7px !important;padding-top:5px !important;padding-bottom:5px !important}
+  #app > header > div:first-child h1{font-size:1.32rem !important;line-height:1.02 !important}
+  #app > header > div:first-child .eyebrow{font-size:.69rem !important;line-height:1 !important}
+  #app > header > div:first-child small{font-size:.72rem !important}
+  #app > header .header-actions{gap:4px !important;padding:1px 0 !important}
   #app > header .header-actions > button.icon{
-    flex-basis:33px !important;width:33px !important;min-width:33px !important;max-width:33px !important;
-    height:33px !important;min-height:33px !important;border-radius:9px !important;font-size:.98rem !important
+    flex-basis:36px !important;width:36px !important;min-width:36px !important;max-width:36px !important;
+    height:36px !important;min-height:36px !important;border-radius:10px !important;font-size:1.05rem !important
   }
-  #app main,#app .view,#app .page{padding-top:5px !important;padding-bottom:5px !important}
-  #app .card{padding:8px 9px !important;border-radius:11px !important}
-  #app .card h2,#app .card h3{margin-top:2px !important;margin-bottom:3px !important;line-height:1.12 !important}
-  #app .card p{margin-top:2px !important;margin-bottom:2px !important;line-height:1.20 !important}
-  #app .actions,#app .signature-actions,#app .archive-doc-actions,#app .schedule-library-actions{gap:4px !important}
-  #app button:not(.icon),#app .file-label{padding:7px 8px !important;min-height:34px !important;line-height:1.12 !important}
-  #app .compact-btn{min-height:31px !important;padding:6px 8px !important}
-  #app label{gap:3px !important;margin-bottom:5px !important}
-  #app input,#app select,#app textarea{padding:7px 8px !important;border-radius:9px !important}
-  #app input,#app select{min-height:36px !important}
-  #app textarea{min-height:62px}
-  #app fieldset{padding:7px !important;margin:6px 0 !important}
-  #app .picker{gap:4px !important}
+  #app main,#app .view,#app .page{padding-top:8px !important;padding-bottom:8px !important}
+  #app .card{padding:10px 11px !important;border-radius:12px !important}
+  #app .card h2,#app .card h3{margin-top:2px !important;margin-bottom:5px !important;line-height:1.12 !important}
+  #app .card p{margin-top:4px !important;margin-bottom:4px !important;line-height:1.28 !important}
+  #app .actions,#app .signature-actions,#app .archive-doc-actions,#app .schedule-library-actions{gap:6px !important}
+  #app button:not(.icon),#app .file-label{padding:9px 10px !important;min-height:38px !important;line-height:1.12 !important}
+  #app .compact-btn{min-height:34px !important;padding:7px 9px !important}
+  #app label{gap:4px !important;margin-bottom:7px !important}
+  #app input,#app select,#app textarea{padding:9px 10px !important;border-radius:10px !important}
+  #app input,#app select{min-height:40px !important}
+  #app textarea{min-height:72px}
+  #app fieldset{padding:9px !important;margin:8px 0 !important}
+  #app .picker{gap:6px !important}
   #app .muted,#app small{line-height:1.22}
-  #app .badge,#app .badge-state,#app .audit-badge,#app .archive-new,#app .archive-read,#app .extra-partial-badge{padding-top:3px !important;padding-bottom:3px !important}
-  #app .pending-review-section,#app .extra-closure-details{margin-top:5px !important;margin-bottom:5px !important}
-  #app dialog form,#app dialog .dialog-body{padding:10px !important}
-  #app .dialog-head{margin-bottom:6px !important}
-  #app .dialog-head h2{font-size:1.14rem !important;margin:0 !important}
-  #app .next-visit-alert{padding:8px 9px !important;margin:5px 0 !important}
-  #app .schedule-next-visit{padding:6px 7px !important;margin:4px 0 1px !important}
+  #app .badge,#app .badge-state,#app .audit-badge,#app .archive-new,#app .archive-read,#app .extra-partial-badge{padding-top:4px !important;padding-bottom:4px !important}
+  #app .pending-review-section,#app .extra-closure-details{margin-top:7px !important;margin-bottom:7px !important}
+  #app dialog form,#app dialog .dialog-body{padding:13px !important}
+  #app .dialog-head{margin-bottom:8px !important}
+  #app .dialog-head h2{font-size:1.25rem !important;margin:0 !important}
+  #app .next-visit-alert{padding:10px 11px !important;margin:7px 0 !important}
+  #app .schedule-next-visit{padding:8px 9px !important;margin:6px 0 2px !important}
 }
 </style>
 </body></html>

@@ -1,4 +1,4 @@
-const APP_VERSION='V112-54';
+const APP_VERSION='V112-55';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -201,12 +201,12 @@ function ensureCloudSettingsUi(){
   <form id="selfPasswordForm" class="settings-form"><input id="selfNewPassword" type="password" minlength="8" placeholder="Nuova password" required><button type="submit">Cambia la mia password</button></form>
   <div id="adminUsersArea" class="admin-only"><hr><h4>👥 Dipendenti</h4><div id="cloudEmployeeList" class="employee-list"></div>
   <form id="cloudAddEmployeeForm" class="settings-form"><input id="cloudEmployeeName" placeholder="Nome" required><input id="cloudEmployeeEmail" type="email" placeholder="Email di accesso" required><input id="cloudEmployeePassword" type="password" minlength="8" placeholder="Password iniziale" required><button type="submit">Crea dipendente</button></form></div>`;
-  const usage=document.createElement('section');usage.id='supabaseUsageCard';usage.className='settings-card admin-only';usage.innerHTML=`<div class="settings-section-head"><div><h3>📊 Utilizzo Supabase</h3><p>Spazio occupato dai file e dimensione del database del progetto.</p></div></div><div class="usage-grid"><div class="usage-metric"><span>Storage</span><strong id="usageStorage">—</strong><small id="usageStorageDetail" class="muted">Calcolo in corso…</small></div><div class="usage-metric"><span>Database</span><strong id="usageDatabase">—</strong><small id="usageDatabaseDetail" class="muted">Calcolo in corso…</small></div></div><p id="usageError" class="error hidden"></p><button id="refreshUsageBtn" type="button" class="secondary">Aggiorna utilizzo</button>`;wrap.appendChild(usage);
+  const usage=document.createElement('section');usage.id='supabaseUsageCard';usage.className='settings-card admin-only';usage.innerHTML=`<div class="settings-section-head"><div><h3>📊 Utilizzo Supabase</h3><p>Spazio occupato dai file e dimensione del database del progetto.</p></div></div><div class="usage-grid"><div class="usage-metric"><span>Storage</span><strong id="usageStorage">—</strong><small id="usageStorageDetail" class="muted">Calcolo in corso…</small></div><div class="usage-metric"><span>Database</span><strong id="usageDatabase">—</strong><small id="usageDatabaseDetail" class="muted">Calcolo in corso…</small></div></div><p id="usageError" class="error hidden"></p><button id="refreshUsageBtn" type="button" class="secondary">Aggiorna utilizzo</button><hr><div class="settings-section-head"><div><h3>🗜️ Ottimizza immagini Storage</h3><p>Controlla le immagini già salvate e stima quanto spazio può essere recuperato. L’analisi non modifica alcun file.</p></div></div><div id="storageOptimizeResult" class="storage-optimize-result muted">Premi “Analizza immagini” per iniziare.</div><div class="actions storage-optimize-actions"><button id="analyzeStorageBtn" type="button" class="secondary">Analizza immagini</button><button id="optimizeStorageBtn" type="button" class="hidden">Comprimi file ottimizzabili</button></div>`;wrap.appendChild(usage);
   const sync=document.createElement('section');sync.className='settings-card';sync.innerHTML=`<h3>☁️ Sincronizzazione</h3><p id="backgroundSyncStatus">Controllo…</p><button id="retryUploadsBtn" type="button" class="secondary">Riprova caricamenti</button>`;wrap.appendChild(sync);
   const badge=document.createElement('button');badge.id='syncFloatingBadge';badge.type='button';badge.className='sync-floating hidden';badge.onclick=()=>{setView?.('settings');};document.body.appendChild(badge);
   $('selfPasswordForm').onsubmit=async e=>{e.preventDefault();const pw=$('selfNewPassword').value;const {error}=await sb.auth.updateUser({password:pw});if(error)return alert(error.message);e.target.reset();toast('Password aggiornata')};
   $('cloudAddEmployeeForm').onsubmit=async e=>{e.preventDefault();const payload={action:'create',nome:$('cloudEmployeeName').value.trim(),email:$('cloudEmployeeEmail').value.trim(),password:$('cloudEmployeePassword').value};const {data,error}=await sb.functions.invoke('manage-user',{body:payload});if(error||data?.error)return alert(data?.error||error.message);e.target.reset();toast('Dipendente creato');await loadAll()};
-  $('retryUploadsBtn').onclick=retryUploads;$('refreshUsageBtn').onclick=loadSupabaseUsage;renderCloudEmployeeList();updateSyncUi();if(admin())loadSupabaseUsage();
+  $('retryUploadsBtn').onclick=retryUploads;$('refreshUsageBtn').onclick=loadSupabaseUsage;$('analyzeStorageBtn').onclick=analyzeStorageImages;$('optimizeStorageBtn').onclick=optimizeStorageImages;renderCloudEmployeeList();updateSyncUi();if(admin())loadSupabaseUsage();
 }
 function formatBytes(value){
   const n=Number(value)||0;if(n<1024)return `${n} B`;const units=['KB','MB','GB','TB'];let v=n/1024,u=0;while(v>=1024&&u<units.length-1){v/=1024;u++}return `${v>=100?v.toFixed(0):v>=10?v.toFixed(1):v.toFixed(2)} ${units[u]}`
@@ -229,6 +229,102 @@ async function loadSupabaseUsage(){
     $('usageDatabase').textContent='Non disponibile';$('usageDatabaseDetail').textContent='Installa la funzione SQL inclusa nella cartella supabase/migrations';
     $('usageError').textContent=err.message;$('usageError').classList.remove('hidden');
   }finally{if(btn)btn.disabled=false}
+}
+
+let storageOptimizationPlan=[];
+const STORAGE_IMAGE_MIN_BYTES=350*1024;
+const STORAGE_MIN_SAVING_BYTES=100*1024;
+const STORAGE_MIN_SAVING_RATIO=.15;
+function storageOptimizationSources(){
+  return [
+    {table:'attachments',sizeField:'dimensione_bytes',nameField:'nome_file',label:'Foto interventi / extra'},
+    {table:'schedule_activity_photos',sizeField:'dimensione_bytes',nameField:'nome_file',label:'Foto attività'},
+    {table:'extra_work_item_photos',sizeField:'dimensione_bytes',nameField:'nome_file',label:'Foto lavorazioni extra'},
+    {table:'signature_sheets',sizeField:'size_bytes',nameField:'file_name',label:'Fogli firme'},
+    {table:'company_documents',sizeField:'size_bytes',nameField:'file_name',label:'Archivio aziendale'}
+  ];
+}
+async function fetchStorageImageRows(){
+  const groups=[];
+  for(const src of storageOptimizationSources()){
+    try{
+      const {data,error}=await sb.from(src.table).select(`id,storage_path,mime_type,${src.sizeField},${src.nameField}`);
+      if(error)throw error;
+      for(const row of data||[]){
+        const mime=String(row.mime_type||'').toLowerCase();
+        const size=Number(row[src.sizeField])||0;
+        // Per ora evitiamo PNG/GIF e documenti: niente conversioni che possano perdere trasparenza o leggibilità.
+        if(!row.storage_path||size<STORAGE_IMAGE_MIN_BYTES||!['image/jpeg','image/jpg','image/webp'].includes(mime))continue;
+        groups.push({...row,_table:src.table,_sizeField:src.sizeField,_nameField:src.nameField,_group:src.label,_size:size});
+      }
+    }catch(err){console.warn(`Analisi ${src.table} saltata:`,err.message)}
+  }
+  return groups;
+}
+async function compressedStorageCandidate(row){
+  const {data,error}=await sb.storage.from('documenti').createSignedUrl(row.storage_path,600);if(error)throw error;
+  const response=await fetch(data.signedUrl,{cache:'no-store'});if(!response.ok)throw new Error(`Download fallito (${response.status})`);
+  const original=await response.blob();
+  const file=new File([original],row[row._nameField]||'foto.jpg',{type:row.mime_type||original.type||'image/jpeg'});
+  const compressed=await compressImage(file);
+  const originalSize=Math.max(Number(row._size)||0,original.size||0);
+  const newSize=compressed.size||originalSize;
+  const saving=Math.max(0,originalSize-newSize);
+  return {row,compressed,originalSize,newSize,saving,ratio:originalSize?saving/originalSize:0};
+}
+function renderStorageOptimizationSummary(plan,checked,errors=0){
+  const box=$('storageOptimizeResult'),btn=$('optimizeStorageBtn');if(!box)return;
+  const current=plan.reduce((n,x)=>n+x.originalSize,0),after=plan.reduce((n,x)=>n+x.newSize,0),saving=current-after;
+  if(!checked){box.textContent='Premi “Analizza immagini” per iniziare.';btn?.classList.add('hidden');return}
+  if(!plan.length){box.innerHTML=`<strong>✅ Nessuna immagine da comprimere</strong><br><span>Sono stati controllati ${checked} file candidati${errors?` · ${errors} non leggibili`:''}. Le immagini risultano già sufficientemente ottimizzate.</span>`;btn?.classList.add('hidden');return}
+  const pct=current?Math.round(saving/current*100):0;
+  const groups={};for(const x of plan)groups[x.row._group]=(groups[x.row._group]||0)+1;
+  box.innerHTML=`<strong>Possibile recupero: ${formatBytes(saving)} (${pct}%)</strong><br><span>${plan.length} immagini ottimizzabili su ${checked} controllate · da ${formatBytes(current)} a circa ${formatBytes(after)}${errors?` · ${errors} non leggibili`:''}</span><div class="storage-optimize-groups">${Object.entries(groups).map(([k,v])=>`<small>${esc(k)}: ${v}</small>`).join('')}</div>`;
+  if(btn){btn.classList.remove('hidden');btn.textContent=`Comprimi ${plan.length} file`}
+}
+async function analyzeStorageImages(){
+  if(!admin())return;
+  const analyze=$('analyzeStorageBtn'),optimize=$('optimizeStorageBtn'),box=$('storageOptimizeResult');if(!analyze||!box)return;
+  analyze.disabled=true;if(optimize)optimize.classList.add('hidden');storageOptimizationPlan=[];
+  try{
+    box.textContent='Cerco immagini grandi nello Storage…';
+    const rows=await fetchStorageImageRows();
+    if(!rows.length){renderStorageOptimizationSummary([],0);box.innerHTML='<strong>✅ Nessuna immagine grande da analizzare</strong><br><span>Non risultano JPEG/WebP sopra 350 KB nei file gestiti dall’app.</span>';return}
+    let errors=0;
+    for(let i=0;i<rows.length;i++){
+      box.textContent=`Analisi ${i+1}/${rows.length} · ${rows[i][rows[i]._nameField]||'immagine'}…`;
+      try{
+        const candidate=await compressedStorageCandidate(rows[i]);
+        if(candidate.saving>=STORAGE_MIN_SAVING_BYTES&&candidate.ratio>=STORAGE_MIN_SAVING_RATIO)storageOptimizationPlan.push(candidate);
+      }catch(err){errors++;console.warn('Immagine non analizzabile:',rows[i].storage_path,err.message)}
+      await new Promise(r=>setTimeout(r,0));
+    }
+    renderStorageOptimizationSummary(storageOptimizationPlan,rows.length,errors);
+  }catch(err){box.innerHTML=`<span class="error">Analisi non riuscita: ${esc(err.message)}</span>`}
+  finally{analyze.disabled=false}
+}
+async function optimizeStorageImages(){
+  if(!admin()||!storageOptimizationPlan.length)return;
+  const totalSaving=storageOptimizationPlan.reduce((n,x)=>n+x.saving,0);
+  if(!confirm(`Comprimere ${storageOptimizationPlan.length} immagini?\n\nRisparmio stimato: ${formatBytes(totalSaving)}.\nI file originali verranno sostituiti nello Storage.`))return;
+  const analyze=$('analyzeStorageBtn'),btn=$('optimizeStorageBtn'),box=$('storageOptimizeResult');
+  if(analyze)analyze.disabled=true;if(btn)btn.disabled=true;
+  let done=0,failed=0,actualSaving=0;
+  for(let i=0;i<storageOptimizationPlan.length;i++){
+    const item=storageOptimizationPlan[i],row=item.row;
+    box.textContent=`Compressione ${i+1}/${storageOptimizationPlan.length} · ${row[row._nameField]||'immagine'}…`;
+    try{
+      const up=await sb.storage.from('documenti').update(row.storage_path,item.compressed,{cacheControl:'3600',contentType:item.compressed.type||'image/jpeg',upsert:true});
+      if(up.error)throw up.error;
+      const patch={[row._sizeField]:item.compressed.size,mime_type:item.compressed.type||'image/jpeg'};
+      const {error}=await sb.from(row._table).update(patch).eq('id',row.id);if(error)throw error;
+      done++;actualSaving+=item.originalSize-item.compressed.size;
+    }catch(err){failed++;console.error('Compressione Storage fallita:',row.storage_path,err)}
+  }
+  storageOptimizationPlan=[];
+  box.innerHTML=`<strong>${failed?'⚠️':'✅'} Ottimizzazione completata</strong><br><span>${done} file compressi · spazio recuperato circa ${formatBytes(actualSaving)}${failed?` · ${failed} file non modificati per errore`:''}.</span>`;
+  if(btn){btn.disabled=false;btn.classList.add('hidden')}if(analyze)analyze.disabled=false;
+  await loadAll();if(admin())loadSupabaseUsage();
 }
 async function renderCloudEmployeeList(){
   const box=$('cloudEmployeeList');if(!box)return;

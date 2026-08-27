@@ -24,6 +24,7 @@ let donePhotoFiles=[];
 let closeExtraPhotoFiles=[];
 let activityCompletePhotoFiles=[];
 
+// ---- V112-43 · Fix editor PDF: controlli sempre attivi + anteprima non bloccante ----
 // ---- V112-42 · Anteprima PDF reale e interattiva chiusura extra ----
 // ---- V112-41 · Procedura guidata impaginazione PDF chiusura extra ----
 // ---- V112-39 · Dashboard: da fare prima, eseguiti sotto in ordine reale di chiusura ----
@@ -4515,8 +4516,21 @@ $('dashboardShareStore')?.addEventListener('click',openShareStorePicker);$('shar
 
 $('editScheduleTeamForm')?.addEventListener('submit',e=>{e.preventDefault();saveEditScheduleTeam()});
 
-// V112-41 · Wizard PDF chiusura extra
-['extraClosureLayout','extraClosureOrientation','extraClosureFit','extraClosureCaptions','extraClosureShowInfo'].forEach(id=>$(id)?.addEventListener('change',renderExtraClosureLayoutPreview));
-$('extraClosurePdfCancel')?.addEventListener('click',()=>{clearExtraClosurePdfPreview();$('extraClosurePdfDialog').close();extraClosurePdfContext=null});
-$('extraClosurePdfQuick')?.addEventListener('click',async()=>{const ctx=extraClosurePdfContext;if(!ctx)return;clearExtraClosurePdfPreview();$('extraClosurePdfDialog').close();await generateExtraClosurePdf(ctx.extra,ctx.button,extraClosurePdfPrefs(),attachments.filter(a=>a.extra_id===ctx.extra.id&&a.tipo==='foto_generica'));extraClosurePdfContext=null});
-$('extraClosurePdfGenerate')?.addEventListener('click',async()=>{const ctx=extraClosurePdfContext;if(!ctx)return;const o=readExtraClosurePdfOptions(),pics=extraClosureSelectedPhotos();if($('extraClosureSaveDefault').checked)saveExtraClosurePdfPrefs(o);clearExtraClosurePdfPreview();$('extraClosurePdfDialog').close();await generateExtraClosurePdf(ctx.extra,ctx.button,o,pics);extraClosurePdfContext=null});
+// V112-43 · Wizard PDF chiusura extra
+// Il dialog viene dichiarato dopo app.js in index.html: i listener vanno collegati
+// solo dopo DOMContentLoaded. In V112-42 l'optional chaining evitava errori ma
+// lasciava X / Genera rapido / Genera PDF senza alcun handler.
+function bindExtraClosurePdfWizard(){
+  ['extraClosureLayout','extraClosureOrientation','extraClosureFit','extraClosureCaptions','extraClosureShowInfo'].forEach(id=>{
+    const el=$(id);if(el&&!el.dataset.pdfWizardBound){el.dataset.pdfWizardBound='1';el.addEventListener('change',renderExtraClosureLayoutPreview)}
+  });
+  const cancel=$('extraClosurePdfCancel');
+  if(cancel&&!cancel.dataset.pdfWizardBound){cancel.dataset.pdfWizardBound='1';cancel.addEventListener('click',()=>{clearExtraClosurePdfPreview();const d=$('extraClosurePdfDialog');if(d?.open)d.close();extraClosurePdfContext=null})}
+  const quick=$('extraClosurePdfQuick');
+  if(quick&&!quick.dataset.pdfWizardBound){quick.dataset.pdfWizardBound='1';quick.addEventListener('click',async()=>{const ctx=extraClosurePdfContext;if(!ctx)return;clearExtraClosurePdfPreview();const d=$('extraClosurePdfDialog');if(d?.open)d.close();extraClosurePdfContext=null;await generateExtraClosurePdf(ctx.extra,ctx.button,extraClosurePdfPrefs(),attachments.filter(a=>a.extra_id===ctx.extra.id&&a.tipo==='foto_generica'))})}
+  const generate=$('extraClosurePdfGenerate');
+  if(generate&&!generate.dataset.pdfWizardBound){generate.dataset.pdfWizardBound='1';generate.addEventListener('click',async()=>{const ctx=extraClosurePdfContext;if(!ctx)return;const o=readExtraClosurePdfOptions(),pics=extraClosureSelectedPhotos();if($('extraClosureSaveDefault')?.checked)saveExtraClosurePdfPrefs(o);clearExtraClosurePdfPreview();const d=$('extraClosurePdfDialog');if(d?.open)d.close();extraClosurePdfContext=null;await generateExtraClosurePdf(ctx.extra,ctx.button,o,pics)})}
+  const dialog=$('extraClosurePdfDialog');
+  if(dialog&&!dialog.dataset.pdfWizardBound){dialog.dataset.pdfWizardBound='1';dialog.addEventListener('cancel',ev=>{ev.preventDefault();clearExtraClosurePdfPreview();dialog.close();extraClosurePdfContext=null});dialog.addEventListener('close',clearExtraClosurePdfPreview)}
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bindExtraClosurePdfWizard,{once:true});else bindExtraClosurePdfWizard();

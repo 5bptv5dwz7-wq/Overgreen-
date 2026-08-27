@@ -1,4 +1,4 @@
-const APP_VERSION='V112-41';
+const APP_VERSION='V112-44';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -3191,12 +3191,36 @@ async function openExtraClosurePdfWizard(e,button){
   extraClosurePdfContext={extra:e,button};const p=extraClosurePdfPrefs();$('extraClosureLayout').value=p.layout;$('extraClosureOrientation').value=p.orientation;$('extraClosureFit').value=p.fit;$('extraClosureCaptions').checked=!!p.captions;$('extraClosureShowInfo').checked=p.showInfo!==false;$('extraClosureSaveDefault').checked=false;
   $('extraClosurePdfTitle').textContent=`Chiusura · ${e.titolo}`;await renderExtraClosurePhotoThumbs();$('extraClosurePdfDialog').showModal();
 }
+function extraClosureWorkerNames(e){return extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean)}
+function extraClosurePlace(e,st){return st?[st.nome,st.indirizzo,st.citta].filter(Boolean).join(' · '):[e.nome_esterno,e.indirizzo_esterno].filter(Boolean).join(' · ')}
+function extraClosureMetaRows(e,st){
+  const workers=extraClosureWorkerNames(e);
+  return [
+    ['LAVORO',e.titolo||'Lavoro extra'],
+    ['DOVE',extraClosurePlace(e,st)||'Luogo non indicato'],
+    ['ESEGUITO IL',e.giorno_intervento?fmt(e.giorno_intervento):'Data non indicata'],
+    ['CHIUSURA',fmtClosedAt(e.closed_at)],
+    ['CHI HA CHIUSO',closedByName(e)],
+    ['CHI HA ESEGUITO',workers.join(' · ')||'Operatore non indicato'],
+    ...(e.numero_target?[['TARGET',String(e.numero_target)]]:[]),
+    ...(e.data_richiesta?[['RICHIESTA IL',fmt(e.data_richiesta)]]:[])
+  ];
+}
 async function drawClosurePhotoPage(doc,pics,options,e,st,bold,regular,green,muted,pageIndex=0){
   const landscape=options.orientation==='landscape',pageW=landscape?841.89:595.28,pageH=landscape?595.28:841.89,margin=36,page=doc.addPage([pageW,pageH]),w=pageW-margin*2;
-  let top=pageH-38;page.drawText('OVERGREEN',{x:margin,y:top,size:18,font:bold,color:green});page.drawText('DOCUMENTAZIONE FOTOGRAFICA',{x:margin+125,y:top+2,size:9,font:bold,color:muted});top-=24;
-  if(options.showInfo){const info=pdfSafeText(`${e.titolo} · ${st?.nome||e.nome_esterno||'Luogo non indicato'} · ${fmt(e.giorno_intervento)}`);for(const line of wrapPdfText(info,regular,9,w).slice(0,2)){page.drawText(line,{x:margin,y:top,size:9,font:regular});top-=12}top-=6}
-  const per=Math.max(1,Number(options.layout)||4),cols=per===1?1:per===2?2:per===4?2:3,rows=Math.ceil(per/cols),gap=10,captionH=options.captions?18:0,availH=top-34-gap*(rows-1),cellW=(w-gap*(cols-1))/cols,cellH=availH/rows;
-  for(let i=0;i<pics.length;i++){const a=pics[i],col=i%cols,row=Math.floor(i/cols),x=margin+col*(cellW+gap),cellTop=top-row*(cellH+gap),imgH=cellH-captionH;try{const bytes=await fetchAttachmentBytes(a),img=await embedUprightImage(doc,bytes,String(a.mime_type||'').toLowerCase());let dw,dh,dx,dy;if(options.fit==='cover'){const scale=Math.max(cellW/img.width,imgH/img.height);dw=img.width*scale;dh=img.height*scale;/* pdf-lib non ritaglia facilmente: manteniamo il riquadro senza deformare */if(dw>cellW||dh>imgH){const safe=Math.min(cellW/img.width,imgH/img.height);dw=img.width*safe;dh=img.height*safe}}else{const scale=Math.min(cellW/img.width,imgH/img.height);dw=img.width*scale;dh=img.height*scale}dx=x+(cellW-dw)/2;dy=cellTop-imgH+(imgH-dh)/2;page.drawImage(img,{x:dx,y:dy,width:dw,height:dh});if(options.captions)page.drawText(`Foto ${pageIndex*per+i+1}`,{x,y:cellTop-cellH+4,size:8,font:regular,color:muted})}catch{page.drawText('Foto non disponibile',{x:x+8,y:cellTop-24,size:8,font:regular,color:muted})}}
+  let top=pageH-38;page.drawText('OVERGREEN',{x:margin,y:top,size:18,font:bold,color:green});page.drawText('DOCUMENTAZIONE FOTOGRAFICA',{x:margin+125,y:top+2,size:9,font:bold,color:muted});top-=26;
+  if(options.showInfo){
+    const rows=extraClosureMetaRows(e,st),labelW=landscape?92:82,metaSize=landscape?8.3:7.8,lineH=11;
+    for(const [label,value] of rows){
+      const wrapped=wrapPdfText(pdfSafeText(value),regular,metaSize,w-labelW).slice(0,2);
+      page.drawText(pdfSafeText(label),{x:margin,y:top,size:metaSize,font:bold,color:muted});
+      for(let j=0;j<wrapped.length;j++){page.drawText(wrapped[j],{x:margin+labelW,y:top-j*lineH,size:metaSize,font:regular})}
+      top-=Math.max(lineH,wrapped.length*lineH);
+    }
+    top-=6;
+  }
+  const per=Math.max(1,Number(options.layout)||4),cols=per===1?1:per===2?2:per===4?2:3,rows=Math.ceil(per/cols),gap=10,captionH=options.captions?18:0,availH=Math.max(120,top-34-gap*(rows-1)),cellW=(w-gap*(cols-1))/cols,cellH=availH/rows;
+  for(let i=0;i<pics.length;i++){const a=pics[i],col=i%cols,row=Math.floor(i/cols),x=margin+col*(cellW+gap),cellTop=top-row*(cellH+gap),imgH=cellH-captionH;try{const bytes=await fetchAttachmentBytes(a),img=await embedUprightImage(doc,bytes,String(a.mime_type||'').toLowerCase());let dw,dh,dx,dy;if(options.fit==='cover'){const scale=Math.max(cellW/img.width,imgH/img.height);dw=img.width*scale;dh=img.height*scale;if(dw>cellW||dh>imgH){const safe=Math.min(cellW/img.width,imgH/img.height);dw=img.width*safe;dh=img.height*safe}}else{const scale=Math.min(cellW/img.width,imgH/img.height);dw=img.width*scale;dh=img.height*scale}dx=x+(cellW-dw)/2;dy=cellTop-imgH+(imgH-dh)/2;page.drawImage(img,{x:dx,y:dy,width:dw,height:dh});if(options.captions)page.drawText(`Foto ${pageIndex*per+i+1}`,{x,y:cellTop-cellH+4,size:8,font:regular,color:muted})}catch{page.drawText('Foto non disponibile',{x:x+8,y:cellTop-24,size:8,font:regular,color:muted})}}
   page.drawText(`Pagina foto ${pageIndex+1}`,{x:margin,y:16,size:7,font:regular,color:muted});
 }
 async function buildExtraClosurePdfBytes(e,options=null,selectedPics=null){

@@ -1,9 +1,9 @@
-const CACHE='overgreen-v112-47';
+const CACHE='overgreen-v112-48';
 self.addEventListener('install',e=>e.waitUntil(self.skipWaiting()));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(fetch(e.request,{cache:'no-store'}).catch(()=>caches.match(e.request)));});
 
-// V112-47 — cache aggiornata; Web Push + apertura corretta della PWA dal percorso di registrazione.
+// V112-48 — cache aggiornata; Web Push + apertura corretta della PWA dal percorso di registrazione.
 self.addEventListener('push',event=>{
   let data={};
   try{data=event.data?event.data.json():{}}catch{data={body:event.data?.text?.()||'Nuova attività completata'}}

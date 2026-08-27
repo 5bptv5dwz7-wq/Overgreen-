@@ -1,4 +1,4 @@
-const APP_VERSION='V112-47';
+const APP_VERSION='V112-48';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -24,7 +24,7 @@ let donePhotoFiles=[];
 let closeExtraPhotoFiles=[];
 let activityCompletePhotoFiles=[];
 
-// ---- V112-47 · Versione app visibile in testata e mantenuta a ogni release ----
+// ---- V112-48 · Metadati prima pagina PDF su due colonne ----
 // ---- V112-39 · Dashboard: da fare prima, eseguiti sotto in ordine reale di chiusura ----
 // ---- V112-38 · Extra già creati aggiungibili/spostabili nelle giornate esistenti ----
 // ---- V112-37 · Upload foto senza dipendenza da navigator.onLine ----
@@ -3141,7 +3141,22 @@ async function generateExtraClosurePdf(e,button){
     page.drawText('OVERGREEN',{x:margin,y,size:22,font:bold,color:green});page.drawText('REPORT DI CHIUSURA LAVORO EXTRA',{x:margin,y:y-29,size:11,font:bold,color:muted});y-=62;
     const place=st?.nome||e.nome_esterno||'Luogo non indicato',address=st?.indirizzo||[e.indirizzo_esterno,st?.citta].filter(Boolean).join(' · ');
     const fields=[['LAVORO',e.titolo],['CATEGORIA',extraCategory(e)==='verde'?'Verde':extraCategory(e)==='pulizie'?'Pulizie':'Categoria non indicata'],['LUOGO',place],['INDIRIZZO',address||'Non indicato'],['DATA RICHIESTA',fmt(extraRequestDate(e))],['DATA ESECUZIONE',fmt(e.giorno_intervento)],['ORARIO CHIUSURA',fmtClosedAt(e.closed_at)],['CHIUSO DA',closedByName(e)],['OPERATORI',names.join(', ')||'Non indicati'],['STATO','Chiuso e convalidato']];
-    for(const [label,value] of fields){page.drawText(label,{x:margin,y,size:8,font:bold,color:muted});const lines=wrapPdfText(value,regular,11,w-105);lines.slice(0,2).forEach((line,i)=>page.drawText(line,{x:margin+105,y:y-i*14,size:11,font:regular,color:rgb(.08,.17,.12)}));y-=Math.max(27,lines.slice(0,2).length*14+8)}
+    const metaGap=22,metaColW=(w-metaGap)/2,metaLabelW=82,metaValueW=metaColW-metaLabelW-6,metaStartY=y,metaRows=Math.ceil(fields.length/2),rowHeights=[];
+    for(let r=0;r<metaRows;r++){
+      const left=fields[r*2],right=fields[r*2+1],lineCounts=[left,right].filter(Boolean).map(([,value])=>Math.min(2,wrapPdfText(value,regular,10.5,metaValueW).length||1));
+      rowHeights[r]=Math.max(25,Math.max(...lineCounts,1)*13+8);
+    }
+    let rowTop=metaStartY;
+    for(let r=0;r<metaRows;r++){
+      for(let c=0;c<2;c++){
+        const field=fields[r*2+c];if(!field)continue;const [label,value]=field,x=margin+c*(metaColW+metaGap);
+        page.drawText(label,{x,y:rowTop,size:7.5,font:bold,color:muted});
+        const lines=wrapPdfText(value,regular,10.5,metaValueW).slice(0,2);
+        lines.forEach((line,i)=>page.drawText(line,{x:x+metaLabelW,y:rowTop-i*13,size:10.5,font:regular,color:rgb(.08,.17,.12)}));
+      }
+      rowTop-=rowHeights[r];
+    }
+    y=rowTop;
     y-=4;page.drawLine({start:{x:margin,y},end:{x:page.getWidth()-margin,y},thickness:1,color:rgb(.82,.88,.84)});y-=25;
     page.drawText('NOTE DI CHIUSURA',{x:margin,y,size:9,font:bold,color:green});y-=18;const notes=pdfSafeText(e.note_lorenzo||e.descrizione||'Nessuna nota inserita.');for(const line of wrapPdfText(notes,regular,10,w).slice(0,8)){page.drawText(line,{x:margin,y,size:10,font:regular,color:rgb(.08,.17,.12)});y-=14}
     if(pics.length&&y>190){

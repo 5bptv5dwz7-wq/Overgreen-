@@ -1,4 +1,4 @@
-const APP_VERSION='V112-40';
+const APP_VERSION='V112-41';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -24,7 +24,7 @@ let donePhotoFiles=[];
 let closeExtraPhotoFiles=[];
 let activityCompletePhotoFiles=[];
 
-// ---- V112-40 · Versione app visibile in testata e mantenuta a ogni release ----
+// ---- V112-41 · Procedura guidata impaginazione PDF chiusura extra ----
 // ---- V112-39 · Dashboard: da fare prima, eseguiti sotto in ordine reale di chiusura ----
 // ---- V112-38 · Extra già creati aggiungibili/spostabili nelle giornate esistenti ----
 // ---- V112-37 · Upload foto senza dipendenza da navigator.onLine ----
@@ -3130,39 +3130,57 @@ async function generateComplexExtraReportPdf(e,button){
  }catch(err){console.error(err);alert('Impossibile generare il report: '+(err.message||String(err)))}finally{if(button){button.disabled=false;button.textContent=old}}
 }
 
-async function generateExtraClosurePdf(e,button){
+let extraClosurePdfContext=null;
+const EXTRA_CLOSURE_PREFS_KEY='overgreen_extra_closure_pdf_prefs_v1';
+function extraClosurePdfPrefs(){
+  try{return Object.assign({layout:'4',orientation:'portrait',fit:'contain',captions:false,showInfo:true},JSON.parse(localStorage.getItem(EXTRA_CLOSURE_PREFS_KEY)||'{}'))}catch{return {layout:'4',orientation:'portrait',fit:'contain',captions:false,showInfo:true}}
+}
+function saveExtraClosurePdfPrefs(p){try{localStorage.setItem(EXTRA_CLOSURE_PREFS_KEY,JSON.stringify(p))}catch{}}
+function extraClosureSelectedPhotos(){
+  const box=$('extraClosurePhotoOrder');if(!box)return [];
+  return [...box.querySelectorAll('[data-photo-id]')].filter(x=>x.querySelector('input[type=checkbox]')?.checked).map(x=>attachments.find(a=>a.id===x.dataset.photoId)).filter(Boolean);
+}
+async function renderExtraClosurePhotoThumbs(){
+  const box=$('extraClosurePhotoOrder'),e=extraClosurePdfContext?.extra;if(!box||!e)return;
+  const pics=attachments.filter(a=>a.extra_id===e.id&&a.tipo==='foto_generica');box.innerHTML='';
+  for(const [i,a] of pics.entries()){
+    const row=document.createElement('div');row.className='closure-layout-photo';row.dataset.photoId=a.id;
+    row.innerHTML=`<label><input type="checkbox" checked><span class="closure-layout-thumb">📷</span><span>Foto ${i+1}</span></label><div><button type="button" class="secondary compact-btn" data-up>↑</button><button type="button" class="secondary compact-btn" data-down>↓</button></div>`;
+    try{const url=await signedAttachmentUrl(a);row.querySelector('.closure-layout-thumb').innerHTML=`<img src="${url}" alt="Foto ${i+1}">`}catch{}
+    row.querySelector('[data-up]').onclick=()=>{const prev=row.previousElementSibling;if(prev)box.insertBefore(row,prev);renderExtraClosureLayoutPreview()};
+    row.querySelector('[data-down]').onclick=()=>{const next=row.nextElementSibling;if(next)box.insertBefore(next,row);renderExtraClosureLayoutPreview()};
+    row.querySelector('input').onchange=renderExtraClosureLayoutPreview;box.appendChild(row);
+  }
+  $('extraClosureNoPhotos').classList.toggle('hidden',!!pics.length);renderExtraClosureLayoutPreview();
+}
+function readExtraClosurePdfOptions(){return {layout:$('extraClosureLayout').value,orientation:$('extraClosureOrientation').value,fit:$('extraClosureFit').value,captions:$('extraClosureCaptions').checked,showInfo:$('extraClosureShowInfo').checked}}
+function renderExtraClosureLayoutPreview(){
+  const preview=$('extraClosureLayoutPreview');if(!preview)return;const o=readExtraClosurePdfOptions(),n=extraClosureSelectedPhotos().length,per=Math.max(1,Number(o.layout)||4),shown=Math.min(n,per);
+  preview.className=`closure-layout-preview ${o.orientation==='landscape'?'is-landscape':''}`;
+  preview.innerHTML=`<div class="closure-preview-head">OVERGREEN <small>${o.showInfo?'Dati lavoro':''}</small></div><div class="closure-preview-grid cols-${per}">${Array.from({length:shown},(_,i)=>`<div><span>Foto ${i+1}</span>${o.captions?'<small>Didascalia</small>':''}</div>`).join('')}${!shown?'<p class="muted">Nessuna foto selezionata</p>':''}</div>`;
+}
+async function openExtraClosurePdfWizard(e,button){
   const reportEurospin=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),reportOvergreen=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen'),requestFile=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');
   if(!requestFile||!reportOvergreen||!reportEurospin)return alert('Per generare la chiusura servono il file richiesta, il file Overgreen e il file Eurospin.');
-  if(!window.PDFLib)return alert('La libreria PDF non è ancora caricata. Aggiorna la pagina e riprova.');
-  const old=button?.textContent;if(button){button.disabled=true;button.textContent='Generazione…'}
-  try{
-    const {PDFDocument,StandardFonts,rgb}=PDFLib,doc=await PDFDocument.create(),page=doc.addPage([595.28,841.89]),bold=await doc.embedFont(StandardFonts.HelveticaBold),regular=await doc.embedFont(StandardFonts.Helvetica),green=rgb(.03,.36,.19),muted=rgb(.35,.43,.39),st=stores.find(s=>s.id===e.store_id),names=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean),pics=attachments.filter(a=>a.extra_id===e.id&&a.tipo==='foto_generica');
-    const margin=42,w=page.getWidth()-margin*2;let y=790;
-    page.drawText('OVERGREEN',{x:margin,y,size:22,font:bold,color:green});page.drawText('REPORT DI CHIUSURA LAVORO EXTRA',{x:margin,y:y-29,size:11,font:bold,color:muted});y-=62;
-    const place=st?.nome||e.nome_esterno||'Luogo non indicato',address=st?.indirizzo||[e.indirizzo_esterno,st?.citta].filter(Boolean).join(' · ');
-    const fields=[['LAVORO',e.titolo],['CATEGORIA',extraCategory(e)==='verde'?'Verde':extraCategory(e)==='pulizie'?'Pulizie':'Categoria non indicata'],['LUOGO',place],['INDIRIZZO',address||'Non indicato'],['DATA RICHIESTA',fmt(extraRequestDate(e))],['DATA ESECUZIONE',fmt(e.giorno_intervento)],['ORARIO CHIUSURA',fmtClosedAt(e.closed_at)],['CHIUSO DA',closedByName(e)],['OPERATORI',names.join(', ')||'Non indicati'],['STATO','Chiuso e convalidato']];
-    for(const [label,value] of fields){page.drawText(label,{x:margin,y,size:8,font:bold,color:muted});const lines=wrapPdfText(value,regular,11,w-105);lines.slice(0,2).forEach((line,i)=>page.drawText(line,{x:margin+105,y:y-i*14,size:11,font:regular,color:rgb(.08,.17,.12)}));y-=Math.max(27,lines.slice(0,2).length*14+8)}
-    y-=4;page.drawLine({start:{x:margin,y},end:{x:page.getWidth()-margin,y},thickness:1,color:rgb(.82,.88,.84)});y-=25;
-    page.drawText('NOTE DI CHIUSURA',{x:margin,y,size:9,font:bold,color:green});y-=18;const notes=pdfSafeText(e.note_lorenzo||e.descrizione||'Nessuna nota inserita.');for(const line of wrapPdfText(notes,regular,10,w).slice(0,8)){page.drawText(line,{x:margin,y,size:10,font:regular,color:rgb(.08,.17,.12)});y-=14}
-    if(pics.length&&y>190){
-      y-=10;page.drawText(`FOTO ALLEGATE (${pics.length})`,{x:margin,y,size:9,font:bold,color:green});y-=15;
-      const selected=pics.slice(0,4),gap=10,count=selected.length;
-      let cols=2,rows=2,cellH=150;
-      if(count===1){cols=1;rows=1;cellH=Math.min(300,Math.max(190,y-38))}
-      else if(count===2){cols=2;rows=1;cellH=Math.min(245,Math.max(175,y-38))}
-      else if(count===3){cols=3;rows=1;cellH=Math.min(215,Math.max(165,y-38))}
-      else{cols=2;rows=2;cellH=Math.min(160,Math.max(125,(y-48-gap)/2))}
-      const cellW=(w-gap*(cols-1))/cols;
-      for(let i=0;i<selected.length;i++){
-        try{
-          const a=selected[i],bytes=await fetchAttachmentBytes(a),mime=String(a.mime_type||'').toLowerCase(),img=await embedUprightImage(doc,bytes,mime),col=i%cols,row=Math.floor(i/cols),x=margin+col*(cellW+gap),top=y-row*(cellH+gap),scale=Math.min(cellW/img.width,cellH/img.height);
-          page.drawImage(img,{x:x+(cellW-img.width*scale)/2,y:top-cellH+(cellH-img.height*scale)/2,width:img.width*scale,height:img.height*scale})
-        }catch{}
-      }
-    }
-    page.drawText('Generato da Overgreen Cloud',{x:margin,y:22,size:8,font:regular,color:muted});
+  extraClosurePdfContext={extra:e,button};const p=extraClosurePdfPrefs();$('extraClosureLayout').value=p.layout;$('extraClosureOrientation').value=p.orientation;$('extraClosureFit').value=p.fit;$('extraClosureCaptions').checked=!!p.captions;$('extraClosureShowInfo').checked=p.showInfo!==false;$('extraClosureSaveDefault').checked=false;
+  $('extraClosurePdfTitle').textContent=`Chiusura · ${e.titolo}`;await renderExtraClosurePhotoThumbs();$('extraClosurePdfDialog').showModal();
+}
+async function drawClosurePhotoPage(doc,pics,options,e,st,bold,regular,green,muted,pageIndex=0){
+  const landscape=options.orientation==='landscape',pageW=landscape?841.89:595.28,pageH=landscape?595.28:841.89,margin=36,page=doc.addPage([pageW,pageH]),w=pageW-margin*2;
+  let top=pageH-38;page.drawText('OVERGREEN',{x:margin,y:top,size:18,font:bold,color:green});page.drawText('DOCUMENTAZIONE FOTOGRAFICA',{x:margin+125,y:top+2,size:9,font:bold,color:muted});top-=24;
+  if(options.showInfo){const info=pdfSafeText(`${e.titolo} · ${st?.nome||e.nome_esterno||'Luogo non indicato'} · ${fmt(e.giorno_intervento)}`);for(const line of wrapPdfText(info,regular,9,w).slice(0,2)){page.drawText(line,{x:margin,y:top,size:9,font:regular});top-=12}top-=6}
+  const per=Math.max(1,Number(options.layout)||4),cols=per===1?1:per===2?2:per===4?2:3,rows=Math.ceil(per/cols),gap=10,captionH=options.captions?18:0,availH=top-34-gap*(rows-1),cellW=(w-gap*(cols-1))/cols,cellH=availH/rows;
+  for(let i=0;i<pics.length;i++){const a=pics[i],col=i%cols,row=Math.floor(i/cols),x=margin+col*(cellW+gap),cellTop=top-row*(cellH+gap),imgH=cellH-captionH;try{const bytes=await fetchAttachmentBytes(a),img=await embedUprightImage(doc,bytes,String(a.mime_type||'').toLowerCase());let dw,dh,dx,dy;if(options.fit==='cover'){const scale=Math.max(cellW/img.width,imgH/img.height);dw=img.width*scale;dh=img.height*scale;/* pdf-lib non ritaglia facilmente: manteniamo il riquadro senza deformare */if(dw>cellW||dh>imgH){const safe=Math.min(cellW/img.width,imgH/img.height);dw=img.width*safe;dh=img.height*safe}}else{const scale=Math.min(cellW/img.width,imgH/img.height);dw=img.width*scale;dh=img.height*scale}dx=x+(cellW-dw)/2;dy=cellTop-imgH+(imgH-dh)/2;page.drawImage(img,{x:dx,y:dy,width:dw,height:dh});if(options.captions)page.drawText(`Foto ${pageIndex*per+i+1}`,{x,y:cellTop-cellH+4,size:8,font:regular,color:muted})}catch{page.drawText('Foto non disponibile',{x:x+8,y:cellTop-24,size:8,font:regular,color:muted})}}
+  page.drawText(`Pagina foto ${pageIndex+1}`,{x:margin,y:16,size:7,font:regular,color:muted});
+}
+async function generateExtraClosurePdf(e,button,options=null,selectedPics=null){
+  const reportEurospin=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),reportOvergreen=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen'),requestFile=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');
+  if(!requestFile||!reportOvergreen||!reportEurospin)return alert('Per generare la chiusura servono il file richiesta, il file Overgreen e il file Eurospin.');if(!window.PDFLib)return alert('La libreria PDF non è ancora caricata. Aggiorna la pagina e riprova.');
+  options=options||extraClosurePdfPrefs();const pics=selectedPics||attachments.filter(a=>a.extra_id===e.id&&a.tipo==='foto_generica'),old=button?.textContent;if(button){button.disabled=true;button.textContent='Generazione…'}
+  try{const {PDFDocument,StandardFonts,rgb}=PDFLib,doc=await PDFDocument.create(),bold=await doc.embedFont(StandardFonts.HelveticaBold),regular=await doc.embedFont(StandardFonts.Helvetica),green=rgb(.03,.36,.19),muted=rgb(.35,.43,.39),st=stores.find(s=>s.id===e.store_id),per=Math.max(1,Number(options.layout)||4);
+    if(pics.length){for(let i=0,pageIndex=0;i<pics.length;i+=per,pageIndex++)await drawClosurePhotoPage(doc,pics.slice(i,i+per),options,e,st,bold,regular,green,muted,pageIndex)}else{const page=doc.addPage([595.28,841.89]);page.drawText('OVERGREEN',{x:42,y:790,size:22,font:bold,color:green});page.drawText('DOCUMENTAZIONE FOTOGRAFICA',{x:42,y:760,size:11,font:bold,color:muted});page.drawText('Nessuna fotografia selezionata.',{x:42,y:720,size:10,font:regular,color:muted})}
     await appendAttachmentAsFullPage(doc,requestFile);await appendAttachmentAsFullPage(doc,reportOvergreen);await appendAttachmentAsFullPage(doc,reportEurospin);
-    const bytes=await doc.save(),blob=new Blob([bytes],{type:'application/pdf'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`chiusura-extra-${pdfSafeName(e.titolo)}-${e.giorno_intervento||today()}.pdf`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('Chiusura PDF generata');
+    const bytes=await doc.save(),blob=new Blob([bytes],{type:'application/pdf'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`chiusura-extra-${pdfSafeName(e.titolo)}-${e.giorno_intervento||today()}.pdf`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('Chiusura PDF generata')
   }catch(err){console.error(err);alert('Impossibile generare la chiusura: '+(err.message||String(err)))}finally{if(button){button.disabled=false;button.textContent=old}}
 }
 
@@ -3182,7 +3200,7 @@ function extraCard(e){
   c.querySelector('[data-report-eurospin]')?.addEventListener('click',()=>openAttachment(reportEurospin));
   c.querySelector('[data-report-overgreen]')?.addEventListener('click',()=>openAttachment(reportOvergreen));
   c.querySelector('[data-generate-work-report]')?.addEventListener('click',ev=>generateComplexExtraReportPdf(e,ev.currentTarget));
-  c.querySelector('[data-generate-closure]')?.addEventListener('click',ev=>generateExtraClosurePdf(e,ev.currentTarget));
+  c.querySelector('[data-generate-closure]')?.addEventListener('click',ev=>openExtraClosurePdfWizard(e,ev.currentTarget));
   c.querySelector('[data-edit-closure]')?.addEventListener('click',()=>openExtraClosureEdit(e));
   c.querySelector('[data-close-extra]')?.addEventListener('click',()=>{if(!e.giorno_intervento)return alert('Prima di chiudere il lavoro inserisci la data di esecuzione da Modifica.');const assigned=extraWorkers.some(w=>w.extra_id===e.id);if(!assigned)return alert('Prima di chiudere il lavoro assegna almeno un dipendente da Modifica.');openExtraClosureDialog(e,false)});
   c.querySelector('[data-approve-extra]')?.addEventListener('click',()=>approveExtra(e));
@@ -4467,3 +4485,9 @@ document.addEventListener('DOMContentLoaded',()=>{
 $('dashboardShareStore')?.addEventListener('click',openShareStorePicker);$('shareStoreSearch')?.addEventListener('input',renderShareStorePicker);
 
 $('editScheduleTeamForm')?.addEventListener('submit',e=>{e.preventDefault();saveEditScheduleTeam()});
+
+// V112-41 · Wizard PDF chiusura extra
+['extraClosureLayout','extraClosureOrientation','extraClosureFit','extraClosureCaptions','extraClosureShowInfo'].forEach(id=>$(id)?.addEventListener('change',renderExtraClosureLayoutPreview));
+$('extraClosurePdfCancel')?.addEventListener('click',()=>{$('extraClosurePdfDialog').close();extraClosurePdfContext=null});
+$('extraClosurePdfQuick')?.addEventListener('click',async()=>{const ctx=extraClosurePdfContext;if(!ctx)return;$('extraClosurePdfDialog').close();await generateExtraClosurePdf(ctx.extra,ctx.button,extraClosurePdfPrefs(),attachments.filter(a=>a.extra_id===ctx.extra.id&&a.tipo==='foto_generica'));extraClosurePdfContext=null});
+$('extraClosurePdfGenerate')?.addEventListener('click',async()=>{const ctx=extraClosurePdfContext;if(!ctx)return;const o=readExtraClosurePdfOptions(),pics=extraClosureSelectedPhotos();if($('extraClosureSaveDefault').checked)saveExtraClosurePdfPrefs(o);$('extraClosurePdfDialog').close();await generateExtraClosurePdf(ctx.extra,ctx.button,o,pics);extraClosurePdfContext=null});

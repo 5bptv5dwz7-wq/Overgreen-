@@ -1,4 +1,4 @@
-const APP_VERSION='V112-48';
+const APP_VERSION='V112-49';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -24,7 +24,7 @@ let donePhotoFiles=[];
 let closeExtraPhotoFiles=[];
 let activityCompletePhotoFiles=[];
 
-// ---- V112-48 · Metadati prima pagina PDF su due colonne ----
+// ---- V112-49 · Foto chiusura PDF più grandi, margini ridotti ----
 // ---- V112-39 · Dashboard: da fare prima, eseguiti sotto in ordine reale di chiusura ----
 // ---- V112-38 · Extra già creati aggiungibili/spostabili nelle giornate esistenti ----
 // ---- V112-37 · Upload foto senza dipendenza da navigator.onLine ----
@@ -3161,16 +3161,16 @@ async function generateExtraClosurePdf(e,button){
     page.drawText('NOTE DI CHIUSURA',{x:margin,y,size:9,font:bold,color:green});y-=18;const notes=pdfSafeText(e.note_lorenzo||e.descrizione||'Nessuna nota inserita.');for(const line of wrapPdfText(notes,regular,10,w).slice(0,8)){page.drawText(line,{x:margin,y,size:10,font:regular,color:rgb(.08,.17,.12)});y-=14}
     if(pics.length&&y>190){
       y-=10;page.drawText(`FOTO ALLEGATE (${pics.length})`,{x:margin,y,size:9,font:bold,color:green});y-=15;
-      const selected=pics.slice(0,4),gap=10,count=selected.length;
-      let cols=2,rows=2,cellH=150;
-      if(count===1){cols=1;rows=1;cellH=Math.min(300,Math.max(190,y-38))}
-      else if(count===2){cols=2;rows=1;cellH=Math.min(245,Math.max(175,y-38))}
-      else if(count===3){cols=3;rows=1;cellH=Math.min(215,Math.max(165,y-38))}
-      else{cols=2;rows=2;cellH=Math.min(160,Math.max(125,(y-48-gap)/2))}
-      const cellW=(w-gap*(cols-1))/cols;
+      const selected=pics.slice(0,4),gap=6,count=selected.length,photoMargin=22,photoW=page.getWidth()-photoMargin*2;
+      let cols=2,rows=Math.ceil(count/2),cellH=180;
+      if(count===1){cols=1;rows=1;cellH=Math.min(330,Math.max(220,y-38))}
+      else if(count===2){cols=2;rows=1;cellH=Math.min(285,Math.max(205,y-38))}
+      else if(count===3){cols=2;rows=2;cellH=Math.min(215,Math.max(165,(y-48-gap)/2))}
+      else{cols=2;rows=2;cellH=Math.min(215,Math.max(165,(y-48-gap)/2))}
+      const cellW=(photoW-gap*(cols-1))/cols;
       for(let i=0;i<selected.length;i++){
         try{
-          const a=selected[i],bytes=await fetchAttachmentBytes(a),mime=String(a.mime_type||'').toLowerCase(),img=await embedUprightImage(doc,bytes,mime),col=i%cols,row=Math.floor(i/cols),x=margin+col*(cellW+gap),top=y-row*(cellH+gap),scale=Math.min(cellW/img.width,cellH/img.height);
+          const a=selected[i],bytes=await fetchAttachmentBytes(a),mime=String(a.mime_type||'').toLowerCase(),img=await embedUprightImage(doc,bytes,mime),col=i%cols,row=Math.floor(i/cols),x=photoMargin+col*(cellW+gap),top=y-row*(cellH+gap),scale=Math.min(cellW/img.width,cellH/img.height);
           page.drawImage(img,{x:x+(cellW-img.width*scale)/2,y:top-cellH+(cellH-img.height*scale)/2,width:img.width*scale,height:img.height*scale})
         }catch{}
       }

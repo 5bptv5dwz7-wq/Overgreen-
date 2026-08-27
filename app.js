@@ -1,4 +1,4 @@
-const APP_VERSION='V112-53';
+const APP_VERSION='V112-54';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -326,8 +326,14 @@ function syncImpersonationUi(){
   const active=impersonating();
   if($('userLabel'))$('userLabel').textContent=active?`${profile.nome} · Vista dipendente (tu: ${realProfile.nome})`:`${profile.nome} · ${admin()?'Amministratore':'Dipendente'}`;
   if($('settingsUser'))$('settingsUser').textContent=active?`Stai operando come ${profile.nome} — sessione reale: ${session?.user?.email||realProfile?.email||''}`:`${profile.nome} — ${session?.user?.email||''}`;
-  document.querySelectorAll('.admin-only').forEach(x=>x.classList.toggle('hidden',!admin()));
-  document.querySelectorAll('.real-admin-only').forEach(x=>x.classList.toggle('hidden',!realAdmin()));
+  document.querySelectorAll('.admin-only').forEach(x=>{
+    const isView=x.classList.contains('view');
+    x.classList.toggle('hidden',!admin()||(isView&&x.id!==currentView+'View'));
+  });
+  document.querySelectorAll('.real-admin-only').forEach(x=>{
+    const isView=x.classList.contains('view');
+    x.classList.toggle('hidden',!realAdmin()||(isView&&x.id!==currentView+'View'));
+  });
   const bar=$('impersonationBar'),select=$('impersonationSelect'),exit=$('exitImpersonationBtn'),state=$('impersonationState'),summary=$('impersonationSummary');
   if(bar){bar.classList.toggle('active',active);if(!realAdmin())bar.removeAttribute('open')}
   if(summary)summary.textContent=active?`👤 ${profile.nome}`:'👤 Admin';

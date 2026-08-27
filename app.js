@@ -1,3 +1,4 @@
+const APP_VERSION='V112-40';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -23,6 +24,8 @@ let donePhotoFiles=[];
 let closeExtraPhotoFiles=[];
 let activityCompletePhotoFiles=[];
 
+// ---- V112-40 · Versione app visibile in testata e mantenuta a ogni release ----
+// ---- V112-39 · Dashboard: da fare prima, eseguiti sotto in ordine reale di chiusura ----
 // ---- V112-38 · Extra già creati aggiungibili/spostabili nelle giornate esistenti ----
 // ---- V112-37 · Upload foto senza dipendenza da navigator.onLine ----
 const PUSH_VAPID_PUBLIC_KEY='BDOq-eaSnfxLf1MBpFqfu02KfKS6G166bX02n-etWusn2JGZjpWVqDlMN3nuH7hf2ts13EZCV4UJ_hm2IevChQo';
@@ -705,7 +708,7 @@ function auditHumanDescription(r){
 
   return r.description||`${auditActionLabel(action)} · ${auditEntityLabel(t)}`;
 }
-async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:'V112-38'}})}catch(e){console.warn('audit',e)}}
+async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:APP_VERSION}})}catch(e){console.warn('audit',e)}}
 function auditViewOpen(name){if(!session?.user?.id)return;const labels={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:'Programmazione',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'};if(labels[name])writeClientAudit('VIEW','navigation',`Aperta pagina ${labels[name]}`,{view:name})}
 function renderAuditUsers(){const sel=$('auditUser');if(!sel)return;const cur=sel.value||'all';sel.innerHTML='<option value="all">Tutti gli utenti</option>';[...profiles].sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.nome||p.email||p.id;sel.appendChild(o)});if([...sel.options].some(o=>o.value===cur))sel.value=cur}
 async function openAuditView(){if(!admin())return setView('dashboard');renderAuditUsers();await loadAuditLogs(true)}
@@ -974,6 +977,44 @@ async function reconcileProgrammingConsistency(){
     else{schedules=schedules.filter(x=>x.id!==sch.id);scheduleMembers=scheduleMembers.filter(x=>x.schedule_id!==sch.id)}
   }
 }
+function dashboardOrdinaryCompletionMs(item){
+  const related=interventions.filter(i=>interventionHasScheduleItem(i,item?.id)&&!i.multi_day_open);
+  if(!related.length)return 0;
+  return Math.max(...related.map(i=>Date.parse(i.closed_at||i.convalidato_il||i.created_at||'')||0));
+}
+function dashboardJobStatus(job){
+  if(job.kind==='ordinary'){
+    const st=effectiveScheduleState(job.row.item);
+    return st==='da_fare'?0:1; // in_attesa e completato sono già eseguiti
+  }
+  if(job.kind==='extra')return ['in_attesa','completato'].includes(job.extra?.stato)?1:0;
+  if(job.kind==='activity')return job.activity?.stato==='completato'?1:0;
+  return 0;
+}
+function dashboardJobRoutePosition(job){
+  if(job.kind==='ordinary')return Number(job.row.item.posizione)||999999;
+  if(job.kind==='extra')return extraRoutePosition(job.extra);
+  return Number(job.activity.posizione)||999999;
+}
+function dashboardJobCompletionMs(job){
+  if(job.kind==='ordinary')return dashboardOrdinaryCompletionMs(job.row.item);
+  if(job.kind==='extra')return Date.parse(job.extra?.closed_at||job.extra?.convalidato_il||job.extra?.updated_at||'')||0;
+  if(job.kind==='activity')return Date.parse(job.activity?.completed_at||job.activity?.updated_at||'')||0;
+  return 0;
+}
+function dashboardJobCompare(a,b){
+  const sa=dashboardJobStatus(a),sb=dashboardJobStatus(b);
+  if(sa!==sb)return sa-sb; // prima tutto ciò che è ancora da fare
+  if(sa===0){
+    const pa=dashboardJobRoutePosition(a),pb=dashboardJobRoutePosition(b);
+    return pa-pb||String((a.row?.item||a.extra||a.activity)?.id||'').localeCompare(String((b.row?.item||b.extra||b.activity)?.id||''));
+  }
+  // Gli eseguiti restano sotto, nell'ordine in cui sono stati effettivamente chiusi.
+  const ta=dashboardJobCompletionMs(a),tb=dashboardJobCompletionMs(b);
+  if(ta&&tb&&ta!==tb)return ta-tb;
+  if(ta!==tb)return ta? -1:1;
+  return dashboardJobRoutePosition(a)-dashboardJobRoutePosition(b)||String((a.row?.item||a.extra||a.activity)?.id||'').localeCompare(String((b.row?.item||b.extra||b.activity)?.id||''));
+}
 function renderDashboard(){
   if(!$('dashToday'))return;
   const currentTravelToken=++travelRenderToken;
@@ -1063,16 +1104,15 @@ function renderDashboard(){
       const section=document.createElement('section');section.className='dashboard-worker-group';
       section.innerHTML=`<h3>${esc(group.label)} <span>${group.jobs.length}</span></h3><div></div>`;
       const list=section.querySelector('div');
-      group.jobs.sort((a,b)=>{
-        const pa=a.kind==='ordinary'?(Number(a.row.item.posizione)||999999):a.kind==='extra'?extraRoutePosition(a.extra):(Number(a.activity.posizione)||999999);
-        const pb=b.kind==='ordinary'?(Number(b.row.item.posizione)||999999):b.kind==='extra'?extraRoutePosition(b.extra):(Number(b.activity.posizione)||999999);
-        return pa-pb;
-      });
+      // V112-39: non mischiare mai lavori eseguiti e lavori ancora da fare.
+      // I da-fare mantengono l'ordine di programmazione; gli eseguiti vanno sotto
+      // e mantengono l'ordine cronologico di chiusura.
+      group.jobs.sort(dashboardJobCompare);
       for(const job of group.jobs){
         if(job.kind==='ordinary'){
           const row=job.row,st=stores.find(x=>x.id===row.item.store_id),linked=linkedExtrasForScheduleItem(row.item.id),done=itemDone(row.item),c=document.createElement('article');
-          c.className=`dashboard-line-job ordinary ${done?'is-done':'is-open'}`;
           const pending=itemPending(row.item);
+          c.className=`dashboard-line-job ordinary ${done?'is-done':pending?'is-pending':'is-open'}`;
           const ordinaryNotes=[row.schedule?.nota_generale,st?.note].filter(v=>String(v||'').trim());
           c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span>${clientBadge(st)}<strong>${esc(st?.nome||'Punto vendita')}</strong>${(st?.indirizzo||st?.citta)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${done?'Completato':pending?'In attesa di convalida':'Da eseguire'}</small>${ordinaryNotes.length?`<div class="dashboard-job-notes"><strong>Note</strong>${ordinaryNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>{const pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');return `<div class="embedded-extra ${extraCategoryClass(e)} ${extraIsDone(e)?'is-done':'is-open'}" data-open-linked-extra="${e.id}" role="button" tabindex="0"><span>${extraIsDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span>${e.numero_target?`<small class="target-number">Target: ${esc(e.numero_target)}</small>`:''}<small>${extraIsDone(e)?'Completato':'Da fare insieme al passaggio'} · Tocca per aprire</small>${e.descrizione?`<p class="embedded-extra-description">${esc(e.descrizione)}</p>`:''}${pdf?`<button type="button" class="secondary compact-btn" data-open-linked-pdf="${e.id}">📄 Apri PDF</button>`:''}</div></div>`}).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${admin()?'<button class="secondary" data-share>Condividi</button>':''}${done?(admin()?'<button class="reopen-intervention-btn" data-reopen>↩ Riapri intervento</button>':'<button class="secondary" disabled>✓ Completato</button>'):pending?'<button class="secondary" disabled>⏳ In attesa</button>':'<button data-done>✓ Eseguito</button>'}</div>`;
           c.dataset.routeAddress=routeAddressForStore(st);
@@ -1103,7 +1143,8 @@ function renderDashboard(){
           list.appendChild(c)
         }else if(job.kind==='extra'){
           const e=job.extra,st=stores.find(s=>s.id===e.store_id),done=extraIsDone(e),urgent=e.urgente===true||e.priorita==='urgente'||elapsedDaysFrom(extraRequestDate(e))>=7,c=document.createElement('article');
-          c.className=`dashboard-line-job standalone-extra ${extraCategoryClass(e)} ${done?'is-done':urgent?'is-urgent':'is-open'}`;
+          const pending=e.stato==='in_attesa';
+          c.className=`dashboard-line-job standalone-extra ${extraCategoryClass(e)} ${done?'is-done':pending?'is-pending':urgent?'is-urgent is-open':'is-open'}`;
           const extraNotes=[e.descrizione,e.note_lorenzo].filter(v=>String(v||'').trim());
           const requestPdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');
           const canClose=!done&&!isIntesaOrdinaryTicket(e)&&['programmato','ricevuto','da_integrare'].includes(e.stato)&&(admin()||myExtraIds.has(e.id));
@@ -1747,7 +1788,7 @@ async function hydrateScheduleTravel(section,token){
   summary.querySelector('span').textContent=okCount?`${totalKm.toFixed(totalKm<10?1:0)} km · ${formatTravelMinutes(totalMinutes)} di guida`:'Dati di viaggio non disponibili';
 }
 async function hydrateWorkerTravel(section,token){
-  const cards=[...section.querySelectorAll('.dashboard-line-job[data-route-address]')];if(cards.length<2)return;
+  const cards=[...section.querySelectorAll('.dashboard-line-job[data-route-address].is-open')];if(cards.length<2)return;
   const summary=document.createElement('div');summary.className='worker-travel-summary';summary.innerHTML='<strong>🚗 Percorso</strong><span>Calcolo in corso…</span>';
   section.querySelector('h3')?.after(summary);
   let totalKm=0,totalMinutes=0,okCount=0;
@@ -3646,7 +3687,7 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
       scheduleItems.filter(x=>linkedScheduleIds.has(x.id)).forEach(x=>x.stato=nextState);
     }
     if(!continueAnotherDay&&admin()){const r=await sb.from('stores').update({ultimo_passaggio:day,next_visit_note:nextVisitNote||null}).eq('id',storeId);if(r.error)throw r.error}
-    if(!continueAnotherDay&&linkedIncludedExtras.length){const includedState=admin()?'completato':'in_attesa',now=new Date().toISOString(),r=await sb.from('extras').update({stato:includedState,giorno_intervento:day,closed_by:profile.id,closed_at:admin()?now:null,convalidato_da:admin()?profile.id:null,convalidato_il:admin()?now:null}).in('id',linkedIncludedExtras.map(e=>e.id));if(r.error)throw new Error('Intervento salvato, ma aggiornamento ticket/target incluso non riuscito: '+r.error.message)}
+    if(!continueAnotherDay&&linkedIncludedExtras.length){const includedState=admin()?'completato':'in_attesa',now=new Date().toISOString(),r=await sb.from('extras').update({stato:includedState,giorno_intervento:day,closed_by:profile.id,closed_at:now,convalidato_da:admin()?profile.id:null,convalidato_il:admin()?now:null}).in('id',linkedIncludedExtras.map(e=>e.id));if(r.error)throw new Error('Intervento salvato, ma aggiornamento ticket/target incluso non riuscito: '+r.error.message)}
     let photoSync=null;
     if(files.length){
       btn.textContent=`Sincronizzo ${files.length} foto…`;
@@ -4339,7 +4380,7 @@ $('closeExtraForm').onsubmit=async e=>{
     
 
     btn.textContent='Invio a Lorenzo…';
-    const {error}=await sb.from('extras').update({stato:'in_attesa',note_lorenzo:notes,closed_by:profile.id,closed_at:null}).eq('id',id);
+    const {error}=await sb.from('extras').update({stato:'in_attesa',note_lorenzo:notes,closed_by:profile.id,closed_at:new Date().toISOString()}).eq('id',id);
     if(error)throw error;
     $('closeExtraDialog').close();$('closeExtraForm').reset();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
     toast(`Extra inviato a Lorenzo${photos.length?' · '+photos.length+' foto':''}`);

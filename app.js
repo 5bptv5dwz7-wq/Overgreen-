@@ -1,4 +1,4 @@
-const APP_VERSION='V112-50';
+const APP_VERSION='V112-51';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -24,7 +24,8 @@ let donePhotoFiles=[];
 let closeExtraPhotoFiles=[];
 let activityCompletePhotoFiles=[];
 
-// ---- V112-50 · Target evidente nella testata PDF senza occupare spazio foto ----
+// ---- V112-51 · UI mobile compatta; PDF invariati ----
+// V112-50 · Target evidente nella testata PDF senza occupare spazio foto ----
 // ---- V112-39 · Dashboard: da fare prima, eseguiti sotto in ordine reale di chiusura ----
 // ---- V112-38 · Extra già creati aggiungibili/spostabili nelle giornate esistenti ----
 // ---- V112-37 · Upload foto senza dipendenza da navigator.onLine ----

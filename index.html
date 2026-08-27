@@ -429,7 +429,7 @@ header .nav-actions,
 @media(max-width:600px){#appVersion{font-size:.58rem;padding:1px 4px;margin-left:4px}}
 </style>
 <section id="loginScreen" class="auth-screen"><div class="auth-card"><div class="logo">OG</div><p class="eyebrow">OVERGREEN</p><h1>Gestione punti vendita</h1><p class="muted">Accedi con email e password.</p><form id="loginForm"><label>Email<input id="loginEmail" type="email" autocomplete="username" required></label><label>Password<input id="loginPassword" type="password" autocomplete="current-password" required></label><label class="remember-row"><input id="rememberAccess" type="checkbox" checked><span>Ricorda l'accesso su questo dispositivo</span></label><button type="submit" class="full">Accedi</button><p id="loginError" class="error hidden"></p></form></div></section>
-<div id="app" class="hidden"><header><div><p class="eyebrow">OVERGREEN <span id="appVersion" aria-label="Versione app">v112-50</span></p><h1 id="pageTitle">Sedi e clienti</h1><small id="userLabel" class="muted"></small></div><div class="header-actions"><button class="icon" data-view="dashboard" title="Dashboard">⌂</button><button class="icon" data-view="stores" title="Sedi e clienti">🏪</button><button class="icon" data-view="schedule" title="Programmazione">📅</button><button class="icon" data-view="extras" title="Extra">E</button><button class="icon admin-only" data-view="reports" title="Report giornaliero">R</button><button class="icon" data-view="stats" title="Statistiche">📊</button><button class="icon" data-view="signatures" title="Fogli firme Eurospin">✍</button><button class="icon" data-view="archive" title="Archivio aziendale">📁</button><button class="icon" data-view="contacts" title="Rubrica lavoro">📇</button><button class="icon admin-only" data-view="audit" title="Log attività">📋</button><button id="pendingBtn" class="icon admin-only" title="Convalide">✓<span id="pendingBadge" class="badge hidden">0</span></button><button class="icon" data-view="settings" title="Impostazioni">⚙</button><button id="helpBtn" class="icon help-icon" title="Istruzioni di questa schermata">?</button></div></header>
+<div id="app" class="hidden"><header><div><p class="eyebrow">OVERGREEN <span id="appVersion" aria-label="Versione app">v112-51</span></p><h1 id="pageTitle">Sedi e clienti</h1><small id="userLabel" class="muted"></small></div><div class="header-actions"><button class="icon" data-view="dashboard" title="Dashboard">⌂</button><button class="icon" data-view="stores" title="Sedi e clienti">🏪</button><button class="icon" data-view="schedule" title="Programmazione">📅</button><button class="icon" data-view="extras" title="Extra">E</button><button class="icon admin-only" data-view="reports" title="Report giornaliero">R</button><button class="icon" data-view="stats" title="Statistiche">📊</button><button class="icon" data-view="signatures" title="Fogli firme Eurospin">✍</button><button class="icon" data-view="archive" title="Archivio aziendale">📁</button><button class="icon" data-view="contacts" title="Rubrica lavoro">📇</button><button class="icon admin-only" data-view="audit" title="Log attività">📋</button><button id="pendingBtn" class="icon admin-only" title="Convalide">✓<span id="pendingBadge" class="badge hidden">0</span></button><button class="icon" data-view="settings" title="Impostazioni">⚙</button><button id="helpBtn" class="icon help-icon" title="Istruzioni di questa schermata">?</button></div></header>
 <div id="impersonationBar" class="impersonation-bar real-admin-only hidden"><strong>👤 Vista come</strong><select id="impersonationSelect" aria-label="Scegli dipendente"><option value="admin">Vista amministratore</option></select><span id="impersonationState" class="impersonation-state">Seleziona un dipendente per vedere e usare l’app come lui</span><button id="exitImpersonationBtn" type="button" class="secondary hidden">Torna amministratore</button></div>
 <main>
 <section id="dashboardView" class="view hidden"><div class="dashboard-grid dashboard-grid-compact"><button class="dash-card" data-dash="today"><strong id="dashToday">0</strong><span>Da fare oggi</span></button><button class="dash-card success" data-dash="done"><strong id="dashDone">0</strong><span>Completati oggi</span></button><button class="dash-card scheduled" data-dash="scheduled"><strong id="dashScheduled">0</strong><span>Programmati</span></button></div>
@@ -628,7 +628,7 @@ header .nav-actions,
 <div id="toast" class="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script><script src="config.js?v=54"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";</script>
-<script src="app.js?v=112-50"></script>
+<script src="app.js?v=112-51"></script>
 <script>
 document.addEventListener('click', function(e){
   const btn=e.target.closest('[data-view]');
@@ -656,7 +656,44 @@ document.addEventListener('DOMContentLoaded', function(){
 <style>
 /* V112-29 — diagnostica salvataggio attività agenda */
 .add-work-shortcuts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 14px}.schedule-activity-card{border-left:4px solid currentColor}.activity-pill{display:inline-flex;align-items:center;width:max-content;border:1px solid rgba(0,0,0,.1);border-radius:999px;padding:3px 8px;font-size:.76rem;font-weight:700;margin-bottom:3px}.work-contact-card{display:grid;gap:9px}.contact-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.contact-head h3,.contact-head p{margin:0}.contact-links{display:flex;gap:10px;flex-wrap:wrap}.contact-links a{display:inline-flex;align-items:center;gap:5px;text-decoration:none;font-weight:700}.contact-store-picker{max-height:34vh;overflow:auto}.contact-store-picker label span{display:flex;flex-direction:column}.contact-store-picker small{color:var(--muted,#68736d)}@media(max-width:600px){.add-work-shortcuts{grid-template-columns:1fr}.schedule-head-actions{display:grid;grid-template-columns:1fr 1fr}.schedule-head-actions button{min-width:0}}
-</style></body></html>
+</style>
+<style>
+/* V112-51 — interfaccia mobile compatta; non modifica i PDF */
+@media (max-width: 700px){
+  #app{font-size:.90rem}
+  #app > header{gap:7px !important;padding-top:5px !important;padding-bottom:5px !important}
+  #app > header > div:first-child h1{font-size:1.32rem !important;line-height:1.02 !important}
+  #app > header > div:first-child .eyebrow{font-size:.69rem !important;line-height:1 !important}
+  #app > header > div:first-child small{font-size:.72rem !important}
+  #app > header .header-actions{gap:4px !important;padding:1px 0 !important}
+  #app > header .header-actions > button.icon{
+    flex-basis:36px !important;width:36px !important;min-width:36px !important;max-width:36px !important;
+    height:36px !important;min-height:36px !important;border-radius:10px !important;font-size:1.05rem !important
+  }
+  #app main,#app .view,#app .page{padding-top:8px !important;padding-bottom:8px !important}
+  #app .card{padding:10px 11px !important;border-radius:12px !important}
+  #app .card h2,#app .card h3{margin-top:2px !important;margin-bottom:5px !important;line-height:1.12 !important}
+  #app .card p{margin-top:4px !important;margin-bottom:4px !important;line-height:1.28 !important}
+  #app .actions,#app .signature-actions,#app .archive-doc-actions,#app .schedule-library-actions{gap:6px !important}
+  #app button:not(.icon),#app .file-label{padding:9px 10px !important;min-height:38px !important;line-height:1.12 !important}
+  #app .compact-btn{min-height:34px !important;padding:7px 9px !important}
+  #app label{gap:4px !important;margin-bottom:7px !important}
+  #app input,#app select,#app textarea{padding:9px 10px !important;border-radius:10px !important}
+  #app input,#app select{min-height:40px !important}
+  #app textarea{min-height:72px}
+  #app fieldset{padding:9px !important;margin:8px 0 !important}
+  #app .picker{gap:6px !important}
+  #app .muted,#app small{line-height:1.22}
+  #app .badge,#app .badge-state,#app .audit-badge,#app .archive-new,#app .archive-read,#app .extra-partial-badge{padding-top:4px !important;padding-bottom:4px !important}
+  #app .pending-review-section,#app .extra-closure-details{margin-top:7px !important;margin-bottom:7px !important}
+  #app dialog form,#app dialog .dialog-body{padding:13px !important}
+  #app .dialog-head{margin-bottom:8px !important}
+  #app .dialog-head h2{font-size:1.25rem !important;margin:0 !important}
+  #app .next-visit-alert{padding:10px 11px !important;margin:7px 0 !important}
+  #app .schedule-next-visit{padding:8px 9px !important;margin:6px 0 2px !important}
+}
+</style>
+</body></html>
 
 <style>
 #activityHistoryDialog .dialog-body{width:min(760px,92vw);max-height:88vh;overflow:auto}.status-ok{font-weight:700;color:#075b31}.pending-review-photos:empty{display:none}.pending-review-photos{display:flex;gap:8px;flex-wrap:wrap;margin:.5rem 0}.pending-review-photo{width:82px;min-height:70px;padding:4px}.pending-review-photo img{width:100%;height:58px;object-fit:cover;border-radius:6px}

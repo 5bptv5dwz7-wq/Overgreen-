@@ -1,4 +1,4 @@
-const APP_VERSION='V112-59';
+const APP_VERSION='V112-60';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -2609,6 +2609,70 @@ async function openPendingDialog(){
   openDialog('pendingDialog');
   try{await refreshPendingData()}catch(err){console.error(err);$('pendingList').innerHTML=`<p class="muted">Impossibile aggiornare le convalide: ${esc(err.message||String(err))}</p>`}
 }
+
+async function recoverInterventionPhotosFromStorage(i,button=null){
+  if(!admin()||!i?.id)return;
+  const old=button?.textContent;
+  if(button){button.disabled=true;button.textContent='Cerco nello Storage…'}
+  try{
+    const folder=`interventi/${i.id}`;
+    const {data:objects,error:listError}=await sb.storage.from('documenti').list(folder,{limit:100,offset:0,sortBy:{column:'name',order:'asc'}});
+    if(listError)throw listError;
+    const files=(objects||[]).filter(o=>o?.name&&!o.name.endsWith('/'));
+    const {data:liveAttachments,error:attError}=await sb.from('attachments').select('*').eq('intervention_id',i.id).eq('tipo','foto_generica');
+    if(attError)throw attError;
+    const linked=new Set((liveAttachments||[]).map(a=>a.storage_path).filter(Boolean));
+    const orphans=files.filter(o=>!linked.has(`${folder}/${o.name}`));
+    if(!files.length){
+      alert('Nessuna foto trovata nello Storage Supabase per questo intervento.\n\nLa foto non risulta arrivata al server. In questo caso potrebbe essere ancora presente solo sul telefono del dipendente.');
+      return;
+    }
+    if(!orphans.length){
+      const st=await interventionPhotoSyncState(i.id);
+      if(st.actual>=st.expected){
+        await markInterventionPhotoUpload(i.id,'synced',null);
+        toast(`Foto già presenti · ${st.actual}/${st.expected}`);
+        await refreshPendingData();
+      }else{
+        alert(`Nello Storage ci sono ${files.length} file, ma risultano già tutti collegati.\n\nIl contatore atteso è ${st.expected} e gli allegati registrati sono ${st.actual}.`);
+      }
+      return;
+    }
+    let recovered=0;
+    for(const o of orphans){
+      const path=`${folder}/${o.name}`;
+      try{
+        const row=await addAttachment({
+          tipo:'foto_generica',
+          intervention_id:i.id,
+          storage_path:path,
+          nome_file:o.name,
+          mime_type:o.metadata?.mimetype||o.metadata?.contentType||'image/jpeg',
+          dimensione_bytes:Number(o.metadata?.size)||null,
+          caricato_da:i.closed_by||i.inserito_da||profile.id
+        });
+        if(row){recovered++;if(!attachments.some(a=>a.id===row.id||a.storage_path===row.storage_path))attachments.push(row)}
+      }catch(err){
+        const msg=String(err?.message||err);
+        if(!/duplicate|unique|already exists/i.test(msg))throw err;
+      }
+    }
+    const st=await interventionPhotoSyncState(i.id);
+    if(st.ready){
+      await markInterventionPhotoUpload(i.id,'synced',null);
+      toast(`✓ Recuperate ${recovered} foto · ${st.actual}/${st.expected}`);
+    }else{
+      toast(`Recuperate ${recovered} foto · ora ${st.actual}/${st.expected}`);
+    }
+    await refreshPendingData();
+  }catch(err){
+    console.error('V112-60 recupero foto Storage fallito',err);
+    alert('Ricerca nello Storage non riuscita: '+(err?.message||String(err)));
+  }finally{
+    if(button){button.disabled=false;button.textContent=old||'Cerca foto nello Storage'}
+  }
+}
+
 async function renderPending(){
   const p=interventions.filter(i=>i.stato==='in_attesa'&&!i.multi_day_open),pendingExtras=extras.filter(e=>e.stato==='in_attesa'&&!isIntesaOrdinaryTicket(e));
   const total=p.length+pendingExtras.length;$('pendingBadge').textContent=total;$('pendingBadge').classList.toggle('hidden',!total);$('pendingList').innerHTML='';
@@ -2616,8 +2680,8 @@ async function renderPending(){
   for(const i of p){
     const s=stores.find(x=>x.id===i.store_id),names=await workerNames(i.id),pics=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica'),expected=Math.max(0,Number(i.foto_attese)||0),syncPending=expected>pics.length;
     const c=document.createElement('article');c.className='card pending pending-review';
-    c.innerHTML=`<div class="pending-review-head"><div><h3>${esc(s?.nome||'Intervento')}</h3><p class="muted">${fmt(i.data_intervento)} · 🕒 ${esc(closureText(i))}</p></div><span class="badge-state">In attesa</span></div><div class="pending-review-section"><strong>Chi ha eseguito</strong><p>${names.length?names.map(esc).join(' · '):'Operatore non indicato'}</p></div><div class="pending-review-section"><strong>Note del dipendente</strong><div class="history-note ${i.note?'':'muted'}">${esc(i.note||'Nessuna nota inserita')}</div>${i.next_visit_note?`<div class="pending-next-visit"><strong>⚠️ Da riportare al prossimo passaggio</strong>${esc(i.next_visit_note)}</div>`:''}</div><div class="pending-review-section"><div class="pending-photo-head"><strong>Foto allegate</strong><span>${expected?`${pics.length}/${expected}`:pics.length}</span></div>${syncPending?`<div class="pending-next-visit"><strong>☁️ Foto ancora in sincronizzazione</strong>Ricevute ${pics.length} di ${expected}. La convalida resta bloccata finché non arrivano tutte.</div>`:''}<div class="pending-review-photos" data-pending-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div><div class="actions"><button data-ok ${syncPending?'disabled':''}>${syncPending?'Attendo foto…':'Convalida'}</button><button class="danger-btn" data-no>Rifiuta</button></div>`;
-    c.querySelector('[data-ok]').onclick=()=>approveIntervention(i);c.querySelector('[data-no]').onclick=()=>rejectIntervention(i);$('pendingList').appendChild(c);
+    c.innerHTML=`<div class="pending-review-head"><div><h3>${esc(s?.nome||'Intervento')}</h3><p class="muted">${fmt(i.data_intervento)} · 🕒 ${esc(closureText(i))}</p></div><span class="badge-state">In attesa</span></div><div class="pending-review-section"><strong>Chi ha eseguito</strong><p>${names.length?names.map(esc).join(' · '):'Operatore non indicato'}</p></div><div class="pending-review-section"><strong>Note del dipendente</strong><div class="history-note ${i.note?'':'muted'}">${esc(i.note||'Nessuna nota inserita')}</div>${i.next_visit_note?`<div class="pending-next-visit"><strong>⚠️ Da riportare al prossimo passaggio</strong>${esc(i.next_visit_note)}</div>`:''}</div><div class="pending-review-section"><div class="pending-photo-head"><strong>Foto allegate</strong><span>${expected?`${pics.length}/${expected}`:pics.length}</span></div>${syncPending?`<div class="pending-next-visit"><strong>☁️ Foto ancora in sincronizzazione</strong>Ricevute ${pics.length} di ${expected}. La convalida resta bloccata finché non arrivano tutte.</div>`:''}<div class="pending-review-photos" data-pending-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div><div class="actions">${syncPending?'<button type="button" class="secondary" data-recover-storage>🔎 Cerca foto nello Storage</button>':''}<button data-ok ${syncPending?'disabled':''}>${syncPending?'Attendo foto…':'Convalida'}</button><button class="danger-btn" data-no>Rifiuta</button></div>`;
+    c.querySelector('[data-recover-storage]')?.addEventListener('click',e=>recoverInterventionPhotosFromStorage(i,e.currentTarget));c.querySelector('[data-ok]').onclick=()=>approveIntervention(i);c.querySelector('[data-no]').onclick=()=>rejectIntervention(i);$('pendingList').appendChild(c);
     if(pics.length){
       const box=c.querySelector('[data-pending-photos]');box.innerHTML='';
       const urls=await Promise.all(pics.map(async a=>{try{return {a,url:await signedAttachmentUrl(a)}}catch{return null}}));

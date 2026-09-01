@@ -1,4 +1,4 @@
-const APP_VERSION='V112-61';
+const APP_VERSION='V112-62';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -238,7 +238,7 @@ async function repairEmployeePhotoSync(button=null){
           restored++;
           await deleteUploadJob(row.id).catch(()=>{});
           row.uploadedAt=Date.now();row.storagePath=path;await putPhotoRecoveryRow(row).catch(()=>{});
-        }catch(err){console.warn('V112-61 recupero locale foto fallito',i.id,err)}
+        }catch(err){console.warn('V112-62 recupero locale foto fallito',i.id,err)}
       }
       const state=await interventionPhotoSyncState(i.id);
       if(state.ready){await markInterventionPhotoUpload(i.id,'synced',null);await flushReadyClosureNotifications(i.id)}
@@ -2740,7 +2740,7 @@ async function recoverInterventionPhotosFromStorage(i,button=null){
     }
     await refreshPendingData();
   }catch(err){
-    console.error('V112-61 recupero foto Storage fallito',err);
+    console.error('V112-62 recupero foto Storage fallito',err);
     alert('Ricerca nello Storage non riuscita: '+(err?.message||String(err)));
   }finally{
     if(button){button.disabled=false;button.textContent=old||'Cerca foto nello Storage'}
@@ -3084,6 +3084,38 @@ async function editScheduleDayNote(schedule){
   toast(note?'Nota della giornata aggiornata':'Nota della giornata eliminata');
   renderSchedules();renderDashboard();
 }
+function openEditScheduleDate(schedule){
+  if(!admin()||!schedule)return;
+  $('editScheduleDateId').value=schedule.id;
+  $('editScheduleDateValue').value=schedule.giorno||today();
+  $('editScheduleDateInfo').textContent=`Data attuale: ${fmt(schedule.giorno)} · ${scheduleMemberNames(schedule.id).join(' + ')||'Squadra non indicata'}`;
+  openDialog('editScheduleDateDialog');
+}
+async function saveEditScheduleDate(){
+  if(!admin())return;
+  const scheduleId=$('editScheduleDateId').value,newDate=$('editScheduleDateValue').value;
+  const schedule=schedules.find(s=>s.id===scheduleId);
+  if(!schedule||!newDate)return alert('Seleziona una data valida.');
+  const oldDate=schedule.giorno;
+  if(newDate===oldDate){$('editScheduleDateDialog').close();return toast('La data è già quella selezionata')}
+  const sameDay=schedules.filter(s=>s.id!==scheduleId&&s.giorno===newDate);
+  if(sameDay.length){
+    const labels=sameDay.slice(0,5).map(s=>scheduleMemberNames(s.id).join(' + ')||'Squadra non indicata').join('\n• ');
+    if(!confirm(`Il ${fmt(newDate)} esist${sameDay.length===1?'e':'ono'} già ${sameDay.length} programmazion${sameDay.length===1?'e':'i'}:\n\n• ${labels}${sameDay.length>5?'\n• …':''}\n\nVuoi comunque spostare questa programmazione? Le altre non verranno modificate.`))return;
+  }
+  const itemIds=scheduleItems.filter(i=>i.schedule_id===scheduleId).map(i=>i.id);
+  const standaloneExtraIds=extras.filter(e=>e.schedule_id===scheduleId&&e.giorno_intervento===oldDate).map(e=>e.id);
+  const linkedExtraIds=extras.filter(e=>e.schedule_item_id&&itemIds.includes(e.schedule_item_id)&&e.giorno_intervento===oldDate).map(e=>e.id);
+  const extraIds=[...new Set([...standaloneExtraIds,...linkedExtraIds])];
+  const btn=$('editScheduleDateForm').querySelector('[type=submit]'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Spostamento…';
+  try{
+    let r=await sb.from('schedules').update({giorno:newDate}).eq('id',scheduleId);if(r.error)throw r.error;
+    if(extraIds.length){r=await sb.from('extras').update({giorno_intervento:newDate}).in('id',extraIds);if(r.error){await sb.from('schedules').update({giorno:oldDate}).eq('id',scheduleId);throw r.error}}
+    schedule.giorno=newDate;
+    extras.filter(e=>extraIds.includes(e.id)).forEach(e=>e.giorno_intervento=newDate);
+    $('editScheduleDateDialog').close();toast(`Programmazione spostata al ${fmt(newDate)}`);await loadAll();
+  }catch(err){alert('Impossibile cambiare la data: '+(err.message||String(err)))}finally{btn.disabled=false;btn.textContent=oldText}
+}
 function openEditScheduleTeam(schedule){
   if(!admin()||!schedule)return;
   const box=$('editScheduleTeamWorkers');if(!box)return;
@@ -3175,7 +3207,8 @@ function renderSchedules(){
     if(!items.length&&!scheduleExtras.length&&!dayActivities.length)continue;
     const members=scheduleMembers.filter(m=>m.schedule_id===s.id).map(m=>profiles.find(p=>p.id===m.profile_id)?.nome).filter(Boolean);
     const c=document.createElement('article');c.className='card schedule-day-card';
-    c.innerHTML=`<div class="schedule-card-head"><div><span class="schedule-date-label">${fmt(s.giorno)}</span><h3>${esc(members.join(' + ')||'Squadra non indicata')}</h3>${s.nota_generale?`<p class="muted">${esc(s.nota_generale)}</p>`:''}${s.auto_rollover?'<p class="muted"><strong>↪ Continuazione automatica attiva</strong></p>':''}</div>${admin()?'<div class="actions schedule-head-actions"><button class="secondary" data-edit-team>Squadra</button><button class="secondary" data-edit-note>Nota giornata</button><button class="secondary" data-add-stores>+ Aggiungi lavoro</button><button class="secondary" data-duplicate>Duplica</button></div>':''}</div><div class="schedule-progress-label">${items.length+scheduleExtras.length+dayActivities.length} lavor${items.length+scheduleExtras.length+dayActivities.length===1?'o':'i'} da eseguire</div>`;
+    c.innerHTML=`<div class="schedule-card-head"><div><span class="schedule-date-label">${fmt(s.giorno)}</span><h3>${esc(members.join(' + ')||'Squadra non indicata')}</h3>${s.nota_generale?`<p class="muted">${esc(s.nota_generale)}</p>`:''}${s.auto_rollover?'<p class="muted"><strong>↪ Continuazione automatica attiva</strong></p>':''}</div>${admin()?'<div class="actions schedule-head-actions"><button class="secondary" data-edit-date>Data</button><button class="secondary" data-edit-team>Squadra</button><button class="secondary" data-edit-note>Nota giornata</button><button class="secondary" data-add-stores>+ Aggiungi lavoro</button><button class="secondary" data-duplicate>Duplica</button></div>':''}</div><div class="schedule-progress-label">${items.length+scheduleExtras.length+dayActivities.length} lavor${items.length+scheduleExtras.length+dayActivities.length===1?'o':'i'} da eseguire</div>`;
+    c.querySelector('[data-edit-date]')?.addEventListener('click',()=>openEditScheduleDate(s));
     c.querySelector('[data-edit-team]')?.addEventListener('click',()=>openEditScheduleTeam(s));
     c.querySelector('[data-edit-note]')?.addEventListener('click',()=>editScheduleDayNote(s));
     c.querySelector('[data-add-stores]')?.addEventListener('click',()=>openAddScheduleItems(s));
@@ -4729,4 +4762,4 @@ document.addEventListener('DOMContentLoaded',()=>{
 
 $('dashboardShareStore')?.addEventListener('click',openShareStorePicker);$('shareStoreSearch')?.addEventListener('input',renderShareStorePicker);
 
-$('editScheduleTeamForm')?.addEventListener('submit',e=>{e.preventDefault();saveEditScheduleTeam()});
+$('editScheduleDateForm')?.addEventListener('submit',e=>{e.preventDefault();saveEditScheduleDate()});$('editScheduleTeamForm')?.addEventListener('submit',e=>{e.preventDefault();saveEditScheduleTeam()});

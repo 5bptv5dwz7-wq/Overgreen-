@@ -1,4 +1,4 @@
-const APP_VERSION='V112-62';
+const APP_VERSION='V112-63';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -238,7 +238,7 @@ async function repairEmployeePhotoSync(button=null){
           restored++;
           await deleteUploadJob(row.id).catch(()=>{});
           row.uploadedAt=Date.now();row.storagePath=path;await putPhotoRecoveryRow(row).catch(()=>{});
-        }catch(err){console.warn('V112-62 recupero locale foto fallito',i.id,err)}
+        }catch(err){console.warn('V112-63 recupero locale foto fallito',i.id,err)}
       }
       const state=await interventionPhotoSyncState(i.id);
       if(state.ready){await markInterventionPhotoUpload(i.id,'synced',null);await flushReadyClosureNotifications(i.id)}
@@ -483,7 +483,7 @@ function closeDialog(d){d.closest('dialog')?.close()}
 function isStoreProgrammed(storeId){return scheduleItems.some(item=>item.store_id===storeId&&effectiveScheduleState(item)!=='completato'&&schedules.some(s=>s.id===item.schedule_id))}
 function storeHasInterval(s){return s?.intervallo_giorni!==null&&s?.intervallo_giorni!==undefined&&Number(s.intervallo_giorni)>0}
 function isUrgentStore(s){if(!storeHasInterval(s))return false;const n=days(s.ultimo_passaggio),lim=Number(s.intervallo_giorni);return n!==null&&n>lim+10}
-function status(s){if(isStoreProgrammed(s.id))return'scheduled';if(!storeHasInterval(s))return'ok';const n=days(s.ultimo_passaggio),lim=Number(s.intervallo_giorni);if(n===null||n>lim)return'due';if(n>=lim-3)return'warning';return'ok'}
+function status(s){if(isStoreProgrammed(s.id))return'scheduled';if(!storeHasInterval(s))return'ok';const n=days(s.ultimo_passaggio),lim=Number(s.intervallo_giorni);if(n!==null&&n>lim+10)return'urgent';if(n===null||n>lim)return'due';if(n>=lim-3)return'warning';return'ok'}
 const CURRENT_VIEW_KEY='overgreen_current_view';
 let currentView=localStorage.getItem(CURRENT_VIEW_KEY)||'dashboard';
 function setView(name){
@@ -1225,7 +1225,7 @@ function renderDashboard(){renderDashboardSmart();
   const clientStores=type=>stores.filter(s=>clientType(s)===type);
   const openClientExtras=type=>extras.filter(e=>clientType(e)===type&&!['completato','in_attesa'].includes(e.stato));
   if(admin()){
-    const rawDue=s=>{if(!storeHasInterval(s))return false;const n=days(s.ultimo_passaggio),lim=Number(s.intervallo_giorni);return n===null||n>lim};
+    const rawDue=s=>{if(!storeHasInterval(s))return false;const n=days(s.ultimo_passaggio),lim=Number(s.intervallo_giorni);return n===null||(n>lim&&n<=lim+10)};
     const counterWithUnscheduled=(list,test)=>{const total=list.filter(test).length,available=list.filter(s=>test(s)&&!isStoreProgrammed(s.id)).length;return `${total} (${available})`};
     $('dashEurospinDue').textContent=counterWithUnscheduled(clientStores('eurospin'),rawDue);
     $('dashEurospinUrgent').textContent=counterWithUnscheduled(clientStores('eurospin'),isUrgentStore);
@@ -1242,7 +1242,7 @@ function renderDashboard(){renderDashboardSmart();
     btn.onclick=()=>{
       const key=btn.dataset.clientCounter,[client,kind]=key.split('-');
       if(kind==='extra'){extraClientFilter=client;setView('extras');renderExtras();return}
-      storeClientFilter=client;storeFilter=kind==='due'?'due':'all';setView('stores');renderStores();
+      storeClientFilter=client;storeFilter=kind==='due'?'due':kind==='urgent'?'urgent':'all';setView('stores');renderStores();
     };
   });
 
@@ -2740,7 +2740,7 @@ async function recoverInterventionPhotosFromStorage(i,button=null){
     }
     await refreshPendingData();
   }catch(err){
-    console.error('V112-62 recupero foto Storage fallito',err);
+    console.error('V112-63 recupero foto Storage fallito',err);
     alert('Ricerca nello Storage non riuscita: '+(err?.message||String(err)));
   }finally{
     if(button){button.disabled=false;button.textContent=old||'Cerca foto nello Storage'}

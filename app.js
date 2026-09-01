@@ -1,4 +1,4 @@
-const APP_VERSION='V112-60';
+const APP_VERSION='V112-61';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -89,6 +89,13 @@ async function flushReadyClosureNotifications(interventionId=null){
 
 // ---- V112-37 · Coda persistente + upload reale Supabase ----
 const UPLOAD_DB='overgreen-upload-queue-v1', UPLOAD_STORE='jobs';
+const PHOTO_RECOVERY_DB='overgreen-photo-recovery-v1', PHOTO_RECOVERY_STORE='photos', PHOTO_RECOVERY_TTL=7*24*60*60*1000;
+function openPhotoRecoveryDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(PHOTO_RECOVERY_DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(PHOTO_RECOVERY_STORE))r.result.createObjectStore(PHOTO_RECOVERY_STORE,{keyPath:'id'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+async function getPhotoRecoveryRows(){const db=await openPhotoRecoveryDb();return new Promise((resolve,reject)=>{const tx=db.transaction(PHOTO_RECOVERY_STORE,'readonly'),r=tx.objectStore(PHOTO_RECOVERY_STORE).getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error)})}
+async function putPhotoRecoveryRow(row){const db=await openPhotoRecoveryDb();return new Promise((resolve,reject)=>{const tx=db.transaction(PHOTO_RECOVERY_STORE,'readwrite');tx.objectStore(PHOTO_RECOVERY_STORE).put(row);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
+async function deletePhotoRecoveryRow(id){const db=await openPhotoRecoveryDb();return new Promise((resolve,reject)=>{const tx=db.transaction(PHOTO_RECOVERY_STORE,'readwrite');tx.objectStore(PHOTO_RECOVERY_STORE).delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
+async function cleanupPhotoRecoveryRows(){try{const rows=await getPhotoRecoveryRows(),cut=Date.now()-PHOTO_RECOVERY_TTL;for(const r of rows)if((r.savedAt||0)<cut)await deletePhotoRecoveryRow(r.id)}catch{}}
+
 let uploadWorkerRunning=false,uploadWorkerPromise=null;
 function openUploadDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(UPLOAD_DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(UPLOAD_STORE))r.result.createObjectStore(UPLOAD_STORE,{keyPath:'id'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
 async function queueTx(mode,fn){const db=await openUploadDb();return new Promise((resolve,reject)=>{const tx=db.transaction(UPLOAD_STORE,mode),st=tx.objectStore(UPLOAD_STORE);let out;try{out=fn(st)}catch(e){reject(e);return}tx.oncomplete=()=>resolve(out);tx.onerror=()=>reject(tx.error)})}
@@ -107,7 +114,7 @@ async function enqueueInterventionPhotos(interventionId,files){
   await markInterventionPhotoUpload(interventionId,'pending',null);
   for(let n=0;n<files.length;n++){
     const f=files[n];
-    await putUploadJob({id:crypto.randomUUID(),kind:'intervention-photo',interventionId,actorProfileId:profile?.id||null,file:f,fileName:f.name||`foto-${n+1}.jpg`,mimeType:f.type||'image/jpeg',createdAt:Date.now()+n,retries:0,lastError:'',lastStage:'queued'});
+    const jobId=crypto.randomUUID(),job={id:jobId,kind:'intervention-photo',interventionId,actorProfileId:profile?.id||null,file:f,fileName:f.name||`foto-${n+1}.jpg`,mimeType:f.type||'image/jpeg',createdAt:Date.now()+n,retries:0,lastError:'',lastStage:'queued'};await putUploadJob(job);await putPhotoRecoveryRow({id:jobId,interventionId,actorProfileId:profile?.id||null,file:f,fileName:job.fileName,mimeType:job.mimeType,savedAt:Date.now(),uploadedAt:null});
   }
   await processUploadQueue();
   const state=await interventionPhotoSyncState(interventionId);
@@ -139,6 +146,7 @@ async function uploadInterventionPhotoJob(job){
   console.info('V112-37 FOTO',job.id,'attachment_insert_ok',added.id);
   if(!attachments.some(a=>a.id===added.id||a.storage_path===added.storage_path))attachments.push(added);
   await deleteUploadJob(job.id);
+  try{const backups=await getPhotoRecoveryRows(),backup=backups.find(x=>x.id===job.id);if(backup){backup.uploadedAt=Date.now();backup.storagePath=path;await putPhotoRecoveryRow(backup)}}catch{}
   return added;
 }
 async function processUploadQueue(){
@@ -179,14 +187,80 @@ async function processUploadQueue(){
   try{return await uploadWorkerPromise}finally{uploadWorkerPromise=null;flushReadyClosureNotifications().catch(()=>{})}
 }
 async function retryUploads(){const jobs=await getUploadJobs();for(const j of jobs){j.retries=0;j.lastError='';j.lastStage='queued';await putUploadJob(j);await markInterventionPhotoUpload(j.interventionId,'pending',null)}return processUploadQueue()}
+
+function localInterventionPhotoCount(interventionId){
+  return attachments.filter(a=>a.intervention_id===interventionId&&a.tipo==='foto_generica').length;
+}
+function employeePhotoMismatchRows(){
+  if(!profile||admin())return [];
+  return interventions.filter(i=>i.closed_by===profile.id&&i.stato==='in_attesa'&&!i.multi_day_open&&Math.max(0,Number(i.foto_attese)||0)>localInterventionPhotoCount(i.id));
+}
+async function localRecoverablePhotoCount(){
+  try{
+    const [jobs,backups]=await Promise.all([getUploadJobs(),getPhotoRecoveryRows()]);
+    const ids=new Set(employeePhotoMismatchRows().map(i=>i.id));
+    return [...jobs,...backups].filter(x=>ids.has(x.interventionId)&&x.file).length;
+  }catch{return 0}
+}
+async function repairEmployeePhotoSync(button=null){
+  if(!profile||admin())return;
+  const old=button?.textContent;if(button){button.disabled=true;button.textContent='Controllo…'}
+  try{
+    await cleanupPhotoRecoveryRows();
+    const mismatches=employeePhotoMismatchRows();
+    if(!mismatches.length){toast('✓ Nessuna foto da recuperare');await updateSyncUi();return}
+    const [jobs,backups]=await Promise.all([getUploadJobs(),getPhotoRecoveryRows()]);
+    let restored=0,missingLocal=0;
+    for(const i of mismatches){
+      let actual=localInterventionPhotoCount(i.id),expected=Math.max(0,Number(i.foto_attese)||0);
+      if(actual>=expected)continue;
+      const candidates=[];
+      for(const j of jobs)if(j.interventionId===i.id&&j.file)candidates.push({source:'queue',row:j});
+      for(const b of backups)if(b.interventionId===i.id&&b.file&&!candidates.some(x=>x.row.id===b.id))candidates.push({source:'backup',row:b});
+      if(!candidates.length){missingLocal++;continue}
+      for(const c of candidates){
+        if(actual>=expected)break;
+        const row=c.row;
+        try{
+          let file=row.file;if(!file)continue;
+          file=await compressImage(file);
+          const safe=(file.name||row.fileName||'foto-recuperata.jpg').replace(/[^a-zA-Z0-9._-]/g,'-');
+          const path=`interventi/${i.id}/${row.id||crypto.randomUUID()}-${safe}`;
+          const up=await sb.storage.from('documenti').upload(path,file,{upsert:true,cacheControl:'3600',contentType:file.type||row.mimeType||'image/jpeg'});
+          if(up.error)throw up.error;
+          const existing=await sb.from('attachments').select('id').eq('intervention_id',i.id).eq('storage_path',path).maybeSingle();
+          if(existing.error)throw existing.error;
+          if(!existing.data){
+            const added=await addAttachment({tipo:'foto_generica',intervention_id:i.id,storage_path:path,nome_file:file.name||row.fileName||safe,mime_type:file.type||row.mimeType||'image/jpeg',dimensione_bytes:file.size,caricato_da:row.actorProfileId||profile.id});
+            if(added&&!attachments.some(a=>a.id===added.id))attachments.push(added);
+          }
+          actual++;
+          restored++;
+          await deleteUploadJob(row.id).catch(()=>{});
+          row.uploadedAt=Date.now();row.storagePath=path;await putPhotoRecoveryRow(row).catch(()=>{});
+        }catch(err){console.warn('V112-61 recupero locale foto fallito',i.id,err)}
+      }
+      const state=await interventionPhotoSyncState(i.id);
+      if(state.ready){await markInterventionPhotoUpload(i.id,'synced',null);await flushReadyClosureNotifications(i.id)}
+    }
+    await loadAll();
+    const remaining=employeePhotoMismatchRows();
+    if(!remaining.length)alert(`Riparazione completata.\n\n${restored} foto recuperate e verificate su Supabase.`);
+    else if(restored)alert(`Recuperate ${restored} foto.\n\nRestano ${remaining.length} interventi con foto mancanti: su questo telefono non è stata trovata una copia locale sufficiente.`);
+    else alert(`Non ho trovato copie locali recuperabili per ${remaining.length} interventi.\n\nSe la foto non è più nella coda né nella copia di recupero del telefono, non può essere ricreata automaticamente.`);
+  }catch(err){alert('Riparazione sincronizzazione non riuscita: '+(err?.message||String(err)))}
+  finally{if(button){button.disabled=false;button.textContent=old||'Ripara sincronizzazione foto'};await updateSyncUi()}
+}
+
 async function updateSyncUi(){
   let jobs=[];try{jobs=await getUploadJobs()}catch{}
   const failed=jobs.filter(j=>(j.retries||0)>=3).length;
   const first=jobs[0]||null;
   const stageLabel=first?.lastStage==='storage_upload'?'upload Storage':first?.lastStage==='attachment_insert'?'registrazione foto':first?.lastStage==='queued'?'preparazione':'sincronizzazione';
-  const text=uploadWorkerRunning?`⬆️ ${jobs.length} foto · ${stageLabel}…`:failed?`⚠️ ${failed} foto NON sincronizzate · premi per riprovare`:jobs.length?`☁️ ${jobs.length} foto in coda · nuovo tentativo automatico`:'🟢 Tutto sincronizzato';
-  const background=$('backgroundSyncStatus');if(background)background.textContent=text;
-  const badge=$('syncFloatingBadge');if(badge){badge.textContent=text;badge.classList.toggle('hidden',!jobs.length&&!uploadWorkerRunning);badge.classList.toggle('sync-error',!!failed);badge.onclick=failed?()=>retryUploads().catch(e=>alert(e.message)):null}
+  const mismatchCount=employeePhotoMismatchRows().length;
+  const text=uploadWorkerRunning?`⬆️ ${jobs.length} foto · ${stageLabel}…`:failed?`⚠️ ${failed} foto NON sincronizzate · premi per riprovare`:jobs.length?`☁️ ${jobs.length} foto in coda · nuovo tentativo automatico`:mismatchCount?`⚠️ ${mismatchCount} intervent${mismatchCount===1?'o':'i'} con foto da recuperare`:'🟢 Tutto sincronizzato';
+  const background=$('backgroundSyncStatus');if(background)background.textContent=text;const repairStatus=$('photoRepairStatus');if(repairStatus)repairStatus.textContent=text;
+  const badge=$('syncFloatingBadge');if(badge){badge.textContent=text;badge.classList.toggle('hidden',!jobs.length&&!uploadWorkerRunning&&!mismatchCount);badge.classList.toggle('sync-error',!!failed||!!mismatchCount);badge.onclick=failed?()=>retryUploads().catch(e=>alert(e.message)):mismatchCount?()=>repairEmployeePhotoSync(badge):null}
 }
 window.addEventListener('online',()=>processUploadQueue());
 // V112-37: navigator.onLine non blocca più gli upload; ogni tentativo verifica davvero Supabase.
@@ -198,7 +272,7 @@ function ensureCloudSettingsUi(){
   if(!sec){sec=document.createElement('section');sec.id='cloudAccountSettings';wrap.appendChild(sec)}
   sec.dataset.ready='1';sec.className='settings-card cloud-account-settings';
   sec.innerHTML=`<div class="settings-section-head"><div><h3>🔐 Account e accessi</h3><p>Cambia la tua password. Lorenzo può creare utenti e modificarne nome, email, ruolo, stato e password.</p></div></div>
-  <form id="selfPasswordForm" class="settings-form"><input id="selfNewPassword" type="password" minlength="8" placeholder="Nuova password" required><button type="submit">Cambia la mia password</button></form>
+  <form id="selfPasswordForm" class="settings-form"><input id="selfNewPassword" type="password" minlength="8" placeholder="Nuova password" required><button type="submit">Cambia la mia password</button></form><div class="photo-repair-box"><hr><h4>📷 Sincronizzazione foto</h4><p id="photoRepairStatus" class="muted">Controllo foto locali e Supabase…</p><button type="button" id="repairPhotoSyncBtn" class="secondary">Ripara sincronizzazione foto</button></div>
   <div id="adminUsersArea" class="admin-only"><hr><h4>👥 Dipendenti</h4><div id="cloudEmployeeList" class="employee-list"></div>
   <form id="cloudAddEmployeeForm" class="settings-form"><input id="cloudEmployeeName" placeholder="Nome" required><input id="cloudEmployeeEmail" type="email" placeholder="Email di accesso" required><input id="cloudEmployeePassword" type="password" minlength="8" placeholder="Password iniziale" required><button type="submit">Crea dipendente</button></form></div>`;
   const usage=document.createElement('section');usage.id='supabaseUsageCard';usage.className='settings-card admin-only';usage.innerHTML=`<div class="settings-section-head"><div><h3>📊 Utilizzo Supabase</h3><p>Spazio occupato dai file e dimensione del database del progetto.</p></div></div><div class="usage-grid"><div class="usage-metric"><span>Storage</span><strong id="usageStorage">—</strong><small id="usageStorageDetail" class="muted">Calcolo in corso…</small></div><div class="usage-metric"><span>Database</span><strong id="usageDatabase">—</strong><small id="usageDatabaseDetail" class="muted">Calcolo in corso…</small></div></div><p id="usageError" class="error hidden"></p><button id="refreshUsageBtn" type="button" class="secondary">Aggiorna utilizzo</button><hr><div class="settings-section-head"><div><h3>🗜️ Ottimizza immagini Storage</h3><p>Controlla le immagini già salvate e stima quanto spazio può essere recuperato. L’analisi non modifica alcun file.</p></div></div><div id="storageOptimizeResult" class="storage-optimize-result muted">Premi “Analizza immagini” per iniziare.</div><div class="actions storage-optimize-actions"><button id="analyzeStorageBtn" type="button" class="secondary">Analizza immagini</button><button id="optimizeStorageBtn" type="button" class="hidden">Comprimi file ottimizzabili</button></div>`;wrap.appendChild(usage);
@@ -206,7 +280,7 @@ function ensureCloudSettingsUi(){
   const badge=document.createElement('button');badge.id='syncFloatingBadge';badge.type='button';badge.className='sync-floating hidden';badge.onclick=()=>{setView?.('settings');};document.body.appendChild(badge);
   $('selfPasswordForm').onsubmit=async e=>{e.preventDefault();const pw=$('selfNewPassword').value;const {error}=await sb.auth.updateUser({password:pw});if(error)return alert(error.message);e.target.reset();toast('Password aggiornata')};
   $('cloudAddEmployeeForm').onsubmit=async e=>{e.preventDefault();const payload={action:'create',nome:$('cloudEmployeeName').value.trim(),email:$('cloudEmployeeEmail').value.trim(),password:$('cloudEmployeePassword').value};const {data,error}=await sb.functions.invoke('manage-user',{body:payload});if(error||data?.error)return alert(data?.error||error.message);e.target.reset();toast('Dipendente creato');await loadAll()};
-  $('retryUploadsBtn').onclick=retryUploads;$('refreshUsageBtn').onclick=loadSupabaseUsage;$('analyzeStorageBtn').onclick=analyzeStorageImages;$('optimizeStorageBtn').onclick=optimizeStorageImages;renderCloudEmployeeList();updateSyncUi();if(admin())loadSupabaseUsage();
+  $('retryUploadsBtn').onclick=retryUploads;const repairBtn=$('repairPhotoSyncBtn');if(repairBtn)repairBtn.onclick=()=>repairEmployeePhotoSync(repairBtn);$('refreshUsageBtn').onclick=loadSupabaseUsage;$('analyzeStorageBtn').onclick=analyzeStorageImages;$('optimizeStorageBtn').onclick=optimizeStorageImages;renderCloudEmployeeList();updateSyncUi();if(admin())loadSupabaseUsage();
 }
 function formatBytes(value){
   const n=Number(value)||0;if(n<1024)return `${n} B`;const units=['KB','MB','GB','TB'];let v=n/1024,u=0;while(v>=1024&&u<units.length-1){v/=1024;u++}return `${v>=100?v.toFixed(0):v>=10?v.toFixed(1):v.toFixed(2)} ${units[u]}`
@@ -957,7 +1031,7 @@ async function loadAll(){
   const renderStarted=performance.now();
   // Prima mostriamo l'interfaccia. Le manutenzioni correttive non devono più
   // tenere l'utente davanti a uno schermo vuoto/nero.
-  renderStores();renderWorkers();renderReportFilters();renderPending();renderScheduleFilters();renderSchedules();renderExtras();renderWorkContacts();renderDashboard();if($('statsView'))renderStats();ensureCloudSettingsUi();renderCloudEmployeeList();updateSyncUi();processUploadQueue();handleNotificationDeepLink();
+  renderStores();renderWorkers();renderReportFilters();renderPending();renderScheduleFilters();renderSchedules();renderExtras();renderWorkContacts();renderDashboard();if($('statsView'))renderStats();ensureCloudSettingsUi();renderCloudEmployeeList();cleanupPhotoRecoveryRows().catch(()=>{});updateSyncUi();processUploadQueue();handleNotificationDeepLink();
   const lastUpdate=$('syncStatus');if(lastUpdate)lastUpdate.textContent='Ultimo aggiornamento dati: '+new Date().toLocaleTimeString('it-IT');
   startupPerf.render=performance.now()-renderStarted;
   startupPerf.total=performance.now()-loadStarted;
@@ -2666,7 +2740,7 @@ async function recoverInterventionPhotosFromStorage(i,button=null){
     }
     await refreshPendingData();
   }catch(err){
-    console.error('V112-60 recupero foto Storage fallito',err);
+    console.error('V112-61 recupero foto Storage fallito',err);
     alert('Ricerca nello Storage non riuscita: '+(err?.message||String(err)));
   }finally{
     if(button){button.disabled=false;button.textContent=old||'Cerca foto nello Storage'}

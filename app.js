@@ -1,4 +1,4 @@
-const APP_VERSION='V112-65';
+const APP_VERSION='V112-66';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -238,7 +238,7 @@ async function repairEmployeePhotoSync(button=null){
           restored++;
           await deleteUploadJob(row.id).catch(()=>{});
           row.uploadedAt=Date.now();row.storagePath=path;await putPhotoRecoveryRow(row).catch(()=>{});
-        }catch(err){console.warn('V112-65 recupero locale foto fallito',i.id,err)}
+        }catch(err){console.warn('V112-66 recupero locale foto fallito',i.id,err)}
       }
       const state=await interventionPhotoSyncState(i.id);
       if(state.ready){await markInterventionPhotoUpload(i.id,'synced',null);await flushReadyClosureNotifications(i.id)}
@@ -2008,6 +2008,7 @@ function setReportMode(mode,rerender=true){
   $('reportMonthField')?.classList.toggle('hidden',mode!=='month');
   if(rerender)renderDailyReport();
 }
+if($('eurospinPackageMonth')&&!$('eurospinPackageMonth').value)$('eurospinPackageMonth').value=today().slice(0,7);
 function renderReportFilters(){
   const select=$('reportWorker');if(!select)return;
   const old=select.value||'all';select.innerHTML='<option value="all">Tutti i dipendenti</option>'+profiles.filter(p=>p.attivo).map(p=>`<option value="${p.id}">${esc(p.nome)}</option>`).join('');
@@ -2740,7 +2741,7 @@ async function recoverInterventionPhotosFromStorage(i,button=null){
     }
     await refreshPendingData();
   }catch(err){
-    console.error('V112-65 recupero foto Storage fallito',err);
+    console.error('V112-66 recupero foto Storage fallito',err);
     alert('Ricerca nello Storage non riuscita: '+(err?.message||String(err)));
   }finally{
     if(button){button.disabled=false;button.textContent=old||'Cerca foto nello Storage'}
@@ -3410,6 +3411,58 @@ async function generateComplexExtraReportPdf(e,button){
  }catch(err){console.error(err);alert('Impossibile generare il report: '+(err.message||String(err)))}finally{if(button){button.disabled=false;button.textContent=old}}
 }
 
+async function buildExtraClosurePdfBlob(e){
+  const reportEurospin=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),reportOvergreen=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen'),requestFile=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');
+  if(!requestFile||!reportOvergreen||!reportEurospin)throw new Error('Per generare la chiusura servono richiesta, file Overgreen e file Eurospin.');
+  if(!window.PDFLib)throw new Error('Libreria PDF non disponibile.');
+  {
+    const {PDFDocument,StandardFonts,rgb}=PDFLib,doc=await PDFDocument.create(),page=doc.addPage([595.28,841.89]),bold=await doc.embedFont(StandardFonts.HelveticaBold),regular=await doc.embedFont(StandardFonts.Helvetica),green=rgb(.03,.36,.19),muted=rgb(.35,.43,.39),st=stores.find(s=>s.id===e.store_id),names=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean),pics=attachments.filter(a=>a.extra_id===e.id&&a.tipo==='foto_generica');
+    const margin=42,w=page.getWidth()-margin*2;let y=790;
+    page.drawText('OVERGREEN',{x:margin,y,size:22,font:bold,color:green});const targetHeader=e.numero_target?`TARGET N° ${pdfSafeText(e.numero_target)}`:'';if(targetHeader){const targetSize=16,targetWidth=bold.widthOfTextAtSize(targetHeader,targetSize);page.drawText(targetHeader,{x:page.getWidth()-margin-targetWidth,y:y+2,size:targetSize,font:bold,color:green});}page.drawText('REPORT DI CHIUSURA LAVORO EXTRA',{x:margin,y:y-29,size:11,font:bold,color:muted});y-=62;
+    const place=st?.nome||e.nome_esterno||'Luogo non indicato',address=st?.indirizzo||[e.indirizzo_esterno,st?.citta].filter(Boolean).join(' · ');
+    const fields=[['LAVORO',e.titolo],['CATEGORIA',extraCategory(e)==='verde'?'Verde':extraCategory(e)==='pulizie'?'Pulizie':'Categoria non indicata'],['LUOGO',place],['INDIRIZZO',address||'Non indicato'],['DATA RICHIESTA',fmt(extraRequestDate(e))],['DATA ESECUZIONE',fmt(e.giorno_intervento)],['ORARIO CHIUSURA',fmtClosedAt(e.closed_at)],['CHIUSO DA',closedByName(e)],['OPERATORI',names.join(', ')||'Non indicati'],['STATO','Chiuso e convalidato']];
+    const metaGap=22,metaColW=(w-metaGap)/2,metaLabelW=82,metaValueW=metaColW-metaLabelW-6,metaStartY=y,metaRows=Math.ceil(fields.length/2),rowHeights=[];
+    for(let r=0;r<metaRows;r++){
+      const left=fields[r*2],right=fields[r*2+1],lineCounts=[left,right].filter(Boolean).map(([,value])=>Math.min(2,wrapPdfText(value,regular,10.5,metaValueW).length||1));
+      rowHeights[r]=Math.max(25,Math.max(...lineCounts,1)*13+8);
+    }
+    let rowTop=metaStartY;
+    for(let r=0;r<metaRows;r++){
+      for(let c=0;c<2;c++){
+        const field=fields[r*2+c];if(!field)continue;const [label,value]=field,x=margin+c*(metaColW+metaGap);
+        page.drawText(label,{x,y:rowTop,size:7.5,font:bold,color:muted});
+        const lines=wrapPdfText(value,regular,10.5,metaValueW).slice(0,2);
+        lines.forEach((line,i)=>page.drawText(line,{x:x+metaLabelW,y:rowTop-i*13,size:10.5,font:regular,color:rgb(.08,.17,.12)}));
+      }
+      rowTop-=rowHeights[r];
+    }
+    y=rowTop;
+    y-=4;page.drawLine({start:{x:margin,y},end:{x:page.getWidth()-margin,y},thickness:1,color:rgb(.82,.88,.84)});y-=25;
+    page.drawText('NOTE DI CHIUSURA',{x:margin,y,size:9,font:bold,color:green});y-=18;const notes=pdfSafeText(e.note_lorenzo||e.descrizione||'Nessuna nota inserita.');for(const line of wrapPdfText(notes,regular,10,w).slice(0,8)){page.drawText(line,{x:margin,y,size:10,font:regular,color:rgb(.08,.17,.12)});y-=14}
+    if(pics.length&&y>190){
+      y-=10;page.drawText(`FOTO ALLEGATE (${pics.length})`,{x:margin,y,size:9,font:bold,color:green});y-=15;
+      const selected=pics.slice(0,4),gap=6,count=selected.length,photoMargin=22,photoW=page.getWidth()-photoMargin*2;
+      let cols=2,rows=Math.ceil(count/2),cellH=180;
+      if(count===1){cols=1;rows=1;cellH=Math.min(330,Math.max(220,y-38))}
+      else if(count===2){cols=2;rows=1;cellH=Math.min(285,Math.max(205,y-38))}
+      else if(count===3){cols=2;rows=2;cellH=Math.min(215,Math.max(165,(y-48-gap)/2))}
+      else{cols=2;rows=2;cellH=Math.min(215,Math.max(165,(y-48-gap)/2))}
+      const cellW=(photoW-gap*(cols-1))/cols;
+      for(let i=0;i<selected.length;i++){
+        try{
+          const a=selected[i],bytes=await fetchAttachmentBytes(a),mime=String(a.mime_type||'').toLowerCase(),img=await embedUprightImage(doc,bytes,mime),col=i%cols,row=Math.floor(i/cols),x=photoMargin+col*(cellW+gap),top=y-row*(cellH+gap),scale=Math.min(cellW/img.width,cellH/img.height);
+          page.drawImage(img,{x:x+(cellW-img.width*scale)/2,y:top-cellH+(cellH-img.height*scale)/2,width:img.width*scale,height:img.height*scale})
+        }catch{}
+      }
+    }
+    page.drawText('Generato da Overgreen Cloud',{x:margin,y:22,size:8,font:regular,color:muted});
+    await appendAttachmentAsFullPage(doc,requestFile);await appendAttachmentAsFullPage(doc,reportOvergreen);await appendAttachmentAsFullPage(doc,reportEurospin);
+    const bytes=await doc.save();
+    return new Blob([bytes],{type:'application/pdf'});
+  }
+}
+
+
 async function generateExtraClosurePdf(e,button){
   const reportEurospin=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),reportOvergreen=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen'),requestFile=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');
   if(!requestFile||!reportOvergreen||!reportEurospin)return alert('Per generare la chiusura servono il file richiesta, il file Overgreen e il file Eurospin.');
@@ -3459,6 +3512,100 @@ async function generateExtraClosurePdf(e,button){
     await appendAttachmentAsFullPage(doc,requestFile);await appendAttachmentAsFullPage(doc,reportOvergreen);await appendAttachmentAsFullPage(doc,reportEurospin);
     const bytes=await doc.save(),blob=new Blob([bytes],{type:'application/pdf'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`chiusura-extra-${pdfSafeName(e.titolo)}-${e.giorno_intervento||today()}.pdf`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('Chiusura PDF generata');
   }catch(err){console.error(err);alert('Impossibile generare la chiusura: '+(err.message||String(err)))}finally{if(button){button.disabled=false;button.textContent=old}}
+}
+
+let eurospinPackageState={month:'',category:'both',groups:{},downloads:{}};
+
+function eurospinPackageMonthLabel(month){
+  if(!month||!/^\d{4}-\d{2}$/.test(month))return month||'';
+  const [y,m]=month.split('-').map(Number);
+  return new Intl.DateTimeFormat('it-IT',{month:'long',year:'numeric'}).format(new Date(y,m-1,1)).replace(/^./,c=>c.toUpperCase())
+}
+function eurospinPackageExtraDate(e){return e.giorno_intervento||String(e.closed_at||'').slice(0,10)||null}
+function eurospinMonthlyExtras(month,category){
+  return extras.filter(e=>{
+    if(clientType(e)!=='eurospin'||isEurospinOrdinaryTarget(e)||e.stato!=='completato')return false;
+    const d=eurospinPackageExtraDate(e);if(!d||!d.startsWith(month+'-'))return false;
+    if(category&&category!=='both'&&extraCategory(e)!==category)return false;
+    return ['verde','pulizie'].includes(extraCategory(e));
+  }).sort((a,b)=>String(eurospinPackageExtraDate(a)).localeCompare(String(eurospinPackageExtraDate(b)))||String(a.numero_target||'').localeCompare(String(b.numero_target||'')))
+}
+function eurospinPackagePrerequisites(e){
+  const request=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');
+  const overgreen=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen');
+  const eurospin=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin');
+  const missing=[];if(!request)missing.push('richiesta');if(!overgreen)missing.push('file Overgreen');if(!eurospin)missing.push('file Eurospin');
+  return {request,overgreen,eurospin,missing,ready:missing.length===0}
+}
+function eurospinPackageFilename(e,index){
+  const st=stores.find(s=>s.id===e.store_id),target=e.numero_target?`Target ${e.numero_target}`:`Extra ${String(index+1).padStart(2,'0')}`;
+  const place=st?.nome||e.nome_esterno||e.titolo||'Sede';
+  const date=eurospinPackageExtraDate(e)||today();
+  return `${pdfSafeName(target)} - ${pdfSafeName(place)} - ${date}.pdf`;
+}
+function eurospinPackageSelectedCategories(){
+  const v=$('eurospinPackageCategory')?.value||'both';return v==='both'?['verde','pulizie']:[v]
+}
+function renderEurospinPackageCheck(){
+  const month=$('eurospinPackageMonth')?.value,root=$('eurospinPackageSummary'),generate=$('eurospinPackageGenerate'),downloads=$('eurospinPackageDownloads');
+  if(!root||!generate)return;
+  if(downloads)downloads.innerHTML='';
+  eurospinPackageState={month,category:$('eurospinPackageCategory')?.value||'both',groups:{},downloads:{}};
+  if(!month){root.innerHTML='<p class="muted">Seleziona un mese.</p>';generate.disabled=true;return}
+  const categories=eurospinPackageSelectedCategories();
+  let total=0,readyTotal=0;
+  const cards=categories.map(cat=>{
+    const rows=eurospinMonthlyExtras(month,cat).map(e=>({e,check:eurospinPackagePrerequisites(e)}));
+    eurospinPackageState.groups[cat]=rows;total+=rows.length;readyTotal+=rows.filter(r=>r.check.ready).length;
+    const missing=rows.filter(r=>!r.check.ready);
+    const issues=missing.slice(0,12).map(r=>{const st=stores.find(s=>s.id===r.e.store_id);return `<div class="eurospin-package-issue"><strong>${esc(r.e.numero_target?`Target ${r.e.numero_target}`:r.e.titolo)}</strong> · ${esc(st?.nome||r.e.nome_esterno||'Sede')}<br>Manca: ${esc(r.check.missing.join(', '))}</div>`}).join('');
+    return `<div class="eurospin-package-card"><strong>${cat==='verde'?'🌿 Verde':'🧹 Pulizie'}</strong><div class="package-kpis"><span>${rows.length} chiusure</span><span class="package-ready">${rows.length-missing.length} pronte</span><span class="${missing.length?'package-missing':'package-ready'}">${missing.length} mancanti</span></div>${missing.length?`<div class="eurospin-package-issues">${issues}${missing.length>12?`<div class="muted">…e altre ${missing.length-12}</div>`:''}</div>`:'<div class="package-ready">✓ Tutte le chiusure sono complete</div>'}</div>`
+  }).join('');
+  root.innerHTML=`<div><strong>${esc(eurospinPackageMonthLabel(month))}</strong> · ${total} extra trovati · ${readyTotal} pronti</div><div class="eurospin-package-grid">${cards}</div>${readyTotal<total?'<p class="muted">Gli ZIP possono essere creati solo quando tutti gli extra della categoria selezionata hanno i tre documenti necessari.</p>':''}`;
+  generate.disabled=!total||readyTotal!==total;
+}
+async function generateEurospinMonthlyPackages(){
+  const btn=$('eurospinPackageGenerate'),root=$('eurospinPackageSummary'),downloads=$('eurospinPackageDownloads');
+  if(!btn||!window.JSZip)return alert('La libreria ZIP non è ancora disponibile. Aggiorna la pagina e riprova.');
+  const categories=eurospinPackageSelectedCategories(),month=$('eurospinPackageMonth').value;
+  if(!month)return alert('Seleziona un mese.');
+  renderEurospinPackageCheck();
+  const allRows=categories.flatMap(c=>eurospinPackageState.groups[c]||[]);
+  if(!allRows.length)return alert('Nessuna chiusura extra Eurospin trovata per questo periodo.');
+  const missing=allRows.filter(r=>!r.check.ready);if(missing.length)return alert(`Ci sono ${missing.length} chiusure incomplete. Completa prima i documenti mancanti.`);
+  const old=btn.textContent;btn.disabled=true;btn.textContent='Preparo chiusure…';if(downloads)downloads.innerHTML='';
+  try{
+    const monthLabel=eurospinPackageMonthLabel(month),made=[];
+    for(const cat of categories){
+      const rows=eurospinPackageState.groups[cat]||[];if(!rows.length)continue;
+      const zip=new JSZip();
+      for(let i=0;i<rows.length;i++){
+        const e=rows[i].e;
+        btn.textContent=`${cat==='verde'?'Verde':'Pulizie'} · ${i+1}/${rows.length}`;
+        if(root)root.insertAdjacentHTML('beforeend',`<div class="eurospin-package-progress" id="packageProgress">Genero ${esc(e.numero_target?`Target ${e.numero_target}`:e.titolo)} · ${i+1}/${rows.length}</div>`);
+        const blob=await buildExtraClosurePdfBlob(e);
+        zip.file(eurospinPackageFilename(e,i),blob);
+        $('packageProgress')?.remove();
+        await new Promise(r=>setTimeout(r,0));
+      }
+      btn.textContent=`Comprimo ZIP ${cat==='verde'?'Verde':'Pulizie'}…`;
+      const zipBlob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
+      const name=`Eurospin - Chiusure Extra ${cat==='verde'?'VERDE':'PULIZIE'} - ${monthLabel}.zip`;
+      made.push({cat,blob:zipBlob,name,count:rows.length});
+    }
+    eurospinPackageState.downloads={};
+    for(const x of made)eurospinPackageState.downloads[x.cat]=x;
+    if(downloads){
+      downloads.innerHTML=made.map(x=>`<button type="button" data-package-download="${x.cat}">⬇️ Scarica ZIP ${x.cat==='verde'?'Verde':'Pulizie'} · ${x.count}</button>`).join('');
+      downloads.querySelectorAll('[data-package-download]').forEach(b=>b.onclick=()=>downloadEurospinPackage(b.dataset.packageDownload));
+    }
+    toast(`✓ ${made.length===2?'2 ZIP pronti':'ZIP pronto'}`);
+  }catch(err){console.error(err);alert('Creazione pacchetto non riuscita: '+(err?.message||String(err)))}
+  finally{btn.disabled=false;btn.textContent=old}
+}
+function downloadEurospinPackage(cat){
+  const x=eurospinPackageState.downloads?.[cat];if(!x)return;
+  const url=URL.createObjectURL(x.blob),a=document.createElement('a');a.href=url;a.download=x.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)
 }
 
 function extraCard(e){
@@ -5004,3 +5151,9 @@ document.addEventListener('DOMContentLoaded',()=>{
 $('dashboardShareStore')?.addEventListener('click',openShareStorePicker);$('shareStoreSearch')?.addEventListener('input',renderShareStorePicker);
 
 $('editScheduleDateForm')?.addEventListener('submit',e=>{e.preventDefault();saveEditScheduleDate()});$('editScheduleTeamForm')?.addEventListener('submit',e=>{e.preventDefault();saveEditScheduleTeam()});
+
+
+$('eurospinPackageCheck')?.addEventListener('click',renderEurospinPackageCheck);
+$('eurospinPackageGenerate')?.addEventListener('click',generateEurospinMonthlyPackages);
+$('eurospinPackageMonth')?.addEventListener('change',()=>{$('eurospinPackageGenerate').disabled=true;$('eurospinPackageDownloads').innerHTML=''});
+$('eurospinPackageCategory')?.addEventListener('change',()=>{$('eurospinPackageGenerate').disabled=true;$('eurospinPackageDownloads').innerHTML=''});

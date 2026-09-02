@@ -1,4 +1,4 @@
-const APP_VERSION='V112-64';
+const APP_VERSION='V112-65';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -238,7 +238,7 @@ async function repairEmployeePhotoSync(button=null){
           restored++;
           await deleteUploadJob(row.id).catch(()=>{});
           row.uploadedAt=Date.now();row.storagePath=path;await putPhotoRecoveryRow(row).catch(()=>{});
-        }catch(err){console.warn('V112-64 recupero locale foto fallito',i.id,err)}
+        }catch(err){console.warn('V112-65 recupero locale foto fallito',i.id,err)}
       }
       const state=await interventionPhotoSyncState(i.id);
       if(state.ready){await markInterventionPhotoUpload(i.id,'synced',null);await flushReadyClosureNotifications(i.id)}
@@ -2740,7 +2740,7 @@ async function recoverInterventionPhotosFromStorage(i,button=null){
     }
     await refreshPendingData();
   }catch(err){
-    console.error('V112-64 recupero foto Storage fallito',err);
+    console.error('V112-65 recupero foto Storage fallito',err);
     alert('Ricerca nello Storage non riuscita: '+(err?.message||String(err)));
   }finally{
     if(button){button.disabled=false;button.textContent=old||'Cerca foto nello Storage'}
@@ -4501,28 +4501,232 @@ $('editExtraClosureForm').onsubmit=async e=>{
 
 
 let scannedExtraDocuments={eurospin:null,overgreen:null};
-let documentScannerState={target:null,file:null,bitmap:null,rotation:0,useCrop:true,mode:'document',crop:null};
+let documentScannerState={target:null,file:null,bitmap:null,rotation:0,mode:'document',corners:null,autoDetected:false,dragIndex:-1};
+
 function scannerStatusId(target){return target==='eurospin'?'scanEurospinStatus':'scanOvergreenStatus'}
 function updateScannedExtraDocumentStatus(target){const el=$(scannerStatusId(target));if(!el)return;const f=scannedExtraDocuments[target];const direct=$(target==='eurospin'?'reportEurospin':'reportOvergreen')?.files?.[0];if(f){el.textContent='✓ Scansione pronta';el.classList.add('scan-ready')}else if(direct){el.textContent=`✓ ${direct.name||'File selezionato'}`;el.classList.add('scan-ready')}else{el.textContent='Nessun documento';el.classList.remove('scan-ready')}}
 function resetScannedExtraDocuments(){scannedExtraDocuments={eurospin:null,overgreen:null};updateScannedExtraDocumentStatus('eurospin');updateScannedExtraDocumentStatus('overgreen')}
-function detectDocumentCrop(bitmap){
-  try{
-    const max=180,scale=Math.min(1,max/Math.max(bitmap.width,bitmap.height)),w=Math.max(40,Math.round(bitmap.width*scale)),h=Math.max(40,Math.round(bitmap.height*scale));
-    const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0,w,h);const d=ctx.getImageData(0,0,w,h).data;
-    const mask=new Uint8Array(w*h);
-    for(let y=0;y<h;y++)for(let x=0;x<w;x++){const k=(y*w+x)*4,r=d[k],g=d[k+1],b=d[k+2],mx=Math.max(r,g,b),mn=Math.min(r,g,b),lum=.299*r+.587*g+.114*b;mask[y*w+x]=(lum>125&&(mx-mn)<95)?1:0}
-    const seen=new Uint8Array(w*h);let best=null;const qx=new Int16Array(w*h),qy=new Int16Array(w*h);
-    for(let sy=0;sy<h;sy+=2)for(let sx=0;sx<w;sx+=2){const si=sy*w+sx;if(!mask[si]||seen[si])continue;let head=0,tail=0,count=0,minx=sx,maxx=sx,miny=sy,maxy=sy;qx[tail]=sx;qy[tail++]=sy;seen[si]=1;while(head<tail){const x=qx[head],y=qy[head++];count++;if(x<minx)minx=x;if(x>maxx)maxx=x;if(y<miny)miny=y;if(y>maxy)maxy=y;for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+dx,ny=y+dy;if(nx<0||ny<0||nx>=w||ny>=h)continue;const ni=ny*w+nx;if(mask[ni]&&!seen[ni]){seen[ni]=1;qx[tail]=nx;qy[tail++]=ny}}}if(!best||count>best.count)best={count,minx,maxx,miny,maxy}}
-    if(!best||best.count<w*h*.10)return {x:.025,y:.025,w:.95,h:.95};
-    const bw=(best.maxx-best.minx+1)/w,bh=(best.maxy-best.miny+1)/h;if(bw<.38||bh<.38)return {x:.025,y:.025,w:.95,h:.95};
-    const pad=.018;return {x:Math.max(0,best.minx/w-pad),y:Math.max(0,best.miny/h-pad),w:Math.min(1,bw+pad*2),h:Math.min(1,bh+pad*2)};
-  }catch{return {x:.025,y:.025,w:.95,h:.95}}
+
+function defaultDocumentCorners(){return [{x:.04,y:.04},{x:.96,y:.04},{x:.96,y:.96},{x:.04,y:.96}]}
+function orderDocumentCorners(points){
+  if(!points||points.length!==4)return defaultDocumentCorners();
+  const p=points.map(x=>({x:Number(x.x),y:Number(x.y)}));
+  const sum=p.map(x=>x.x+x.y),diff=p.map(x=>x.x-x.y);
+  const pick=(arr,fn)=>arr.indexOf(fn(...arr));
+  const tl=p[pick(sum,Math.min)],br=p[pick(sum,Math.max)],tr=p[pick(diff,Math.max)],bl=p[pick(diff,Math.min)];
+  return [tl,tr,br,bl].map(x=>({x:Math.max(0,Math.min(1,x.x)),y:Math.max(0,Math.min(1,x.y))}));
 }
-function applyDocumentLook(ctx,w,h,mode){if(mode==='original')return;const img=ctx.getImageData(0,0,w,h),d=img.data;for(let i=0;i<d.length;i+=4){let r=d[i],g=d[i+1],b=d[i+2];if(mode==='bw'){const y=.299*r+.587*g+.114*b;const v=y>175?255:y<85?20:Math.max(0,Math.min(255,(y-128)*1.55+145));r=g=b=v}else{const avg=(r+g+b)/3;r=avg+(r-avg)*.45;g=avg+(g-avg)*.45;b=avg+(b-avg)*.45;r=(r-128)*1.22+142;g=(g-128)*1.22+142;b=(b-128)*1.22+142;r=Math.max(0,Math.min(255,r));g=Math.max(0,Math.min(255,g));b=Math.max(0,Math.min(255,b))}d[i]=r;d[i+1]=g;d[i+2]=b}ctx.putImageData(img,0,0)}
-function renderDocumentScannerPreview(fullQuality=false){const st=documentScannerState,b=st.bitmap,c=$('documentScannerCanvas');if(!b||!c)return;const crop=st.useCrop?(st.crop||{x:0,y:0,w:1,h:1}):{x:0,y:0,w:1,h:1};const sx=Math.round(crop.x*b.width),sy=Math.round(crop.y*b.height),sw=Math.max(1,Math.round(crop.w*b.width)),sh=Math.max(1,Math.round(crop.h*b.height));const rot=((st.rotation%360)+360)%360,maxSide=fullQuality?2200:1050,baseScale=Math.min(1,maxSide/Math.max(sw,sh)),dw=Math.max(1,Math.round(sw*baseScale)),dh=Math.max(1,Math.round(sh*baseScale)),turned=rot===90||rot===270;c.width=turned?dh:dw;c.height=turned?dw:dh;const ctx=c.getContext('2d',{alpha:false,willReadFrequently:true});ctx.save();ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);if(rot===90){ctx.translate(c.width,0);ctx.rotate(Math.PI/2)}else if(rot===180){ctx.translate(c.width,c.height);ctx.rotate(Math.PI)}else if(rot===270){ctx.translate(0,c.height);ctx.rotate(-Math.PI/2)}ctx.drawImage(b,sx,sy,sw,sh,0,0,dw,dh);ctx.restore();applyDocumentLook(ctx,c.width,c.height,st.mode);return c}
-async function openDocumentScanner(target,file){if(!file?.type?.startsWith('image/'))return;try{documentScannerState.bitmap?.close?.();const bitmap=await createImageBitmap(file);documentScannerState={target,file,bitmap,rotation:0,useCrop:true,mode:'document',crop:detectDocumentCrop(bitmap)};$('documentScannerTitle').textContent=target==='eurospin'?'Rapportino Eurospin':'File Overgreen';$('documentScannerCrop').textContent='▣ Foto intera';$('documentScannerMode').textContent='◐ Documento';renderDocumentScannerPreview(false);openDialog('documentScannerDialog')}catch(err){alert('Impossibile aprire la foto: '+(err?.message||err))}}
-function closeDocumentScanner(){try{documentScannerState.bitmap?.close?.()}catch{}documentScannerState={target:null,file:null,bitmap:null,rotation:0,useCrop:true,mode:'document',crop:null};$('documentScannerDialog')?.close()}
-async function useScannedDocument(){const btn=$('documentScannerUse'),old=btn.textContent;btn.disabled=true;btn.textContent='Preparo scansione…';try{const st=documentScannerState,c=renderDocumentScannerPreview(true);if(!c||!st.target)throw new Error('Scansione non disponibile.');const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('Conversione immagine non riuscita')),'image/jpeg',.88));const label=st.target==='eurospin'?'eurospin':'overgreen',file=new File([blob],`${label}-scansione-${Date.now()}.jpg`,{type:'image/jpeg',lastModified:Date.now()});scannedExtraDocuments[st.target]=file;const input=$(st.target==='eurospin'?'reportEurospin':'reportOvergreen');if(input)input.value='';updateScannedExtraDocumentStatus(st.target);closeDocumentScanner();toast('✓ Documento acquisito')}catch(err){alert(err.message||String(err))}finally{btn.disabled=false;btn.textContent=old}}
+function polygonAreaNormalized(c){
+  if(!c?.length)return 0;let a=0;
+  for(let i=0;i<c.length;i++){const j=(i+1)%c.length;a+=c[i].x*c[j].y-c[j].x*c[i].y}
+  return Math.abs(a/2)
+}
+function openCvReady(){
+  return !!(window.cv&&cv.Mat&&cv.imread&&cv.findContours);
+}
+async function waitForOpenCv(timeout=4500){
+  if(openCvReady())return true;
+  const started=Date.now();
+  while(Date.now()-started<timeout){
+    await new Promise(r=>setTimeout(r,120));
+    if(openCvReady())return true;
+  }
+  return false;
+}
+function scannerSourceCanvas(maxSide=1500){
+  const b=documentScannerState.bitmap;if(!b)return null;
+  const c=document.createElement('canvas'),scale=Math.min(1,maxSide/Math.max(b.width,b.height));
+  c.width=Math.max(1,Math.round(b.width*scale));c.height=Math.max(1,Math.round(b.height*scale));
+  c.getContext('2d',{alpha:false}).drawImage(b,0,0,c.width,c.height);
+  return c;
+}
+async function detectDocumentCornersOpenCv(){
+  const status=$('documentScannerDetectionStatus');
+  if(status)status.textContent='Analizzo bordi e prospettiva…';
+  const ready=await waitForOpenCv();
+  if(!ready)throw new Error('OpenCV non disponibile: puoi comunque posizionare manualmente i 4 angoli.');
+  const source=scannerSourceCanvas(1300);
+  if(!source)throw new Error('Foto non disponibile.');
+  let src,gray,blur,edges,closed,contours,hierarchy,kernel;
+  try{
+    src=cv.imread(source);
+    gray=new cv.Mat();blur=new cv.Mat();edges=new cv.Mat();closed=new cv.Mat();
+    cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
+    cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0,cv.BORDER_DEFAULT);
+    cv.Canny(blur,edges,55,165);
+    kernel=cv.Mat.ones(5,5,cv.CV_8U);
+    cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,kernel,new cv.Point(-1,-1),2);
+    contours=new cv.MatVector();hierarchy=new cv.Mat();
+    cv.findContours(closed,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE);
+
+    const minArea=source.width*source.height*.13;
+    let best=null,bestScore=0;
+    for(let i=0;i<contours.size();i++){
+      const cnt=contours.get(i),area=Math.abs(cv.contourArea(cnt));
+      if(area<minArea){cnt.delete();continue}
+      const peri=cv.arcLength(cnt,true),approx=new cv.Mat();
+      cv.approxPolyDP(cnt,approx,.018*peri,true);
+      if(approx.rows===4&&cv.isContourConvex(approx)){
+        const pts=[];
+        for(let r=0;r<4;r++)pts.push({x:approx.intPtr(r,0)[0]/source.width,y:approx.intPtr(r,0)[1]/source.height});
+        const ordered=orderDocumentCorners(pts),normArea=polygonAreaNormalized(ordered);
+        const edgeBonus=ordered.reduce((s,p)=>s+(p.x<.12||p.x>.88?1:0)+(p.y<.12||p.y>.88?1:0),0)*.01;
+        const score=normArea+edgeBonus;
+        if(normArea>.12&&score>bestScore){bestScore=score;best=ordered}
+      }
+      approx.delete();cnt.delete();
+    }
+    if(!best)throw new Error('Non ho trovato un contorno abbastanza affidabile.');
+    return best;
+  }finally{
+    [src,gray,blur,edges,closed,contours,hierarchy,kernel].forEach(x=>{try{x?.delete?.()}catch{}})
+  }
+}
+function scannerDisplayGeometry(){
+  const c=$('documentScannerCanvas'),editor=$('documentScannerEditor');
+  if(!c||!editor)return null;
+  const cr=c.getBoundingClientRect(),er=editor.getBoundingClientRect();
+  return {canvas:c,editor,left:cr.left-er.left,top:cr.top-er.top,w:cr.width,h:cr.height};
+}
+function drawScannerPolygon(ctx,w,h,corners){
+  if(!corners?.length)return;
+  ctx.save();ctx.beginPath();ctx.moveTo(corners[0].x*w,corners[0].y*h);
+  for(let i=1;i<4;i++)ctx.lineTo(corners[i].x*w,corners[i].y*h);
+  ctx.closePath();ctx.lineWidth=Math.max(3,w/260);ctx.strokeStyle='rgba(25,190,93,.95)';ctx.stroke();
+  ctx.fillStyle='rgba(22,164,76,.08)';ctx.fill();ctx.restore();
+}
+function renderScannerHandles(){
+  const root=$('documentScannerHandles'),g=scannerDisplayGeometry(),corners=documentScannerState.corners;
+  if(!root||!g||!corners)return;
+  root.innerHTML='';
+  corners.forEach((p,index)=>{
+    const h=document.createElement('div');h.className='scanner-handle';h.dataset.corner=index;
+    h.style.left=`${g.left+p.x*g.w}px`;h.style.top=`${g.top+p.y*g.h}px`;
+    const move=e=>{
+      e.preventDefault();
+      const rect=g.editor.getBoundingClientRect();
+      const x=(e.clientX-rect.left-g.left)/g.w,y=(e.clientY-rect.top-g.top)/g.h;
+      documentScannerState.corners[index]={x:Math.max(0,Math.min(1,x)),y:Math.max(0,Math.min(1,y))};
+      documentScannerState.autoDetected=false;
+      renderDocumentScannerPreview(false);
+      $('documentScannerDetectionStatus').textContent='Angoli corretti manualmente';
+    };
+    h.addEventListener('pointerdown',e=>{h.setPointerCapture?.(e.pointerId);move(e)});
+    h.addEventListener('pointermove',e=>{if(h.hasPointerCapture?.(e.pointerId))move(e)});
+    h.addEventListener('pointerup',e=>{try{h.releasePointerCapture?.(e.pointerId)}catch{}});
+    root.appendChild(h)
+  })
+}
+function applyDocumentLook(ctx,w,h,mode){
+  if(mode==='original')return;
+  const img=ctx.getImageData(0,0,w,h),d=img.data;
+  for(let i=0;i<d.length;i+=4){
+    let r=d[i],g=d[i+1],b=d[i+2];
+    if(mode==='bw'){
+      const y=.299*r+.587*g+.114*b;
+      const v=y>176?255:y<78?12:Math.max(0,Math.min(255,(y-128)*1.72+148));r=g=b=v
+    }else{
+      const avg=(r+g+b)/3;r=avg+(r-avg)*.38;g=avg+(g-avg)*.38;b=avg+(b-avg)*.38;
+      r=(r-128)*1.17+139;g=(g-128)*1.17+139;b=(b-128)*1.17+139;
+      r=Math.max(0,Math.min(255,r));g=Math.max(0,Math.min(255,g));b=Math.max(0,Math.min(255,b))
+    }
+    d[i]=r;d[i+1]=g;d[i+2]=b
+  }
+  ctx.putImageData(img,0,0)
+}
+function renderDocumentScannerPreview(){
+  const st=documentScannerState,b=st.bitmap,c=$('documentScannerCanvas');
+  if(!b||!c)return null;
+  const maxSide=1000,scale=Math.min(1,maxSide/Math.max(b.width,b.height));
+  c.width=Math.max(1,Math.round(b.width*scale));c.height=Math.max(1,Math.round(b.height*scale));
+  const ctx=c.getContext('2d',{alpha:false,willReadFrequently:true});
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(b,0,0,c.width,c.height);
+  drawScannerPolygon(ctx,c.width,c.height,st.corners||defaultDocumentCorners());
+  requestAnimationFrame(renderScannerHandles);
+  return c
+}
+function distancePx(a,b,w,h){return Math.hypot((a.x-b.x)*w,(a.y-b.y)*h)}
+async function renderPerspectiveDocument(fullQuality=true){
+  const st=documentScannerState,b=st.bitmap,corners=orderDocumentCorners(st.corners||defaultDocumentCorners());
+  if(!b)return null;
+  const source=scannerSourceCanvas(fullQuality?2600:1400);if(!source)return null;
+  const sw=source.width,sh=source.height;
+  const p=corners.map(x=>({x:x.x*sw,y:x.y*sh}));
+  let outW=Math.round(Math.max(distancePx(corners[0],corners[1],sw,sh),distancePx(corners[3],corners[2],sw,sh)));
+  let outH=Math.round(Math.max(distancePx(corners[0],corners[3],sw,sh),distancePx(corners[1],corners[2],sw,sh)));
+  const maxOut=fullQuality?2300:1200,scale=Math.min(1,maxOut/Math.max(outW,outH));outW=Math.max(80,Math.round(outW*scale));outH=Math.max(80,Math.round(outH*scale));
+
+  const ready=await waitForOpenCv(2500);
+  let out=document.createElement('canvas');out.width=outW;out.height=outH;
+
+  if(ready){
+    let src,dst,srcTri,dstTri,M;
+    try{
+      src=cv.imread(source);dst=new cv.Mat();
+      srcTri=cv.matFromArray(4,1,cv.CV_32FC2,[p[0].x,p[0].y,p[1].x,p[1].y,p[2].x,p[2].y,p[3].x,p[3].y]);
+      dstTri=cv.matFromArray(4,1,cv.CV_32FC2,[0,0,outW-1,0,outW-1,outH-1,0,outH-1]);
+      M=cv.getPerspectiveTransform(srcTri,dstTri);
+      cv.warpPerspective(src,dst,M,new cv.Size(outW,outH),cv.INTER_CUBIC,cv.BORDER_REPLICATE,new cv.Scalar());
+      cv.imshow(out,dst);
+    }finally{[src,dst,srcTri,dstTri,M].forEach(x=>{try{x?.delete?.()}catch{}})}
+  }else{
+    // Fallback: rectangular crop based on manual corner bounds; still usable if CDN is unavailable.
+    const minX=Math.min(...p.map(x=>x.x)),maxX=Math.max(...p.map(x=>x.x)),minY=Math.min(...p.map(x=>x.y)),maxY=Math.max(...p.map(x=>x.y));
+    out.getContext('2d').drawImage(source,minX,minY,maxX-minX,maxY-minY,0,0,outW,outH);
+  }
+
+  const rot=((st.rotation%360)+360)%360;
+  if(rot){
+    const turned=rot===90||rot===270,rc=document.createElement('canvas');rc.width=turned?out.height:out.width;rc.height=turned?out.width:out.height;
+    const rctx=rc.getContext('2d',{alpha:false});rctx.fillStyle='#fff';rctx.fillRect(0,0,rc.width,rc.height);rctx.save();
+    if(rot===90){rctx.translate(rc.width,0);rctx.rotate(Math.PI/2)}else if(rot===180){rctx.translate(rc.width,rc.height);rctx.rotate(Math.PI)}else{rctx.translate(0,rc.height);rctx.rotate(-Math.PI/2)}
+    rctx.drawImage(out,0,0);rctx.restore();out=rc
+  }
+  applyDocumentLook(out.getContext('2d',{willReadFrequently:true}),out.width,out.height,st.mode);
+  return out
+}
+async function autoDetectDocumentCorners(){
+  const btn=$('documentScannerDetect');if(btn){btn.disabled=true;btn.textContent='⌛ Analizzo…'}
+  try{
+    const corners=await detectDocumentCornersOpenCv();
+    documentScannerState.corners=orderDocumentCorners(corners);documentScannerState.autoDetected=true;
+    $('documentScannerDetectionStatus').textContent='✓ Foglio rilevato automaticamente · trascina gli angoli se serve';
+    $('documentScannerEditor')?.classList.add('scanner-detected');renderDocumentScannerPreview(false)
+  }catch(err){
+    documentScannerState.corners=documentScannerState.corners||defaultDocumentCorners();
+    documentScannerState.autoDetected=false;
+    $('documentScannerDetectionStatus').textContent='⚠️ '+(err?.message||'Rilevamento non riuscito')+' Posiziona i 4 angoli a mano.';
+    renderDocumentScannerPreview(false)
+  }finally{if(btn){btn.disabled=false;btn.textContent='⌗ Rileva bordi'}}
+}
+async function openDocumentScanner(target,file){
+  if(!file?.type?.startsWith('image/'))return;
+  try{
+    documentScannerState.bitmap?.close?.();const bitmap=await createImageBitmap(file);
+    documentScannerState={target,file,bitmap,rotation:0,mode:'document',corners:defaultDocumentCorners(),autoDetected:false,dragIndex:-1};
+    $('documentScannerTitle').textContent=target==='eurospin'?'Rapportino Eurospin':'File Overgreen';
+    $('documentScannerMode').textContent='◐ Documento';$('documentScannerDetectionStatus').textContent='Analizzo automaticamente i bordi…';
+    $('documentScannerEditor')?.classList.remove('scanner-detected');
+    renderDocumentScannerPreview(false);openDialog('documentScannerDialog');
+    setTimeout(()=>autoDetectDocumentCorners(),120)
+  }catch(err){alert('Impossibile aprire la foto: '+(err?.message||err))}
+}
+function closeDocumentScanner(){
+  try{documentScannerState.bitmap?.close?.()}catch{}
+  documentScannerState={target:null,file:null,bitmap:null,rotation:0,mode:'document',corners:null,autoDetected:false,dragIndex:-1};
+  $('documentScannerHandles')?.replaceChildren();$('documentScannerDialog')?.close()
+}
+async function useScannedDocument(){
+  const btn=$('documentScannerUse'),old=btn.textContent;btn.disabled=true;btn.textContent='Raddrizzo documento…';
+  try{
+    const st=documentScannerState;if(!st.target||!st.bitmap)throw new Error('Scansione non disponibile.');
+    const c=await renderPerspectiveDocument(true);if(!c)throw new Error('Impossibile creare la scansione.');
+    const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('Conversione immagine non riuscita')),'image/jpeg',.9));
+    const label=st.target==='eurospin'?'eurospin':'overgreen',file=new File([blob],`${label}-scansione-${Date.now()}.jpg`,{type:'image/jpeg',lastModified:Date.now()});
+    scannedExtraDocuments[st.target]=file;const input=$(st.target==='eurospin'?'reportEurospin':'reportOvergreen');if(input)input.value='';
+    updateScannedExtraDocumentStatus(st.target);closeDocumentScanner();toast('✓ Documento raddrizzato e acquisito')
+  }catch(err){alert(err.message||String(err))}finally{btn.disabled=false;btn.textContent=old}
+}
 
 function openExtraClosureDialog(extra,fromOrdinary=false){
   if(!extra)return;
@@ -4599,10 +4803,10 @@ $('reportEurospin')?.addEventListener('change',()=>{scannedExtraDocuments.eurosp
 $('reportOvergreen')?.addEventListener('change',()=>{scannedExtraDocuments.overgreen=null;updateScannedExtraDocumentStatus('overgreen')});
 $('documentScannerClose')?.addEventListener('click',closeDocumentScanner);
 $('documentScannerRetake')?.addEventListener('click',()=>{const target=documentScannerState.target;closeDocumentScanner();setTimeout(()=>$(target==='eurospin'?'scanEurospinCamera':'scanOvergreenCamera')?.click(),80)});
-$('documentScannerRotate')?.addEventListener('click',()=>{documentScannerState.rotation=(documentScannerState.rotation+90)%360;renderDocumentScannerPreview(false)});
-$('documentScannerCrop')?.addEventListener('click',e=>{documentScannerState.useCrop=!documentScannerState.useCrop;e.currentTarget.textContent=documentScannerState.useCrop?'▣ Foto intera':'▣ Ritaglio auto';renderDocumentScannerPreview(false)});
-$('documentScannerMode')?.addEventListener('click',e=>{const modes=['document','bw','original'],i=modes.indexOf(documentScannerState.mode);documentScannerState.mode=modes[(i+1)%modes.length];e.currentTarget.textContent=documentScannerState.mode==='document'?'◐ Documento':documentScannerState.mode==='bw'?'◑ B/N forte':'◯ Originale';renderDocumentScannerPreview(false)});
-$('documentScannerUse')?.addEventListener('click',useScannedDocument);
+
+
+$('documentScannerMode')?.addEventListener('click',e=>{const modes=['document','bw','original'],i=modes.indexOf(documentScannerState.mode);documentScannerState.mode=modes[(i+1)%modes.length];e.currentTarget.textContent=documentScannerState.mode==='document'?'◐ Documento':documentScannerState.mode==='bw'?'◑ B/N forte':'◯ Originale';});
+$('documentScannerDetect')?.addEventListener('click',autoDetectDocumentCorners);$('documentScannerFull')?.addEventListener('click',()=>{documentScannerState.corners=defaultDocumentCorners();documentScannerState.autoDetected=false;$('documentScannerDetectionStatus').textContent='Foto intera selezionata · puoi comunque trascinare gli angoli';renderDocumentScannerPreview(false)});$('documentScannerRotate')?.addEventListener('click',()=>{documentScannerState.rotation=(documentScannerState.rotation+90)%360;toast('Rotazione applicata al documento finale')});$('documentScannerUse')?.addEventListener('click',useScannedDocument);
 $('documentScannerDialog')?.addEventListener('cancel',e=>{e.preventDefault();closeDocumentScanner()});
 
 async function saveExtraPartial(){

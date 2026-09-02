@@ -1,4 +1,4 @@
-const APP_VERSION='V112-63';
+const APP_VERSION='V112-64';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -238,7 +238,7 @@ async function repairEmployeePhotoSync(button=null){
           restored++;
           await deleteUploadJob(row.id).catch(()=>{});
           row.uploadedAt=Date.now();row.storagePath=path;await putPhotoRecoveryRow(row).catch(()=>{});
-        }catch(err){console.warn('V112-63 recupero locale foto fallito',i.id,err)}
+        }catch(err){console.warn('V112-64 recupero locale foto fallito',i.id,err)}
       }
       const state=await interventionPhotoSyncState(i.id);
       if(state.ready){await markInterventionPhotoUpload(i.id,'synced',null);await flushReadyClosureNotifications(i.id)}
@@ -2740,7 +2740,7 @@ async function recoverInterventionPhotosFromStorage(i,button=null){
     }
     await refreshPendingData();
   }catch(err){
-    console.error('V112-63 recupero foto Storage fallito',err);
+    console.error('V112-64 recupero foto Storage fallito',err);
     alert('Ricerca nello Storage non riuscita: '+(err?.message||String(err)));
   }finally{
     if(button){button.disabled=false;button.textContent=old||'Cerca foto nello Storage'}
@@ -4499,9 +4499,35 @@ $('editExtraClosureForm').onsubmit=async e=>{
   }catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=oldText}
 };
 
+
+let scannedExtraDocuments={eurospin:null,overgreen:null};
+let documentScannerState={target:null,file:null,bitmap:null,rotation:0,useCrop:true,mode:'document',crop:null};
+function scannerStatusId(target){return target==='eurospin'?'scanEurospinStatus':'scanOvergreenStatus'}
+function updateScannedExtraDocumentStatus(target){const el=$(scannerStatusId(target));if(!el)return;const f=scannedExtraDocuments[target];const direct=$(target==='eurospin'?'reportEurospin':'reportOvergreen')?.files?.[0];if(f){el.textContent='✓ Scansione pronta';el.classList.add('scan-ready')}else if(direct){el.textContent=`✓ ${direct.name||'File selezionato'}`;el.classList.add('scan-ready')}else{el.textContent='Nessun documento';el.classList.remove('scan-ready')}}
+function resetScannedExtraDocuments(){scannedExtraDocuments={eurospin:null,overgreen:null};updateScannedExtraDocumentStatus('eurospin');updateScannedExtraDocumentStatus('overgreen')}
+function detectDocumentCrop(bitmap){
+  try{
+    const max=180,scale=Math.min(1,max/Math.max(bitmap.width,bitmap.height)),w=Math.max(40,Math.round(bitmap.width*scale)),h=Math.max(40,Math.round(bitmap.height*scale));
+    const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0,w,h);const d=ctx.getImageData(0,0,w,h).data;
+    const mask=new Uint8Array(w*h);
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){const k=(y*w+x)*4,r=d[k],g=d[k+1],b=d[k+2],mx=Math.max(r,g,b),mn=Math.min(r,g,b),lum=.299*r+.587*g+.114*b;mask[y*w+x]=(lum>125&&(mx-mn)<95)?1:0}
+    const seen=new Uint8Array(w*h);let best=null;const qx=new Int16Array(w*h),qy=new Int16Array(w*h);
+    for(let sy=0;sy<h;sy+=2)for(let sx=0;sx<w;sx+=2){const si=sy*w+sx;if(!mask[si]||seen[si])continue;let head=0,tail=0,count=0,minx=sx,maxx=sx,miny=sy,maxy=sy;qx[tail]=sx;qy[tail++]=sy;seen[si]=1;while(head<tail){const x=qx[head],y=qy[head++];count++;if(x<minx)minx=x;if(x>maxx)maxx=x;if(y<miny)miny=y;if(y>maxy)maxy=y;for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+dx,ny=y+dy;if(nx<0||ny<0||nx>=w||ny>=h)continue;const ni=ny*w+nx;if(mask[ni]&&!seen[ni]){seen[ni]=1;qx[tail]=nx;qy[tail++]=ny}}}if(!best||count>best.count)best={count,minx,maxx,miny,maxy}}
+    if(!best||best.count<w*h*.10)return {x:.025,y:.025,w:.95,h:.95};
+    const bw=(best.maxx-best.minx+1)/w,bh=(best.maxy-best.miny+1)/h;if(bw<.38||bh<.38)return {x:.025,y:.025,w:.95,h:.95};
+    const pad=.018;return {x:Math.max(0,best.minx/w-pad),y:Math.max(0,best.miny/h-pad),w:Math.min(1,bw+pad*2),h:Math.min(1,bh+pad*2)};
+  }catch{return {x:.025,y:.025,w:.95,h:.95}}
+}
+function applyDocumentLook(ctx,w,h,mode){if(mode==='original')return;const img=ctx.getImageData(0,0,w,h),d=img.data;for(let i=0;i<d.length;i+=4){let r=d[i],g=d[i+1],b=d[i+2];if(mode==='bw'){const y=.299*r+.587*g+.114*b;const v=y>175?255:y<85?20:Math.max(0,Math.min(255,(y-128)*1.55+145));r=g=b=v}else{const avg=(r+g+b)/3;r=avg+(r-avg)*.45;g=avg+(g-avg)*.45;b=avg+(b-avg)*.45;r=(r-128)*1.22+142;g=(g-128)*1.22+142;b=(b-128)*1.22+142;r=Math.max(0,Math.min(255,r));g=Math.max(0,Math.min(255,g));b=Math.max(0,Math.min(255,b))}d[i]=r;d[i+1]=g;d[i+2]=b}ctx.putImageData(img,0,0)}
+function renderDocumentScannerPreview(fullQuality=false){const st=documentScannerState,b=st.bitmap,c=$('documentScannerCanvas');if(!b||!c)return;const crop=st.useCrop?(st.crop||{x:0,y:0,w:1,h:1}):{x:0,y:0,w:1,h:1};const sx=Math.round(crop.x*b.width),sy=Math.round(crop.y*b.height),sw=Math.max(1,Math.round(crop.w*b.width)),sh=Math.max(1,Math.round(crop.h*b.height));const rot=((st.rotation%360)+360)%360,maxSide=fullQuality?2200:1050,baseScale=Math.min(1,maxSide/Math.max(sw,sh)),dw=Math.max(1,Math.round(sw*baseScale)),dh=Math.max(1,Math.round(sh*baseScale)),turned=rot===90||rot===270;c.width=turned?dh:dw;c.height=turned?dw:dh;const ctx=c.getContext('2d',{alpha:false,willReadFrequently:true});ctx.save();ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);if(rot===90){ctx.translate(c.width,0);ctx.rotate(Math.PI/2)}else if(rot===180){ctx.translate(c.width,c.height);ctx.rotate(Math.PI)}else if(rot===270){ctx.translate(0,c.height);ctx.rotate(-Math.PI/2)}ctx.drawImage(b,sx,sy,sw,sh,0,0,dw,dh);ctx.restore();applyDocumentLook(ctx,c.width,c.height,st.mode);return c}
+async function openDocumentScanner(target,file){if(!file?.type?.startsWith('image/'))return;try{documentScannerState.bitmap?.close?.();const bitmap=await createImageBitmap(file);documentScannerState={target,file,bitmap,rotation:0,useCrop:true,mode:'document',crop:detectDocumentCrop(bitmap)};$('documentScannerTitle').textContent=target==='eurospin'?'Rapportino Eurospin':'File Overgreen';$('documentScannerCrop').textContent='▣ Foto intera';$('documentScannerMode').textContent='◐ Documento';renderDocumentScannerPreview(false);openDialog('documentScannerDialog')}catch(err){alert('Impossibile aprire la foto: '+(err?.message||err))}}
+function closeDocumentScanner(){try{documentScannerState.bitmap?.close?.()}catch{}documentScannerState={target:null,file:null,bitmap:null,rotation:0,useCrop:true,mode:'document',crop:null};$('documentScannerDialog')?.close()}
+async function useScannedDocument(){const btn=$('documentScannerUse'),old=btn.textContent;btn.disabled=true;btn.textContent='Preparo scansione…';try{const st=documentScannerState,c=renderDocumentScannerPreview(true);if(!c||!st.target)throw new Error('Scansione non disponibile.');const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('Conversione immagine non riuscita')),'image/jpeg',.88));const label=st.target==='eurospin'?'eurospin':'overgreen',file=new File([blob],`${label}-scansione-${Date.now()}.jpg`,{type:'image/jpeg',lastModified:Date.now()});scannedExtraDocuments[st.target]=file;const input=$(st.target==='eurospin'?'reportEurospin':'reportOvergreen');if(input)input.value='';updateScannedExtraDocumentStatus(st.target);closeDocumentScanner();toast('✓ Documento acquisito')}catch(err){alert(err.message||String(err))}finally{btn.disabled=false;btn.textContent=old}}
+
 function openExtraClosureDialog(extra,fromOrdinary=false){
   if(!extra)return;
   $('closeExtraForm').reset();
+  resetScannedExtraDocuments();
   closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
   $('closeExtraId').value=extra.id;
   $('closeExtraForm').dataset.profile=closureProfile(extra);
@@ -4567,6 +4593,17 @@ function renderCloseExtraPhotoSelection(){
 $('closeExtraPhotos').onchange=e=>{addCloseExtraPhotos(e.target.files);e.target.value=''};
 $('closeExtraCameraPhoto').onchange=e=>{addCloseExtraPhotos(e.target.files);e.target.value=''};
 $('clearCloseExtraPhotos').onclick=()=>{closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection()};
+$('scanEurospinCamera')?.addEventListener('change',e=>{const f=e.target.files?.[0];e.target.value='';if(f)openDocumentScanner('eurospin',f)});
+$('scanOvergreenCamera')?.addEventListener('change',e=>{const f=e.target.files?.[0];e.target.value='';if(f)openDocumentScanner('overgreen',f)});
+$('reportEurospin')?.addEventListener('change',()=>{scannedExtraDocuments.eurospin=null;updateScannedExtraDocumentStatus('eurospin')});
+$('reportOvergreen')?.addEventListener('change',()=>{scannedExtraDocuments.overgreen=null;updateScannedExtraDocumentStatus('overgreen')});
+$('documentScannerClose')?.addEventListener('click',closeDocumentScanner);
+$('documentScannerRetake')?.addEventListener('click',()=>{const target=documentScannerState.target;closeDocumentScanner();setTimeout(()=>$(target==='eurospin'?'scanEurospinCamera':'scanOvergreenCamera')?.click(),80)});
+$('documentScannerRotate')?.addEventListener('click',()=>{documentScannerState.rotation=(documentScannerState.rotation+90)%360;renderDocumentScannerPreview(false)});
+$('documentScannerCrop')?.addEventListener('click',e=>{documentScannerState.useCrop=!documentScannerState.useCrop;e.currentTarget.textContent=documentScannerState.useCrop?'▣ Foto intera':'▣ Ritaglio auto';renderDocumentScannerPreview(false)});
+$('documentScannerMode')?.addEventListener('click',e=>{const modes=['document','bw','original'],i=modes.indexOf(documentScannerState.mode);documentScannerState.mode=modes[(i+1)%modes.length];e.currentTarget.textContent=documentScannerState.mode==='document'?'◐ Documento':documentScannerState.mode==='bw'?'◑ B/N forte':'◯ Originale';renderDocumentScannerPreview(false)});
+$('documentScannerUse')?.addEventListener('click',useScannedDocument);
+$('documentScannerDialog')?.addEventListener('cancel',e=>{e.preventDefault();closeDocumentScanner()});
 
 async function saveExtraPartial(){
   const btn=$('closeExtraPartialBtn');if(!btn)return;
@@ -4576,8 +4613,8 @@ async function saveExtraPartial(){
     const id=$('closeExtraId').value,extra=extras.find(x=>x.id===id),profileMode=$('closeExtraForm').dataset.profile||'eurospin';
     if(!extra)throw new Error('Extra non trovato. Aggiorna i dati e riprova.');
     const notes=$('closeExtraNotes').value.trim()||null,photos=[...closeExtraPhotoFiles];
-    const overgreenFile=profileMode==='eurospin'?$('reportOvergreen').files[0]:null;
-    if(profileMode==='eurospin'&&$('reportEurospin').files[0])throw new Error('Nel parziale non caricare il rapportino Eurospin: va inserito solo alla chiusura definitiva.');
+    const overgreenFile=profileMode==='eurospin'?(scannedExtraDocuments.overgreen||$('reportOvergreen').files[0]):null;
+    if(profileMode==='eurospin'&&(scannedExtraDocuments.eurospin||$('reportEurospin').files[0]))throw new Error('Nel parziale non caricare il rapportino Eurospin: va inserito solo alla chiusura definitiva.');
 
     if(overgreenFile){
       btn.textContent='Carico file Overgreen…';
@@ -4605,7 +4642,7 @@ async function saveExtraPartial(){
     const {error}=await sb.from('extras').update({stato:'da_integrare',note_lorenzo:notes,closed_by:null,closed_at:null}).eq('id',id);
     if(error)throw error;
     notifyAdminClosure('extra',id,photos.length);
-    $('closeExtraDialog').close();$('closeExtraForm').reset();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
+    $('closeExtraDialog').close();$('closeExtraForm').reset();resetScannedExtraDocuments();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
     toast(`Parziale salvato · extra ancora aperto${photos.length?' · '+photos.length+' foto':''}${overgreenFile?' · file Overgreen':''}`);
     await loadAll();
     if(combinedExtraClosureQueue.length)setTimeout(()=>openNextCombinedExtraClosure(),250);
@@ -4635,8 +4672,8 @@ $('closeExtraForm').onsubmit=async e=>{
     const photos=[...closeExtraPhotoFiles];
     const existingEurospin=attachments.some(a=>a.extra_id===id&&a.tipo==='rapportino_eurospin');
     const existingOvergreen=attachments.some(a=>a.extra_id===id&&a.tipo==='rapportino_overgreen');
-    const newEurospin=profileMode==='eurospin'?$('reportEurospin').files[0]:null;
-    const newOvergreen=profileMode==='eurospin'?$('reportOvergreen').files[0]:null;
+    const newEurospin=profileMode==='eurospin'?(scannedExtraDocuments.eurospin||$('reportEurospin').files[0]):null;
+    const newOvergreen=profileMode==='eurospin'?(scannedExtraDocuments.overgreen||$('reportOvergreen').files[0]):null;
     const reports=profileMode==='eurospin'?[['rapportino_eurospin',newEurospin],['rapportino_overgreen',newOvergreen]].filter(([,file])=>!!file):profileMode==='intesa'&&$('closeExtraGenericDoc').files[0]?[['verbale_cliente',$('closeExtraGenericDoc').files[0]]]:[];
     if(profileMode==='eurospin'&&!newEurospin&&!existingEurospin)throw new Error('Per la chiusura definitiva serve il rapportino Eurospin.');
     if(profileMode==='eurospin'&&!newOvergreen&&!existingOvergreen)throw new Error('Per la chiusura definitiva serve anche il file Overgreen. Se lo hai già caricato in un parziale non devi ricaricarlo.');
@@ -4678,7 +4715,7 @@ $('closeExtraForm').onsubmit=async e=>{
     btn.textContent='Invio a Lorenzo…';
     const {error}=await sb.from('extras').update({stato:'in_attesa',note_lorenzo:notes,closed_by:profile.id,closed_at:new Date().toISOString()}).eq('id',id);
     if(error)throw error;
-    $('closeExtraDialog').close();$('closeExtraForm').reset();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
+    $('closeExtraDialog').close();$('closeExtraForm').reset();resetScannedExtraDocuments();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
     toast(`Extra inviato a Lorenzo${photos.length?' · '+photos.length+' foto':''}`);
     await loadAll();
     if(combinedExtraClosureQueue.length)setTimeout(()=>openNextCombinedExtraClosure(),250);

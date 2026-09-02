@@ -1,4 +1,4 @@
-const APP_VERSION='V179';
+const APP_VERSION='V180';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -238,7 +238,7 @@ async function repairEmployeePhotoSync(button=null){
           restored++;
           await deleteUploadJob(row.id).catch(()=>{});
           row.uploadedAt=Date.now();row.storagePath=path;await putPhotoRecoveryRow(row).catch(()=>{});
-        }catch(err){console.warn('V179 recupero locale foto fallito',i.id,err)}
+        }catch(err){console.warn('V180 recupero locale foto fallito',i.id,err)}
       }
       const state=await interventionPhotoSyncState(i.id);
       if(state.ready){await markInterventionPhotoUpload(i.id,'synced',null);await flushReadyClosureNotifications(i.id)}
@@ -2741,7 +2741,7 @@ async function recoverInterventionPhotosFromStorage(i,button=null){
     }
     await refreshPendingData();
   }catch(err){
-    console.error('V179 recupero foto Storage fallito',err);
+    console.error('V180 recupero foto Storage fallito',err);
     alert('Ricerca nello Storage non riuscita: '+(err?.message||String(err)));
   }finally{
     if(button){button.disabled=false;button.textContent=old||'Cerca foto nello Storage'}
@@ -3574,7 +3574,7 @@ function renderEurospinPackageCheck(){
   const month=$('eurospinPackageMonth')?.value,root=$('eurospinPackageSummary'),generate=$('eurospinPackageGenerate'),downloads=$('eurospinPackageDownloads');
   if(!root||!generate)return;
   if(downloads)downloads.innerHTML='';
-  eurospinPackageState={month,category:$('eurospinPackageCategory')?.value||'both',groups:{},downloads:{}};
+  eurospinPackageState={month,category:$('eurospinPackageCategory')?.value||'both',groups:{},downloads:{}};eurospinExcelState={month,category:$('eurospinPackageCategory')?.value||'both',rows:[],analyzed:false};if($('eurospinExcelStatus'))$('eurospinExcelStatus').textContent='Premi “Leggi numeri chiusura” dopo la verifica.';if($('eurospinExcelGenerate'))$('eurospinExcelGenerate').disabled=true;
   if(!month){root.innerHTML='<p class="muted">Seleziona un mese.</p>';generate.disabled=true;return}
   const categories=eurospinPackageSelectedCategories();
   let total=0,readyTotal=0;
@@ -3588,6 +3588,125 @@ function renderEurospinPackageCheck(){
   root.innerHTML=`<div><strong>${esc(eurospinPackageMonthLabel(month))}</strong> · ${total} extra trovati · ${readyTotal} pronti</div><div class="eurospin-package-grid">${cards}</div>${readyTotal<total?'<p class="muted">Gli ZIP possono essere creati solo quando tutti gli extra della categoria selezionata hanno i tre documenti necessari.</p>':''}`;
   generate.disabled=!total||readyTotal!==total;
 }
+
+let eurospinExcelState={month:'',category:'both',rows:[],analyzed:false};
+let eurospinOcrWorker=null;
+
+function eurospinSelectedPackageRows(){
+  const categories=eurospinPackageSelectedCategories();
+  return categories.flatMap(cat=>(eurospinPackageState.groups?.[cat]||[]).map(r=>({...r,category:cat})));
+}
+function cleanClosureNumberCandidate(v){
+  const digits=String(v||'').replace(/\D/g,'');
+  return /^\d{5,8}$/.test(digits)?digits:null;
+}
+function extractClosureNumberFromText(text){
+  const normalized=String(text||'').replace(/\s+/g,' ').toUpperCase();
+  const nearPatterns=[
+    /(?:NUMERO\s+)?CHIUSURA(?:\s+INTERVENTO)?[\s:#N°.-]{0,20}(\d{5,8})/,
+    /CHIUS\w{0,8}[\s:#N°.-]{0,20}(\d{5,8})/,
+    /N[°.]?\s*CHIUSURA[\s:#.-]{0,15}(\d{5,8})/
+  ];
+  for(const re of nearPatterns){const m=normalized.match(re);if(m){const n=cleanClosureNumberCandidate(m[1]);if(n)return n}}
+  // Fallback: closure numbers in the supplied Eurospin workbook are normally 6 digits.
+  const all=[...normalized.matchAll(/\b(\d{6})\b/g)].map(m=>m[1]);
+  if(all.length===1)return all[0];
+  return null
+}
+async function pdfTextFromAttachment(a){
+  const url=await signedAttachmentUrl(a),loading=pdfjsLib.getDocument({url});
+  const pdf=await loading.promise;let text='';
+  for(let i=1;i<=Math.min(pdf.numPages,4);i++){const page=await pdf.getPage(i),content=await page.getTextContent();text+=' '+content.items.map(x=>x.str).join(' ')}
+  try{await pdf.destroy()}catch{}
+  return text
+}
+async function attachmentImageBlob(a){
+  const url=await signedAttachmentUrl(a),res=await fetch(url,{cache:'no-store'});if(!res.ok)throw new Error('Impossibile leggere il file Eurospin');
+  const original=await res.blob(),mime=String(a.mime_type||original.type||'').toLowerCase(),name=String(a.nome_file||'').toLowerCase();
+  if(mime.includes('pdf')||name.endsWith('.pdf')){
+    const bytes=new Uint8Array(await original.arrayBuffer()),pdf=await pdfjsLib.getDocument({data:bytes}).promise,page=await pdf.getPage(1),viewport=page.getViewport({scale:1.8}),canvas=document.createElement('canvas');
+    canvas.width=Math.round(viewport.width);canvas.height=Math.round(viewport.height);
+    await page.render({canvasContext:canvas.getContext('2d',{alpha:false}),viewport}).promise;
+    try{await pdf.destroy()}catch{}
+    return new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Conversione PDF non riuscita')),'image/jpeg',.86))
+  }
+  return original
+}
+async function getEurospinOcrWorker(){
+  if(eurospinOcrWorker)return eurospinOcrWorker;
+  if(!window.Tesseract)throw new Error('OCR non disponibile. Aggiorna la pagina e riprova.');
+  eurospinOcrWorker=await Tesseract.createWorker('ita+eng',1,{logger:m=>{const s=$('eurospinExcelStatus');if(s&&m.status==='recognizing text')s.textContent=`OCR documento… ${Math.round((m.progress||0)*100)}%`}});
+  return eurospinOcrWorker
+}
+async function readClosureNumberFromEurospinFile(e){
+  const a=attachments.find(x=>x.extra_id===e.id&&x.tipo==='rapportino_eurospin');
+  if(!a)return {number:null,method:'missing',error:'File Eurospin mancante'};
+  const mime=String(a.mime_type||'').toLowerCase(),name=String(a.nome_file||'').toLowerCase();
+  if(mime.includes('pdf')||name.endsWith('.pdf')){
+    try{
+      const text=await pdfTextFromAttachment(a),n=extractClosureNumberFromText(text);
+      if(n)return {number:n,method:'pdf-text'}
+    }catch{}
+  }
+  try{
+    const blob=await attachmentImageBlob(a),worker=await getEurospinOcrWorker(),result=await worker.recognize(blob),text=result?.data?.text||'',n=extractClosureNumberFromText(text);
+    return n?{number:n,method:'ocr'}:{number:null,method:'ocr',error:'Numero non riconosciuto'};
+  }catch(err){return {number:null,method:'ocr',error:err?.message||String(err)}}
+}
+function renderEurospinExcelStatus(){
+  const root=$('eurospinExcelStatus'),btn=$('eurospinExcelGenerate');if(!root||!btn)return;
+  const rows=eurospinExcelState.rows||[];
+  if(!rows.length){root.textContent='Prima verifica il pacchetto del mese.';btn.disabled=true;return}
+  const ok=rows.filter(r=>r.closureNumber).length,bad=rows.length-ok;
+  root.innerHTML=`<div><strong>${ok}/${rows.length}</strong> numeri chiusura riconosciuti${bad?` · <span class="package-missing">${bad} da verificare</span>`:' · ✓ completo'}</div><div class="eurospin-excel-status-grid">${rows.map(r=>{const st=stores.find(s=>s.id===r.e.store_id);return `<div class="eurospin-excel-row ${r.closureNumber?'ok':'bad'}"><div><strong>${esc(r.e.numero_target?`Target ${r.e.numero_target}`:r.e.titolo)}</strong><br>${esc(st?.nome||r.e.nome_esterno||'Sede')}</div><div class="eurospin-excel-number">${r.closureNumber||'—'}</div></div>`}).join('')}</div>`;
+  btn.disabled=bad>0
+}
+async function analyzeEurospinClosureNumbers(){
+  const btn=$('eurospinExcelAnalyze'),old=btn?.textContent,packageRows=eurospinSelectedPackageRows();
+  if(!packageRows.length)return alert('Prima premi Verifica pacchetto e assicurati che ci siano extra nel mese selezionato.');
+  if(btn){btn.disabled=true;btn.textContent='Analizzo documenti…'}
+  try{
+    eurospinExcelState={month:$('eurospinPackageMonth').value,category:$('eurospinPackageCategory').value,rows:[],analyzed:false};
+    for(let i=0;i<packageRows.length;i++){
+      const r=packageRows[i],status=$('eurospinExcelStatus');if(status)status.textContent=`Leggo file Eurospin ${i+1}/${packageRows.length}…`;
+      const result=await readClosureNumberFromEurospinFile(r.e);
+      eurospinExcelState.rows.push({...r,closureNumber:result.number,closureMethod:result.method,closureError:result.error||null});
+      renderEurospinExcelStatus();
+      await new Promise(res=>setTimeout(res,0))
+    }
+    eurospinExcelState.analyzed=true;renderEurospinExcelStatus();
+    const missing=eurospinExcelState.rows.filter(r=>!r.closureNumber).length;
+    if(missing)alert(`Analisi completata, ma ${missing} numeri chiusura non sono stati riconosciuti automaticamente. Per sicurezza l'Excel resta bloccato finché non sono tutti leggibili.`);
+    else toast('✓ Prime 5 colonne pronte')
+  }finally{if(btn){btn.disabled=false;btn.textContent=old}}
+}
+function excelDateValue(dateString){
+  if(!dateString)return null;const [y,m,d]=String(dateString).slice(0,10).split('-').map(Number);return y&&m&&d?new Date(y,m-1,d):null
+}
+async function generateEurospinExcel(){
+  if(!window.ExcelJS)return alert('Libreria Excel non disponibile. Aggiorna la pagina e riprova.');
+  const rows=eurospinExcelState.rows||[];if(!rows.length||rows.some(r=>!r.closureNumber))return alert('Prima completa la lettura dei numeri chiusura.');
+  const wb=new ExcelJS.Workbook(),ws=wb.addWorksheet('Foglio1'),month=eurospinExcelState.month,monthLabel=eurospinPackageMonthLabel(month).toUpperCase();
+  const headers=["PUNTO VENDITA","DATA RICHIESTA INTERVENTO","DATA INTERVENTO","NUMERO INTERVENTO","NUMERO CHIUSURA INTERVENTO","DESCRIZIONE INTERVENTO","NUMERO TECNICI","USCITA","IMPORTO FORFETTARIO TRASFERTA","N. ORE ORDINARIE","COSTO ORE ORDINARIE ","N. ORE CON CESTELLO","COSTO ORE CON CESTELLO","COSTO TOTALE ORE","TOTALE","MODALITA'","TOTALE FATTURATO","NOTE"];
+  ws.mergeCells('A1:R1');const title=ws.getCell('A1');title.value=`CONSUNTIVO OVERGREEN ${monthLabel}`;title.font={bold:true,size:14};title.alignment={horizontal:'center',vertical:'middle'};ws.getRow(1).height=24;
+  const hr=ws.getRow(2);headers.forEach((h,i)=>hr.getCell(i+1).value=h);hr.font={bold:true,size:9,color:{argb:'FFFFFFFF'}};hr.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF2F6B45'}};hr.alignment={horizontal:'center',vertical:'middle',wrapText:true};hr.height=42;
+  rows.forEach((r,index)=>{
+    const row=ws.getRow(index+3),e=r.e,st=stores.find(s=>s.id===e.store_id);
+    row.getCell(1).value=(st?.nome||e.nome_esterno||'').toUpperCase();
+    row.getCell(2).value=excelDateValue(extraRequestDate(e));
+    row.getCell(3).value=excelDateValue(eurospinPackageExtraDate(e));
+    row.getCell(4).value=Number(e.numero_target)||String(e.numero_target||'');
+    row.getCell(5).value=Number(r.closureNumber)||String(r.closureNumber||'');
+    row.getCell(2).numFmt='dd/mm/yyyy';row.getCell(3).numFmt='dd/mm/yyyy';
+    for(let c=1;c<=18;c++){row.getCell(c).border={top:{style:'thin',color:{argb:'FFD9E0DB'}},left:{style:'thin',color:{argb:'FFD9E0DB'}},bottom:{style:'thin',color:{argb:'FFD9E0DB'}},right:{style:'thin',color:{argb:'FFD9E0DB'}}};row.getCell(c).alignment={vertical:'middle',wrapText:true}}
+  });
+  const widths=[25,16,16,18,20,30,12,10,18,15,16,16,17,16,14,14,17,30];widths.forEach((w,i)=>ws.getColumn(i+1).width=w);
+  ws.views=[{state:'frozen',ySplit:2}];ws.autoFilter={from:'A2',to:`R${Math.max(3,rows.length+2)}`};
+  const buf=await wb.xlsx.writeBuffer(),blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  const category=$('eurospinPackageCategory').value,label=category==='both'?'VERDE + PULIZIE':category.toUpperCase();
+  a.href=url;a.download=`Consuntivo Overgreen - ${eurospinPackageMonthLabel(month)} - ${label}.xlsx`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('✓ Excel Eurospin generato')
+}
+
 async function buildEurospinCategoryZip(cat,rows,monthLabel,quality,maxSide,button,root){
   const zip=new JSZip();
   for(let i=0;i<rows.length;i++){
@@ -5199,6 +5318,8 @@ $('editScheduleDateForm')?.addEventListener('submit',e=>{e.preventDefault();save
 
 
 $('eurospinPackageCheck')?.addEventListener('click',renderEurospinPackageCheck);
+$('eurospinExcelAnalyze')?.addEventListener('click',analyzeEurospinClosureNumbers);
+$('eurospinExcelGenerate')?.addEventListener('click',generateEurospinExcel);
 $('eurospinPackageGenerate')?.addEventListener('click',generateEurospinMonthlyPackages);
 $('eurospinPackageMonth')?.addEventListener('change',()=>{$('eurospinPackageGenerate').disabled=true;$('eurospinPackageDownloads').innerHTML=''});
 $('eurospinPackageCategory')?.addEventListener('change',()=>{$('eurospinPackageGenerate').disabled=true;$('eurospinPackageDownloads').innerHTML=''});

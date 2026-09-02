@@ -1,4 +1,4 @@
-const APP_VERSION='V112-66';
+const APP_VERSION='V179';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -238,7 +238,7 @@ async function repairEmployeePhotoSync(button=null){
           restored++;
           await deleteUploadJob(row.id).catch(()=>{});
           row.uploadedAt=Date.now();row.storagePath=path;await putPhotoRecoveryRow(row).catch(()=>{});
-        }catch(err){console.warn('V112-66 recupero locale foto fallito',i.id,err)}
+        }catch(err){console.warn('V179 recupero locale foto fallito',i.id,err)}
       }
       const state=await interventionPhotoSyncState(i.id);
       if(state.ready){await markInterventionPhotoUpload(i.id,'synced',null);await flushReadyClosureNotifications(i.id)}
@@ -2741,7 +2741,7 @@ async function recoverInterventionPhotosFromStorage(i,button=null){
     }
     await refreshPendingData();
   }catch(err){
-    console.error('V112-66 recupero foto Storage fallito',err);
+    console.error('V179 recupero foto Storage fallito',err);
     alert('Ricerca nello Storage non riuscita: '+(err?.message||String(err)));
   }finally{
     if(button){button.disabled=false;button.textContent=old||'Cerca foto nello Storage'}
@@ -3411,7 +3411,31 @@ async function generateComplexExtraReportPdf(e,button){
  }catch(err){console.error(err);alert('Impossibile generare il report: '+(err.message||String(err)))}finally{if(button){button.disabled=false;button.textContent=old}}
 }
 
-async function buildExtraClosurePdfBlob(e){
+
+async function normalizeImageForPackagePdf(bytes,mime='image/jpeg',quality=.68,maxSide=1500){
+  const blob=new Blob([bytes],{type:mime||'image/jpeg'}),url=URL.createObjectURL(blob);
+  try{
+    const img=await new Promise((resolve,reject)=>{const el=new Image();el.onload=()=>resolve(el);el.onerror=()=>reject(new Error('Immagine non leggibile'));el.src=url});
+    const scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight)),canvas=document.createElement('canvas');
+    canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+    const ctx=canvas.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    const out=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Compressione immagine non riuscita')),'image/jpeg',quality));
+    return new Uint8Array(await out.arrayBuffer());
+  }finally{URL.revokeObjectURL(url)}
+}
+async function appendAttachmentForPackage(targetDoc,a,quality=.68,maxSide=1500){
+  const bytes=await fetchAttachmentBytes(a),mime=String(a.mime_type||'').toLowerCase(),name=String(a.nome_file||'').toLowerCase();
+  if(mime.includes('pdf')||name.endsWith('.pdf')){
+    // Preserve PDF text/vector quality. Only the first page is required by the existing closure format.
+    const source=await PDFLib.PDFDocument.load(bytes);if(!source.getPageCount())throw new Error(`${attachmentLabel(a)} è vuoto`);
+    const [page]=await targetDoc.copyPages(source,[0]);targetDoc.addPage(page);return
+  }
+  const compact=await normalizeImageForPackagePdf(bytes,mime,quality,maxSide),image=await targetDoc.embedJpg(compact);
+  const page=targetDoc.addPage([595.28,841.89]),pw=page.getWidth(),ph=page.getHeight(),scale=Math.min(pw/image.width,ph/image.height);
+  page.drawImage(image,{x:(pw-image.width*scale)/2,y:(ph-image.height*scale)/2,width:image.width*scale,height:image.height*scale});
+}
+
+async function buildExtraClosurePdfBlob(e,packageQuality=.68,packageMaxSide=1500){
   const reportEurospin=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),reportOvergreen=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen'),requestFile=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');
   if(!requestFile||!reportOvergreen||!reportEurospin)throw new Error('Per generare la chiusura servono richiesta, file Overgreen e file Eurospin.');
   if(!window.PDFLib)throw new Error('Libreria PDF non disponibile.');
@@ -3450,13 +3474,13 @@ async function buildExtraClosurePdfBlob(e){
       const cellW=(photoW-gap*(cols-1))/cols;
       for(let i=0;i<selected.length;i++){
         try{
-          const a=selected[i],bytes=await fetchAttachmentBytes(a),mime=String(a.mime_type||'').toLowerCase(),img=await embedUprightImage(doc,bytes,mime),col=i%cols,row=Math.floor(i/cols),x=photoMargin+col*(cellW+gap),top=y-row*(cellH+gap),scale=Math.min(cellW/img.width,cellH/img.height);
+          const a=selected[i],bytes=await fetchAttachmentBytes(a),mime=String(a.mime_type||'').toLowerCase(),compactBytes=await normalizeImageForPackagePdf(bytes,mime,packageQuality,packageMaxSide),img=await doc.embedJpg(compactBytes),col=i%cols,row=Math.floor(i/cols),x=photoMargin+col*(cellW+gap),top=y-row*(cellH+gap),scale=Math.min(cellW/img.width,cellH/img.height);
           page.drawImage(img,{x:x+(cellW-img.width*scale)/2,y:top-cellH+(cellH-img.height*scale)/2,width:img.width*scale,height:img.height*scale})
         }catch{}
       }
     }
     page.drawText('Generato da Overgreen Cloud',{x:margin,y:22,size:8,font:regular,color:muted});
-    await appendAttachmentAsFullPage(doc,requestFile);await appendAttachmentAsFullPage(doc,reportOvergreen);await appendAttachmentAsFullPage(doc,reportEurospin);
+    await appendAttachmentForPackage(doc,requestFile,packageQuality,packageMaxSide);await appendAttachmentForPackage(doc,reportOvergreen,packageQuality,packageMaxSide);await appendAttachmentForPackage(doc,reportEurospin,packageQuality,packageMaxSide);
     const bytes=await doc.save();
     return new Blob([bytes],{type:'application/pdf'});
   }
@@ -3564,6 +3588,20 @@ function renderEurospinPackageCheck(){
   root.innerHTML=`<div><strong>${esc(eurospinPackageMonthLabel(month))}</strong> · ${total} extra trovati · ${readyTotal} pronti</div><div class="eurospin-package-grid">${cards}</div>${readyTotal<total?'<p class="muted">Gli ZIP possono essere creati solo quando tutti gli extra della categoria selezionata hanno i tre documenti necessari.</p>':''}`;
   generate.disabled=!total||readyTotal!==total;
 }
+async function buildEurospinCategoryZip(cat,rows,monthLabel,quality,maxSide,button,root){
+  const zip=new JSZip();
+  for(let i=0;i<rows.length;i++){
+    const e=rows[i].e;
+    button.textContent=`${cat==='verde'?'Verde':'Pulizie'} · ${i+1}/${rows.length}`;
+    $('packageProgress')?.remove();
+    if(root)root.insertAdjacentHTML('beforeend',`<div class="eurospin-package-progress" id="packageProgress">Ottimizzo ${esc(e.numero_target?`Target ${e.numero_target}`:e.titolo)} · ${i+1}/${rows.length}</div>`);
+    const blob=await buildExtraClosurePdfBlob(e,quality,maxSide);
+    zip.file(eurospinPackageFilename(e,i),blob);
+    await new Promise(r=>setTimeout(r,0));
+  }
+  $('packageProgress')?.remove();button.textContent=`Comprimo ZIP ${cat==='verde'?'Verde':'Pulizie'}…`;
+  return zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:9}})
+}
 async function generateEurospinMonthlyPackages(){
   const btn=$('eurospinPackageGenerate'),root=$('eurospinPackageSummary'),downloads=$('eurospinPackageDownloads');
   if(!btn||!window.JSZip)return alert('La libreria ZIP non è ancora disponibile. Aggiorna la pagina e riprova.');
@@ -3575,34 +3613,41 @@ async function generateEurospinMonthlyPackages(){
   const missing=allRows.filter(r=>!r.check.ready);if(missing.length)return alert(`Ci sono ${missing.length} chiusure incomplete. Completa prima i documenti mancanti.`);
   const old=btn.textContent;btn.disabled=true;btn.textContent='Preparo chiusure…';if(downloads)downloads.innerHTML='';
   try{
-    const monthLabel=eurospinPackageMonthLabel(month),made=[];
+    const monthLabel=eurospinPackageMonthLabel(month),made=[],LIMIT=10*1024*1024,TARGET=9.35*1024*1024;
+    // Progressive profiles: preserve readability first, compress harder only if necessary.
+    const profiles=[
+      {quality:.72,maxSide:1600,label:'alta'},
+      {quality:.62,maxSide:1350,label:'media'},
+      {quality:.52,maxSide:1150,label:'compatta'},
+      {quality:.44,maxSide:1000,label:'forte'},
+      {quality:.36,maxSide:850,label:'massima'}
+    ];
     for(const cat of categories){
       const rows=eurospinPackageState.groups[cat]||[];if(!rows.length)continue;
-      const zip=new JSZip();
-      for(let i=0;i<rows.length;i++){
-        const e=rows[i].e;
-        btn.textContent=`${cat==='verde'?'Verde':'Pulizie'} · ${i+1}/${rows.length}`;
-        if(root)root.insertAdjacentHTML('beforeend',`<div class="eurospin-package-progress" id="packageProgress">Genero ${esc(e.numero_target?`Target ${e.numero_target}`:e.titolo)} · ${i+1}/${rows.length}</div>`);
-        const blob=await buildExtraClosurePdfBlob(e);
-        zip.file(eurospinPackageFilename(e,i),blob);
-        $('packageProgress')?.remove();
-        await new Promise(r=>setTimeout(r,0));
+      let zipBlob=null,used=null;
+      for(let p=0;p<profiles.length;p++){
+        const cfg=profiles[p];btn.textContent=`Ottimizzo ZIP ${cat==='verde'?'Verde':'Pulizie'} · ${cfg.label}`;
+        zipBlob=await buildEurospinCategoryZip(cat,rows,monthLabel,cfg.quality,cfg.maxSide,btn,root);
+        used=cfg;
+        if(zipBlob.size<=TARGET||zipBlob.size<=LIMIT&&p===profiles.length-1)break;
       }
-      btn.textContent=`Comprimo ZIP ${cat==='verde'?'Verde':'Pulizie'}…`;
-      const zipBlob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
+      if(zipBlob.size>LIMIT){
+        throw new Error(`Il pacchetto ${cat==='verde'?'Verde':'Pulizie'} pesa ${(zipBlob.size/1024/1024).toFixed(1)} MB anche con la compressione massima leggibile. Non ho creato più ZIP perché hai scelto di mantenerne uno solo.`);
+      }
       const name=`Eurospin - Chiusure Extra ${cat==='verde'?'VERDE':'PULIZIE'} - ${monthLabel}.zip`;
-      made.push({cat,blob:zipBlob,name,count:rows.length});
+      made.push({cat,blob:zipBlob,name,count:rows.length,quality:used.label,size:zipBlob.size});
     }
-    eurospinPackageState.downloads={};
-    for(const x of made)eurospinPackageState.downloads[x.cat]=x;
+    eurospinPackageState.downloads={};for(const x of made)eurospinPackageState.downloads[x.cat]=x;
     if(downloads){
-      downloads.innerHTML=made.map(x=>`<button type="button" data-package-download="${x.cat}">⬇️ Scarica ZIP ${x.cat==='verde'?'Verde':'Pulizie'} · ${x.count}</button>`).join('');
+      downloads.innerHTML=made.map(x=>`<button type="button" data-package-download="${x.cat}">⬇️ ZIP ${x.cat==='verde'?'Verde':'Pulizie'} · ${(x.size/1024/1024).toFixed(1)} MB</button>`).join('');
       downloads.querySelectorAll('[data-package-download]').forEach(b=>b.onclick=()=>downloadEurospinPackage(b.dataset.packageDownload));
     }
-    toast(`✓ ${made.length===2?'2 ZIP pronti':'ZIP pronto'}`);
+    if(root)root.insertAdjacentHTML('beforeend',`<div class="eurospin-package-progress">✓ ${made.map(x=>`${x.cat==='verde'?'Verde':'Pulizie'} ${(x.size/1024/1024).toFixed(1)} MB`).join(' · ')} · ciascun ZIP sotto 10 MB</div>`);
+    toast(`✓ ${made.length===2?'2 ZIP ottimizzati':'ZIP ottimizzato'} sotto 10 MB`);
   }catch(err){console.error(err);alert('Creazione pacchetto non riuscita: '+(err?.message||String(err)))}
-  finally{btn.disabled=false;btn.textContent=old}
+  finally{$('packageProgress')?.remove();btn.disabled=false;btn.textContent=old}
 }
+
 function downloadEurospinPackage(cat){
   const x=eurospinPackageState.downloads?.[cat];if(!x)return;
   const url=URL.createObjectURL(x.blob),a=document.createElement('a');a.href=url;a.download=x.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)

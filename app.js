@@ -1,4 +1,4 @@
-const APP_VERSION='V180';
+const APP_VERSION='V181';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -2603,10 +2603,11 @@ async function showHistory(s,refreshOnly=false){
     const names=await workerNames(i.id),pics=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica');
     const d=document.createElement('article');d.className=`history-card history-${i.stato}`;
     const statusText=historyStatusLabel(i.stato);
-    d.innerHTML=`<div class="history-dot"></div><div class="history-card-top"><div class="history-date"><span>${interventionDateLabel(i)}</span><small>${i.data_fine&&i.data_fine!==i.data_intervento?'Intervento ordinario · più giorni':'Intervento ordinario'}</small></div><span class="history-status">${esc(statusText)}</span></div><label class="history-report-select"><input type="checkbox" data-history-select value="${i.id}"><span>Includi nel report multiplo</span></label>${i.note?`<div class="history-note">${esc(i.note)}</div>`:'<div class="history-note muted">Nessuna nota inserita</div>'}${i.next_visit_note?`<div class="history-next-visit"><strong>Promemoria lasciato per il passaggio successivo:</strong> ${esc(i.next_visit_note)}</div>`:''}<div class="history-meta"><div class="history-workers">${names.length?names.map(n=>`<span>👤 ${esc(n)}</span>`).join(''):'<span>👤 Operatori non indicati</span>'}</div>${pics.length?`<span class="history-photo-count">📷 ${pics.length}</span>`:''}</div><div class="closure-stamp">🕒 Chiuso: ${esc(closureText(i))}</div><div class="history-photos" data-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':''}</div><div class="history-report-actions"><button type="button" data-single-report>📄 Report singolo</button></div>${admin()?'<div class="history-admin-actions"><button class="history-edit-btn" data-edit-history>Modifica</button><button class="history-delete-btn" data-delete-history>Elimina</button></div>':''}`;
+    d.innerHTML=`<div class="history-dot"></div><div class="history-card-top"><div class="history-date"><span>${interventionDateLabel(i)}</span><small>${i.data_fine&&i.data_fine!==i.data_intervento?'Intervento ordinario · più giorni':'Intervento ordinario'}</small></div><span class="history-status">${esc(statusText)}</span></div><label class="history-report-select"><input type="checkbox" data-history-select value="${i.id}"><span>Includi nel report multiplo</span></label>${i.note?`<div class="history-note">${esc(i.note)}</div>`:'<div class="history-note muted">Nessuna nota inserita</div>'}${i.next_visit_note?`<div class="history-next-visit"><strong>Promemoria lasciato per il passaggio successivo:</strong> ${esc(i.next_visit_note)}</div>`:''}<div class="history-meta"><div class="history-workers">${names.length?names.map(n=>`<span>👤 ${esc(n)}</span>`).join(''):'<span>👤 Operatori non indicati</span>'}</div>${pics.length?`<span class="history-photo-count">📷 ${pics.length}</span>`:''}</div><div class="closure-stamp">🕒 Chiuso: ${esc(closureText(i))}</div><div class="history-photos" data-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':''}</div><div class="history-report-actions"><button type="button" data-single-report>📄 Report singolo</button>${admin()?'<button type="button" class="secondary" data-add-retro-ticket>🎫 Aggiungi ticket già compreso</button>':''}</div>${admin()?'<div class="history-admin-actions"><button class="history-edit-btn" data-edit-history>Modifica</button><button class="history-delete-btn" data-delete-history>Elimina</button></div>':''}`;
     const checkbox=d.querySelector('[data-history-select]');
     checkbox?.addEventListener('change',()=>{checkbox.checked?selected.add(i.id):selected.delete(i.id);updateSelectionUi()});
     d.querySelector('[data-single-report]')?.addEventListener('click',()=>downloadStoreInterventionsReport(s,[i]));
+    d.querySelector('[data-add-retro-ticket]')?.addEventListener('click',()=>openRetroOrdinaryTicket(i,s));
     d.querySelector('[data-edit-history]')?.addEventListener('click',()=>openHistoryEdit(i));d.querySelector('[data-delete-history]')?.addEventListener('click',()=>deleteHistoryIntervention(i,s));
     timeline.appendChild(d);
     if(pics.length){
@@ -2617,6 +2618,35 @@ async function showHistory(s,refreshOnly=false){
   }
   updateSelectionUi();
   if(!refreshOnly&&!$('historyDialog').open)openDialog('historyDialog')
+}
+
+function openRetroOrdinaryTicket(intervention,store){
+  if(!admin())return;
+  const scheduleIds=[intervention?.schedule_item_id,...(Array.isArray(intervention?.schedule_item_ids)?intervention.schedule_item_ids:[])].filter(Boolean);
+  if(!scheduleIds.length)return alert('Questo vecchio passaggio non è collegato a una programmazione. Per ora il ticket retroattivo può essere agganciato solo ai passaggi provenienti dalla programmazione.');
+  $('retroTicketInterventionId').value=intervention.id;
+  $('retroTicketStoreId').value=store.id;
+  $('retroTicketNumber').value='';
+  $('retroTicketTitle').value='Ticket compreso nell’ordinario';
+  $('retroTicketDescription').value='';
+  $('retroTicketInfo').textContent=`${store.nome} · passaggio del ${fmt(interventionEndDate(intervention))}. Il ticket verrà creato già chiuso e collegato a questo passaggio.`;
+  $('retroTicketNumberLabel').textContent=clientType(store)==='intesa'?'Numero ticket':'Numero target / ticket';
+  openDialog('retroTicketDialog');
+}
+async function saveRetroOrdinaryTicket(){
+  if(!admin())return;
+  const intervention=interventions.find(x=>x.id===$('retroTicketInterventionId').value),store=stores.find(x=>x.id===$('retroTicketStoreId').value);
+  if(!intervention||!store)throw new Error('Intervento o punto vendita non trovato.');
+  const scheduleIds=[intervention.schedule_item_id,...(Array.isArray(intervention.schedule_item_ids)?intervention.schedule_item_ids:[])].filter(Boolean);
+  const scheduleItemId=scheduleIds[scheduleIds.length-1];
+  if(!scheduleItemId)throw new Error('Questo passaggio non è collegato a una programmazione.');
+  const number=$('retroTicketNumber').value.trim();if(!number)throw new Error('Inserisci il numero ticket/target.');
+  const duplicate=findExistingExtraByTarget(number);if(duplicate)throw new Error(`Il numero ${number} è già presente negli extra.`);
+  const now=new Date().toISOString(),client=clientType(store),profileMode=client==='intesa'?'intesa_ordinario':'eurospin_ordinario';
+  const payload={client_type:client,closure_profile:profileMode,store_id:store.id,nome_esterno:null,indirizzo_esterno:null,titolo:$('retroTicketTitle').value.trim()||'Ticket compreso nell’ordinario',numero_target:number,categoria_target:null,descrizione:$('retroTicketDescription').value.trim()||null,data_richiesta:today(),giorno_intervento:interventionEndDate(intervention),note_lorenzo:'Chiuso retroattivamente perché già eseguito nel passaggio ordinario.',stato:'completato',con_ordinario:true,creato_da:profile.id,schedule_item_id:scheduleItemId,closed_by:profile.id,closed_at:intervention.closed_at||now,convalidato_da:profile.id,convalidato_il:now};
+  const {data,error}=await sb.from('extras').insert(payload).select().single();if(error)throw error;
+  writeClientAudit('INSERT','extras',`Ticket ${number} aggiunto e chiuso su passaggio ordinario già effettuato`,{entity_type:'extra',entity_id:data.id,intervention_id:intervention.id,store_id:store.id});
+  $('retroTicketDialog').close();toast(`Ticket ${number} aggiunto e già chiuso`);await loadAll();const refreshed=stores.find(x=>x.id===store.id);if(refreshed)showHistory(refreshed,true);
 }
 
 async function deleteHistoryIntervention(i,store){
@@ -4311,6 +4341,7 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
 }
 $('doneForm').onsubmit=async e=>{e.preventDefault();await saveOrdinaryIntervention(false,e.submitter||$('doneForm').querySelector('[type=submit]'))};
 $('doneContinueBtn').onclick=async e=>{await saveOrdinaryIntervention(true,e.currentTarget)};
+$('retroTicketForm')&&( $('retroTicketForm').onsubmit=async e=>{e.preventDefault();const btn=e.submitter||$('retroTicketForm').querySelector('[type=submit]'),old=btn.textContent;btn.disabled=true;btn.textContent='Salvataggio…';try{await saveRetroOrdinaryTicket()}catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=old}} );
 $('historyEditForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const btn=e.submitter||$('historyEditForm').querySelector('[type=submit]'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Salvataggio…';try{const id=$('historyEditId').value,workers=[...$('historyEditWorkers').querySelectorAll('input:checked')].map(x=>x.value),newPhotos=[...historyEditPhotoFiles];if(!workers.length)throw new Error('Seleziona almeno un operatore.');const {error}=await sb.from('interventions').update({data_intervento:$('historyEditDate').value,closed_at:$('historyEditClosedAt').value?new Date($('historyEditClosedAt').value).toISOString():null,note:$('historyEditNotes').value.trim()||null}).eq('id',id);if(error)throw error;let r=await sb.from('intervention_workers').delete().eq('intervention_id',id);if(r.error)throw r.error;r=await sb.from('intervention_workers').insert(workers.map(profile_id=>({intervention_id:id,profile_id})));if(r.error)throw r.error;for(let n=0;n<newPhotos.length;n++){btn.textContent=`Caricamento foto ${n+1}/${newPhotos.length}…`;const file=await compressImage(newPhotos[n]),safe=(file.name||`foto-${n+1}.jpg`).replace(/[^a-zA-Z0-9._-]/g,'-'),path=`interventi/${id}/${Date.now()}-${n}-${safe}`;await uploadFile(path,file);const added=await addAttachment({tipo:'foto_generica',intervention_id:id,storage_path:path,nome_file:file.name||safe,mime_type:file.type||'image/jpeg',dimensione_bytes:file.size,caricato_da:profile.id});if(!added){await sb.storage.from('documenti').remove([path]);throw new Error('Registrazione della nuova foto non riuscita.')}attachments.push(added)}const intervention=interventions.find(x=>x.id===id);if(intervention?.stato==='convalidato')await sb.from('stores').update({ultimo_passaggio:$('historyEditDate').value}).eq('id',intervention.store_id);historyEditPhotoFiles=[];$('historyEditDialog').close();toast(newPhotos.length?`Intervento aggiornato · ${newPhotos.length} foto aggiunte`:'Storico aggiornato');await loadAll();const st=stores.find(x=>x.id===intervention?.store_id);if(st)showHistory(st)}catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=oldText}};
 $('userEditForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const payload={action:'update',user_id:$('userEditId').value,nome:$('userEditName').value.trim(),email:$('userEditEmail').value.trim(),ruolo:$('userEditRole').value,attivo:$('userEditActive').checked};if(!payload.nome||!payload.email)return alert('Nome ed email sono obbligatori.');const btn=e.submitter;btn.disabled=true;const old=btn.textContent;btn.textContent='Salvataggio…';try{const {data,error}=await sb.functions.invoke('manage-user',{body:payload});if(error||data?.error)throw new Error(data?.error||error.message);$('userEditDialog').close();toast('Utente aggiornato');await loadAll();await renderCloudEmployeeList()}catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=old}};
 $('addScheduleItemsForm').onsubmit=async e=>{

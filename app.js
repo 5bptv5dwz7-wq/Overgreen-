@@ -1,4 +1,4 @@
-const APP_VERSION='V183';
+const APP_VERSION='V184';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -2290,9 +2290,12 @@ async function downloadStoreInterventionsReport(store,rows){
 
 async function createIntesaFullReportAsSingles(data=dailyReportData()){
   if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
+  // I ticket Intesa inclusi nell'ordinario sono già mostrati dentro il report
+  // del passaggio ordinario: non vanno aggiunti una seconda volta come report extra.
+  const standaloneExtras=(data.extra||[]).filter(row=>!isIntesaOrdinaryTicket(row));
   const jobs=[
     ...(data.ordinary||[]).map(row=>({kind:'ordinary',row,date:interventionEndDate(row)})),
-    ...(data.extra||[]).map(row=>({kind:'extra',row,date:row.giorno_intervento||''}))
+    ...standaloneExtras.map(row=>({kind:'extra',row,date:row.giorno_intervento||''}))
   ].sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
   if(!jobs.length)throw new Error('Nessun lavoro Intesa trovato per il periodo e i filtri selezionati.');
   const {PDFDocument}=PDFLib,merged=await PDFDocument.create();

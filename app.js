@@ -1,4 +1,4 @@
-const APP_VERSION='V182';
+const APP_VERSION='V183';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -2039,9 +2039,13 @@ function dateInReportPeriod(value,period){return !!value&&value>=period.start&&v
 
 function reportStatusLabel(stato){return ({convalidato:'Convalidato',in_attesa:'In attesa',rifiutato:'Rifiutato',completato:'Completato',programmato:'Programmato'})[stato]||String(stato||'').replaceAll('_',' ')}
 function dailyReportData(){
-  const period=reportPeriod(),type=$('reportType')?.value||'all',worker=$('reportWorker')?.value||'all';
+  const period=reportPeriod(),type=$('reportType')?.value||'all',worker=$('reportWorker')?.value||'all',client=$('reportClient')?.value||'all';
   let ordinary=interventions.filter(i=>!i.multi_day_open&&dateInReportPeriod(interventionEndDate(i),period));
   let extra=extras.filter(e=>dateInReportPeriod(e.giorno_intervento,period)&&['in_attesa','completato'].includes(e.stato));
+  if(client!=='all'){
+    ordinary=ordinary.filter(i=>clientType(stores.find(s=>s.id===i.store_id)||i)===client);
+    extra=extra.filter(e=>clientType(e)===client);
+  }
   if(worker!=='all'){
     ordinary=ordinary.filter(i=>interventionWorkers.some(w=>w.intervention_id===i.id&&w.profile_id===worker));
     extra=extra.filter(e=>extraWorkers.some(w=>w.extra_id===e.id&&w.profile_id===worker));
@@ -2284,9 +2288,33 @@ async function downloadStoreInterventionsReport(store,rows){
   }catch(err){alert('Impossibile creare il report: '+(err?.message||String(err)))}
 }
 
+async function createIntesaFullReportAsSingles(data=dailyReportData()){
+  if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
+  const jobs=[
+    ...(data.ordinary||[]).map(row=>({kind:'ordinary',row,date:interventionEndDate(row)})),
+    ...(data.extra||[]).map(row=>({kind:'extra',row,date:row.giorno_intervento||''}))
+  ].sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
+  if(!jobs.length)throw new Error('Nessun lavoro Intesa trovato per il periodo e i filtri selezionati.');
+  const {PDFDocument}=PDFLib,merged=await PDFDocument.create();
+  for(const job of jobs){
+    const single=await createSingleClientReportFile(job.kind,job.row);
+    const source=await PDFDocument.load(new Uint8Array(await single.file.arrayBuffer()));
+    const copied=await merged.copyPages(source,source.getPageIndices());
+    copied.forEach(page=>merged.addPage(page));
+  }
+  merged.setTitle(`Report Intesa Sanpaolo completo ${pdfSafeText(data.period?.short||data.date||'')}`);
+  merged.setAuthor('Overgreen');merged.setCreator('Overgreen Cloud');merged.setProducer('Overgreen Cloud');
+  const bytes=await merged.save({useObjectStreams:true,addDefaultPage:false});
+  const periodSafe=pdfSafeText(data.period?.short||data.date).replace(/[\/:*?"<>|]/g,' ').replace(/\s+/g,' ').trim();
+  const fileName=`Report Intesa Sanpaolo completo - ${periodSafe}.pdf`,file=new File([bytes],fileName,{type:'application/pdf'});
+  return {file,fileName,title:`Report Intesa Sanpaolo completo · ${jobs.length} report singoli`,sizeKb:Math.max(1,Math.round(file.size/1024))};
+}
+
 async function createDailyReportFile(mode='compact'){
   if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
-  const {PDFDocument,StandardFonts,rgb}=PDFLib,data=dailyReportData(),counts=reportCounts(data);
+  const data=dailyReportData();
+  if(mode==='full'&&($('reportClient')?.value||'all')==='intesa')return createIntesaFullReportAsSingles(data);
+  const {PDFDocument,StandardFonts,rgb}=PDFLib,counts=reportCounts(data);
   const typeLabel=({all:'Tutti i lavori',ordinary:'Interventi ordinari',extra:'Lavori extra'})[$('reportType')?.value||'all'];
   const workerLabel=$('reportWorker')?.selectedOptions?.[0]?.textContent||'Tutti i dipendenti';
   const pdf=await PDFDocument.create(),regular=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -2360,6 +2388,7 @@ function dailyReportPdfKey(mode='compact'){
     d.period?.short||d.date||'',
     $('reportType')?.value||'all',
     $('reportWorker')?.value||'all',
+    $('reportClient')?.value||'all',
     ids,
     attachments.length
   ].join('::');
@@ -5372,7 +5401,7 @@ async function recoverSupabaseSession(){
 async function resetBrokenSession(){try{await sb.auth.signOut({scope:'local'})}catch{};localStorage.removeItem('sb-'+new URL(cfg.supabaseUrl).hostname.split('.')[0]+'-auth-token');sessionStorage.removeItem(IMPERSONATE_PROFILE_KEY);realProfile=null;profile=null;session=null;$('app').classList.add('hidden');$('loginScreen').classList.remove('hidden');const box=$('loginError');if(box){box.textContent='Le credenziali salvate non sono più valide. Accedi di nuovo.';box.classList.remove('hidden')}}
 
 document.querySelectorAll('[data-stats-days]').forEach(b=>b.addEventListener('click',()=>setStatsDays(b.dataset.statsDays)));$('statsClient')?.addEventListener('change',renderStats);$('statsType')?.addEventListener('change',renderStats);$('statsSiteType')?.addEventListener('change',renderStats);$('statsStartDate')?.addEventListener('change',renderStats);$('statsEndDate')?.addEventListener('change',renderStats);$('statsRefresh')?.addEventListener('click',async()=>{await loadAll();renderStats();toast('Statistiche aggiornate')});
-const refreshReportAndPdfCache=()=>{renderDailyReport();prewarmDailyReportPdfs()};$('reportDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportStartDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportEndDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportMonth')?.addEventListener('change',refreshReportAndPdfCache);document.querySelectorAll('[data-report-mode]').forEach(b=>b.addEventListener('click',()=>{setReportMode(b.dataset.reportMode);prewarmDailyReportPdfs()}));$('reportType')?.addEventListener('change',refreshReportAndPdfCache);$('reportWorker')?.addEventListener('change',refreshReportAndPdfCache);$('reportRefresh')?.addEventListener('click',async()=>{await loadAll();dailyReportPdfCache.clear();dailyReportPdfPending.clear();renderDailyReport();prewarmDailyReportPdfs();toast('Report aggiornato')});$('shareDailyReport')?.addEventListener('click',shareDailyReport);$('exportDailyReportCompact')?.addEventListener('click',()=>exportDailyReportPdf('compact'));$('exportDailyReportFull')?.addEventListener('click',()=>exportDailyReportPdf('full'));
+const refreshReportAndPdfCache=()=>{renderDailyReport();prewarmDailyReportPdfs()};$('reportDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportStartDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportEndDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportMonth')?.addEventListener('change',refreshReportAndPdfCache);document.querySelectorAll('[data-report-mode]').forEach(b=>b.addEventListener('click',()=>{setReportMode(b.dataset.reportMode);prewarmDailyReportPdfs()}));$('reportClient')?.addEventListener('change',refreshReportAndPdfCache);$('reportType')?.addEventListener('change',refreshReportAndPdfCache);$('reportWorker')?.addEventListener('change',refreshReportAndPdfCache);$('reportRefresh')?.addEventListener('click',async()=>{await loadAll();dailyReportPdfCache.clear();dailyReportPdfPending.clear();renderDailyReport();prewarmDailyReportPdfs();toast('Report aggiornato')});$('shareDailyReport')?.addEventListener('click',shareDailyReport);$('exportDailyReportCompact')?.addEventListener('click',()=>exportDailyReportPdf('compact'));$('exportDailyReportFull')?.addEventListener('click',()=>exportDailyReportPdf('full'));
 
 sb.auth.onAuthStateChange(async(event,s)=>{
   session=s;

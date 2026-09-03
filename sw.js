@@ -1,9 +1,9 @@
-const CACHE='overgreen-v182';
+const CACHE='overgreen-v183';
 self.addEventListener('install',e=>e.waitUntil(self.skipWaiting()));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(fetch(e.request,{cache:'no-store'}).catch(()=>caches.match(e.request)));});
 
-// V182 — ticket/target retroattivi: creazione completa con PDF e compilazione automatica, poi chiusura immediata sul passaggio ordinario.
+// V183 — PDF completo Intesa: unione di report singoli completi, uno per ogni intervento; filtro cliente applicato anche ai report attività.
 self.addEventListener('push',event=>{
   let data={};
   try{data=event.data?event.data.json():{}}catch{data={body:event.data?.text?.()||'Nuova attività completata'}}

@@ -1,9 +1,9 @@
-const CACHE='overgreen-v181';
+const CACHE='overgreen-v182';
 self.addEventListener('install',e=>e.waitUntil(self.skipWaiting()));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(fetch(e.request,{cache:'no-store'}).catch(()=>caches.match(e.request)));});
 
-// V181 — fix viste admin: nessuna pagina report/audit può riapparire fuori dalla vista attiva; Web Push invariato.
+// V182 — ticket/target retroattivi: creazione completa con PDF e compilazione automatica, poi chiusura immediata sul passaggio ordinario.
 self.addEventListener('push',event=>{
   let data={};
   try{data=event.data?event.data.json():{}}catch{data={body:event.data?.text?.()||'Nuova attività completata'}}

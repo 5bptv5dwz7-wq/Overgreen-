@@ -1,4 +1,4 @@
-const APP_VERSION='V181';
+const APP_VERSION='V182';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -15,6 +15,7 @@ const SEED_STORES=[{"name": "ABBIATEGRASSO", "lastDone": "2026-06-17"}, {"name":
 const $=id=>document.getElementById(id);
 let session=null,profile=null,realProfile=null,profiles=[],managedUsers=[],stores=[],interventions=[],schedules=[],scheduleMembers=[],scheduleItems=[],extras=[],extraWorkers=[],interventionWorkers=[],attachments=[],extraWorkItems=[],extraWorkItemPhotos=[],extraWorkItemNotes=[],savedRoutes=[],savedRouteItems=[],signatureSheets=[],auditLogs=[],auditPage=0,auditHasMore=false,companyDocuments=[],companyDocumentReads=[],archiveCategory='modulistica',workContacts=[],contactStores=[],scheduleActivities=[],scheduleActivityPhotos=[];
 let combinedExtraClosureQueue=[];
+let retroExtraCreateContext=null;
 let storeFilter='all',storeClientFilter='all',extraClientFilter='all',scheduleClientFilter='all',scheduleWorkerFilter='all',scheduleDateFilter='all',scheduleExactDate=null;
 let loadAllPromise=null,currentHistoryStoreId=null;
 let startupPerf={auth:0,rollover:0,supabase:0,render:0,total:0};
@@ -2603,7 +2604,7 @@ async function showHistory(s,refreshOnly=false){
     const names=await workerNames(i.id),pics=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica');
     const d=document.createElement('article');d.className=`history-card history-${i.stato}`;
     const statusText=historyStatusLabel(i.stato);
-    d.innerHTML=`<div class="history-dot"></div><div class="history-card-top"><div class="history-date"><span>${interventionDateLabel(i)}</span><small>${i.data_fine&&i.data_fine!==i.data_intervento?'Intervento ordinario · più giorni':'Intervento ordinario'}</small></div><span class="history-status">${esc(statusText)}</span></div><label class="history-report-select"><input type="checkbox" data-history-select value="${i.id}"><span>Includi nel report multiplo</span></label>${i.note?`<div class="history-note">${esc(i.note)}</div>`:'<div class="history-note muted">Nessuna nota inserita</div>'}${i.next_visit_note?`<div class="history-next-visit"><strong>Promemoria lasciato per il passaggio successivo:</strong> ${esc(i.next_visit_note)}</div>`:''}<div class="history-meta"><div class="history-workers">${names.length?names.map(n=>`<span>👤 ${esc(n)}</span>`).join(''):'<span>👤 Operatori non indicati</span>'}</div>${pics.length?`<span class="history-photo-count">📷 ${pics.length}</span>`:''}</div><div class="closure-stamp">🕒 Chiuso: ${esc(closureText(i))}</div><div class="history-photos" data-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':''}</div><div class="history-report-actions"><button type="button" data-single-report>📄 Report singolo</button>${admin()?'<button type="button" class="secondary" data-add-retro-ticket>🎫 Aggiungi ticket già compreso</button>':''}</div>${admin()?'<div class="history-admin-actions"><button class="history-edit-btn" data-edit-history>Modifica</button><button class="history-delete-btn" data-delete-history>Elimina</button></div>':''}`;
+    d.innerHTML=`<div class="history-dot"></div><div class="history-card-top"><div class="history-date"><span>${interventionDateLabel(i)}</span><small>${i.data_fine&&i.data_fine!==i.data_intervento?'Intervento ordinario · più giorni':'Intervento ordinario'}</small></div><span class="history-status">${esc(statusText)}</span></div><label class="history-report-select"><input type="checkbox" data-history-select value="${i.id}"><span>Includi nel report multiplo</span></label>${i.note?`<div class="history-note">${esc(i.note)}</div>`:'<div class="history-note muted">Nessuna nota inserita</div>'}${i.next_visit_note?`<div class="history-next-visit"><strong>Promemoria lasciato per il passaggio successivo:</strong> ${esc(i.next_visit_note)}</div>`:''}<div class="history-meta"><div class="history-workers">${names.length?names.map(n=>`<span>👤 ${esc(n)}</span>`).join(''):'<span>👤 Operatori non indicati</span>'}</div>${pics.length?`<span class="history-photo-count">📷 ${pics.length}</span>`:''}</div><div class="closure-stamp">🕒 Chiuso: ${esc(closureText(i))}</div><div class="history-photos" data-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':''}</div><div class="history-report-actions"><button type="button" data-single-report>📄 Report singolo</button>${admin()?`<button type="button" class="secondary" data-add-retro-ticket>${clientType(s)==='intesa'?'🎫 Aggiungi ticket già compreso':'🎯 Aggiungi target già compreso'}</button>`:''}</div>${admin()?'<div class="history-admin-actions"><button class="history-edit-btn" data-edit-history>Modifica</button><button class="history-delete-btn" data-delete-history>Elimina</button></div>':''}`;
     const checkbox=d.querySelector('[data-history-select]');
     checkbox?.addEventListener('change',()=>{checkbox.checked?selected.add(i.id):selected.delete(i.id);updateSelectionUi()});
     d.querySelector('[data-single-report]')?.addEventListener('click',()=>downloadStoreInterventionsReport(s,[i]));
@@ -2623,15 +2624,38 @@ async function showHistory(s,refreshOnly=false){
 function openRetroOrdinaryTicket(intervention,store){
   if(!admin())return;
   const scheduleIds=[intervention?.schedule_item_id,...(Array.isArray(intervention?.schedule_item_ids)?intervention.schedule_item_ids:[])].filter(Boolean);
-  if(!scheduleIds.length)return alert('Questo vecchio passaggio non è collegato a una programmazione. Per ora il ticket retroattivo può essere agganciato solo ai passaggi provenienti dalla programmazione.');
-  $('retroTicketInterventionId').value=intervention.id;
-  $('retroTicketStoreId').value=store.id;
-  $('retroTicketNumber').value='';
-  $('retroTicketTitle').value='Ticket compreso nell’ordinario';
-  $('retroTicketDescription').value='';
-  $('retroTicketInfo').textContent=`${store.nome} · passaggio del ${fmt(interventionEndDate(intervention))}. Il ticket verrà creato già chiuso e collegato a questo passaggio.`;
-  $('retroTicketNumberLabel').textContent=clientType(store)==='intesa'?'Numero ticket':'Numero target / ticket';
-  openDialog('retroTicketDialog');
+  if(!scheduleIds.length)return alert('Questo vecchio passaggio non è collegato a una programmazione. Per ora il ticket/target retroattivo può essere agganciato solo ai passaggi provenienti dalla programmazione.');
+  const client=clientType(store),scheduleItemId=scheduleIds[scheduleIds.length-1],interventionDate=interventionEndDate(intervention);
+  retroExtraCreateContext={interventionId:intervention.id,storeId:store.id,client,scheduleItemId,interventionDate};
+
+  $('extraForm').reset();
+  $('extraRequestDate').value=today();
+  $('extraDate').value=interventionDate;
+  $('extraDeadline').value='';
+  $('extraClient').value=client;
+  syncExtraClosureOptions($('extraClosureProfile'),client,`${client}_ordinario`);
+  $('extraClosureProfile').value=`${client}_ordinario`;
+  if($('extraIntesaOrdinaryMode'))$('extraIntesaOrdinaryMode').checked=client==='intesa';
+  if($('extraEurospinOrdinaryMode'))$('extraEurospinOrdinaryMode').checked=client==='eurospin';
+  if($('extraWithOrdinary'))$('extraWithOrdinary').checked=true;
+  if($('extraPdfAutoReadStatus')){$('extraPdfAutoReadStatus').textContent='';$('extraPdfAutoReadStatus').classList.add('hidden')}
+  clearDuplicateTargetWarning();
+  if($('extraStoreSearch'))$('extraStoreSearch').value='';
+  if($('extraStructured'))$('extraStructured').checked=false;
+  if($('extraWorkItemsEditor'))$('extraWorkItemsEditor').innerHTML='';
+  syncStructuredCreateUi();
+  syncOrdinaryIncludedCreateUi();
+  syncExtraNumberLabel();
+  $('extraDestination').value='store';
+  renderExtraStoreOptions(store.id);
+  $('extraStore').value=store.id;
+  syncExtraDestinationUi();
+  const workerIds=new Set(interventionWorkers.filter(w=>w.intervention_id===intervention.id).map(w=>w.profile_id));
+  $('extraWorkers').querySelectorAll('input').forEach(x=>x.checked=workerIds.has(x.value));
+  const title=$('extraDialog')?.querySelector('h2');if(title)title.textContent=client==='intesa'?'Nuovo ticket compreso nell’ordinario':'Nuovo target compreso nell’ordinario';
+  const submit=$('extraForm')?.querySelector('button[type="submit"]');if(submit)submit.textContent=client==='intesa'?'Crea e chiudi ticket':'Crea e chiudi target';
+  const status=$('extraPdfAutoReadStatus');if(status){status.textContent=`📌 Verrà collegato al passaggio di ${store.nome} del ${fmt(interventionDate)} e chiuso subito.`;status.classList.remove('hidden')}
+  openDialog('extraDialog');
 }
 async function saveRetroOrdinaryTicket(){
   if(!admin())return;
@@ -4092,7 +4116,7 @@ $('archiveUploadForm')?.addEventListener('submit',async e=>{
 
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeDialog(b));$('helpBtn').onclick=openHelp;document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));document.querySelectorAll('[data-client-filter]').forEach(b=>b.onclick=()=>{storeClientFilter=b.dataset.clientFilter;document.querySelectorAll('[data-client-filter]').forEach(x=>x.classList.toggle('active',x===b));renderStores()});document.querySelectorAll('[data-extra-client]').forEach(b=>b.onclick=()=>{extraClientFilter=b.dataset.extraClient;document.querySelectorAll('[data-extra-client]').forEach(x=>x.classList.toggle('active',x===b));renderExtras()});document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{storeFilter=b.dataset.filter;renderStores()});
 $("globalSearchBtn")?.addEventListener("click",()=>{$("globalSearchDialog").showModal();setTimeout(()=>$("globalSearchEverywhere").focus(),50)});$("globalSearchEverywhere")?.addEventListener("input",renderGlobalSearchEverywhere);$("healthRefreshBtn")?.addEventListener("click",renderHealthCenter);document.querySelectorAll("[data-bottom-view]").forEach(b=>b.onclick=()=>{setView(b.dataset.bottomView);$("bottomMoreMenu").classList.add("hidden")});$("bottomMoreBtn")?.addEventListener("click",()=>$("bottomMoreMenu").classList.toggle("hidden"));document.querySelectorAll("[data-more-view]").forEach(b=>b.onclick=()=>{setView(b.dataset.moreView);$("bottomMoreMenu").classList.add("hidden")});document.querySelector("[data-more-search]")?.addEventListener("click",()=>{$("bottomMoreMenu").classList.add("hidden");$("globalSearchDialog").showModal()});
-$('impersonationSelect')?.addEventListener('change',async e=>{await setImpersonatedProfile(e.target.value);$('impersonationBar')?.removeAttribute('open')});$('exitImpersonationBtn')?.addEventListener('click',async()=>{await setImpersonatedProfile('admin');$('impersonationBar')?.removeAttribute('open')});$('globalSearch')?.addEventListener('input',renderGlobalSearch);$('dashboardRefresh').onclick=loadAll;if($('storeAddressLookupBtn'))$('storeAddressLookupBtn').onclick=lookupStoreAddressOnline;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){scheduleDateFilter='all';$('scheduleDateFilter').value='all';setView('schedule')}else if(b.dataset.dash==='today'){scheduleDateFilter='today';$('scheduleDateFilter').value='today';setView('schedule')}else if(b.dataset.dash==='openextras')setView('extras');else if(b.dataset.dash==='todayextras'){$('extraSearchInput').value=today();setView('extras');renderExtras()}else setView('stores')});$('scheduleClientFilter').onchange=e=>{scheduleClientFilter=e.target.value;renderSchedules()};$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('bulkIntervalBtn').onclick=openBulkIntervalDialog;$('bulkIntervalClient').onchange=updateBulkIntervalPreview;$('bulkIntervalSiteType').onchange=updateBulkIntervalPreview;$('bulkIntervalDays').oninput=updateBulkIntervalPreview;$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('schedulePickerClient').onchange=renderSchedulePicker;document.querySelectorAll('[data-quick-date]').forEach(b=>b.onclick=()=>{$('scheduleDate').value=b.dataset.quickDate==='today'?today():tomorrow()});$('addScheduleSearch').oninput=renderAddSchedulePicker;$('addScheduleNewExtra')?.addEventListener('click',()=>{const sch=schedules.find(x=>x.id===$('addScheduleId').value);if(sch)openNewExtraForSchedule(sch)});$('addScheduleNewActivity')?.addEventListener('click',()=>{const sch=schedules.find(x=>x.id===$('addScheduleId').value);if(sch){$('addScheduleItemsDialog').close();openScheduleActivityDialog(sch)}});$('activityForm')&&( $('activityForm').onsubmit=async e=>{e.preventDefault();await saveScheduleActivity()} );$('programExtraForm')&&( $('programExtraForm').onsubmit=async e=>{e.preventDefault();await saveProgramExtra()} );$('contactsSearch')?.addEventListener('input',renderWorkContacts);$('newContactBtn')?.addEventListener('click',()=>openWorkContactDialog());$('contactForm')&&( $('contactForm').onsubmit=async e=>{e.preventDefault();await saveWorkContact()} );$('newExtraBtn').onclick=()=>{$('extraForm').reset();$('extraRequestDate').value=today();$('extraDate').value='';$('extraDeadline').value='';$('extraClient').value='eurospin';syncExtraClosureOptions($('extraClosureProfile'),'eurospin','eurospin');syncExtraNumberLabel();if($('extraIntesaOrdinaryMode'))$('extraIntesaOrdinaryMode').checked=false;if($('extraEurospinOrdinaryMode'))$('extraEurospinOrdinaryMode').checked=false;if($('extraPdfAutoReadStatus')){$('extraPdfAutoReadStatus').textContent='';$('extraPdfAutoReadStatus').classList.add('hidden')}clearDuplicateTargetWarning();if($('extraStoreSearch'))$('extraStoreSearch').value='';if($('extraStructured'))$('extraStructured').checked=false;if($('extraWorkItemsEditor'))$('extraWorkItemsEditor').innerHTML='';syncStructuredCreateUi();syncOrdinaryIncludedCreateUi();renderExtraStoreOptions();syncExtraDestinationUi();openDialog('extraDialog')};
+$('impersonationSelect')?.addEventListener('change',async e=>{await setImpersonatedProfile(e.target.value);$('impersonationBar')?.removeAttribute('open')});$('exitImpersonationBtn')?.addEventListener('click',async()=>{await setImpersonatedProfile('admin');$('impersonationBar')?.removeAttribute('open')});$('globalSearch')?.addEventListener('input',renderGlobalSearch);$('dashboardRefresh').onclick=loadAll;if($('storeAddressLookupBtn'))$('storeAddressLookupBtn').onclick=lookupStoreAddressOnline;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){scheduleDateFilter='all';$('scheduleDateFilter').value='all';setView('schedule')}else if(b.dataset.dash==='today'){scheduleDateFilter='today';$('scheduleDateFilter').value='today';setView('schedule')}else if(b.dataset.dash==='openextras')setView('extras');else if(b.dataset.dash==='todayextras'){$('extraSearchInput').value=today();setView('extras');renderExtras()}else setView('stores')});$('scheduleClientFilter').onchange=e=>{scheduleClientFilter=e.target.value;renderSchedules()};$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('bulkIntervalBtn').onclick=openBulkIntervalDialog;$('bulkIntervalClient').onchange=updateBulkIntervalPreview;$('bulkIntervalSiteType').onchange=updateBulkIntervalPreview;$('bulkIntervalDays').oninput=updateBulkIntervalPreview;$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('schedulePickerClient').onchange=renderSchedulePicker;document.querySelectorAll('[data-quick-date]').forEach(b=>b.onclick=()=>{$('scheduleDate').value=b.dataset.quickDate==='today'?today():tomorrow()});$('addScheduleSearch').oninput=renderAddSchedulePicker;$('addScheduleNewExtra')?.addEventListener('click',()=>{const sch=schedules.find(x=>x.id===$('addScheduleId').value);if(sch)openNewExtraForSchedule(sch)});$('addScheduleNewActivity')?.addEventListener('click',()=>{const sch=schedules.find(x=>x.id===$('addScheduleId').value);if(sch){$('addScheduleItemsDialog').close();openScheduleActivityDialog(sch)}});$('activityForm')&&( $('activityForm').onsubmit=async e=>{e.preventDefault();await saveScheduleActivity()} );$('programExtraForm')&&( $('programExtraForm').onsubmit=async e=>{e.preventDefault();await saveProgramExtra()} );$('contactsSearch')?.addEventListener('input',renderWorkContacts);$('newContactBtn')?.addEventListener('click',()=>openWorkContactDialog());$('contactForm')&&( $('contactForm').onsubmit=async e=>{e.preventDefault();await saveWorkContact()} );$('newExtraBtn').onclick=()=>{retroExtraCreateContext=null;$('extraForm').reset();$('extraRequestDate').value=today();$('extraDate').value='';$('extraDeadline').value='';$('extraClient').value='eurospin';syncExtraClosureOptions($('extraClosureProfile'),'eurospin','eurospin');syncExtraNumberLabel();if($('extraIntesaOrdinaryMode'))$('extraIntesaOrdinaryMode').checked=false;if($('extraEurospinOrdinaryMode'))$('extraEurospinOrdinaryMode').checked=false;if($('extraPdfAutoReadStatus')){$('extraPdfAutoReadStatus').textContent='';$('extraPdfAutoReadStatus').classList.add('hidden')}clearDuplicateTargetWarning();if($('extraStoreSearch'))$('extraStoreSearch').value='';if($('extraStructured'))$('extraStructured').checked=false;if($('extraWorkItemsEditor'))$('extraWorkItemsEditor').innerHTML='';syncStructuredCreateUi();syncOrdinaryIncludedCreateUi();renderExtraStoreOptions();syncExtraDestinationUi();const title=$('extraDialog')?.querySelector('h2');if(title)title.textContent='Nuovo extra';const submit=$('extraForm')?.querySelector('button[type="submit"]');if(submit)submit.textContent='Crea extra';openDialog('extraDialog')};
 function syncOrdinaryIncludedCreateUi(){
   const client=$('extraClient')?.value||'eurospin';
   const isIntesa=client==='intesa',isEurospin=client==='eurospin';
@@ -4643,15 +4667,22 @@ async function autoFillExtraFromPdf(file){
       return;
     }
 
-    // Il PDF decide il cliente.
-    $('extraClient').value=found.client;
-    syncExtraClosureOptions($('extraClosureProfile'),found.client,found.client);
+    const retro=retroExtraCreateContext;
+    if(retro&&found.client!==retro.client){
+      status.textContent=`⚠️ Questo PDF sembra ${found.client==='intesa'?'Intesa Sanpaolo':'Eurospin'}, ma il passaggio selezionato è ${retro.client==='intesa'?'Intesa Sanpaolo':'Eurospin'}. Carica il documento corretto.`;
+      return;
+    }
+    const effectiveClient=retro?.client||found.client;
+    $('extraClient').value=effectiveClient;
+    syncExtraClosureOptions($('extraClosureProfile'),effectiveClient,retro?`${effectiveClient}_ordinario`:effectiveClient);
+    if(retro)$('extraClosureProfile').value=`${effectiveClient}_ordinario`;
     syncOrdinaryIncludedCreateUi();
     syncExtraNumberLabel();
-    renderExtraStoreOptions();
+    renderExtraStoreOptions(retro?.storeId||null);
+    if(retro&&$('extraStore'))$('extraStore').value=retro.storeId;
     syncExtraDestinationUi();
 
-    const filled=[found.client==='intesa'?'Intesa Sanpaolo':'Eurospin'];
+    const filled=[effectiveClient==='intesa'?'Intesa Sanpaolo':'Eurospin'];
 
     if(found.number){
       $('extraTargetNumber').value=found.number;
@@ -4665,18 +4696,24 @@ async function autoFillExtraFromPdf(file){
       filled.push(`data ${fmt(found.requestDate)}`);
     }
 
-    const matchedStore=findStoreFromPdf(found.client,found.locationText||found.text);
-    if(matchedStore){
+    const matchedStore=findStoreFromPdf(effectiveClient,found.locationText||found.text);
+    if(retro&&matchedStore&&matchedStore.id!==retro.storeId){
+      const fixedStore=stores.find(s=>s.id===retro.storeId);
+      status.textContent=`⚠️ Il PDF sembra riferito a ${matchedStore.nome}, ma hai aperto il passaggio di ${fixedStore?.nome||'un’altra sede'}. Carica il documento corretto.`;
+      return;
+    }
+    if(matchedStore||retro){
+      const selectedStore=retro?stores.find(s=>s.id===retro.storeId):matchedStore;
       $('extraDestination').value='store';
       if($('extraStoreSearch'))$('extraStoreSearch').value='';
-      renderExtraStoreOptions(matchedStore.id);
-      $('extraStore').value=matchedStore.id;
+      renderExtraStoreOptions(selectedStore?.id||'');
+      if(selectedStore)$('extraStore').value=selectedStore.id;
       syncExtraDestinationUi();
-      filled.push(`${found.client==='intesa'?'filiale':'PV'} ${matchedStore.nome}`);
+      if(selectedStore)filled.push(`${effectiveClient==='intesa'?'filiale':'PV'} ${selectedStore.nome}`);
     }
 
     // Intesa contiene normalmente anche titolo e dettaglio della richiesta.
-    if(found.client==='intesa'){
+    if(effectiveClient==='intesa'){
       if(found.title){
         $('extraTitle').value=found.title;
         filled.push('titolo');
@@ -4686,8 +4723,8 @@ async function autoFillExtraFromPdf(file){
     }
 
     status.textContent=`✓ ${filled.join(' · ')}`;
-    if(!matchedStore&&found.locationText){
-      status.textContent+=` · ${found.client==='intesa'?'filiale':'PV'} letto dal PDF ma non trovato con certezza nell'anagrafica`;
+    if(!matchedStore&&!retro&&found.locationText){
+      status.textContent+=` · ${effectiveClient==='intesa'?'filiale':'PV'} letto dal PDF ma non trovato con certezza nell'anagrafica`;
     }
   }catch(err){
     console.warn('Lettura automatica PDF non riuscita',err);
@@ -4793,7 +4830,42 @@ $('extraWorkProgressForm')?.addEventListener('submit',e=>{e.preventDefault();sav
 async function signedWorkPhotoUrl(p){const {data,error}=await sb.storage.from('documenti').createSignedUrl(p.storage_path,900);if(error)throw error;return data.signedUrl}
 async function fetchWorkPhotoBytes(p){const url=await signedWorkPhotoUrl(p),res=await fetch(url);if(!res.ok)throw new Error('Foto non disponibile');return new Uint8Array(await res.arrayBuffer())}
 
-$('extraForm').onsubmit=async e=>{e.preventDefault();const workers=[...$('extraWorkers').querySelectorAll('input:checked')].map(x=>x.value),external=$('extraDestination').value==='external',pdf=$('extraPdf').files[0],closureMode=$('extraClosureProfile').value;if(!pdf)return alert('Allega il PDF della richiesta.');const duplicateTarget=findExistingExtraByTarget($('extraTargetNumber').value);if(duplicateTarget){showDuplicateTargetWarning(duplicateTarget);const st=stores.find(s=>s.id===duplicateTarget.store_id);return alert(`Target ${$('extraTargetNumber').value.trim()} già presente${st?.nome?` su ${st.nome}`:''}. Apri l’extra esistente invece di crearne un duplicato.`);}const structuredRows=$('extraStructured')?.checked?workEditorRows('extraWorkItemsEditor'):[];if($('extraStructured')?.checked&&!structuredRows.length)return alert('Aggiungi almeno una lavorazione.');if(!external){const chosen=stores.find(s=>s.id===$('extraStore').value);if(!chosen)return alert('Seleziona una sede valida.');if((chosen.client_type||'eurospin')!==$('extraClient').value)return alert('La sede selezionata non appartiene al cliente scelto.');}if(closureMode==='intesa_ordinario'||closureMode==='eurospin_ordinario'){const expected=closureMode==='intesa_ordinario'?'intesa':'eurospin';if($('extraClient').value!==expected)return alert('Il modello di chiusura non corrisponde al cliente selezionato.');if(external)return alert(closureMode==='intesa_ordinario'?'Il ticket Intesa incluso nell’ordinario deve essere collegato a una filiale.':'Il target Eurospin incluso nell’ordinario deve essere collegato a un punto vendita.');if(!$('extraWithOrdinary').checked)return alert('Per questa modalità attiva “Da fare insieme al passaggio ordinario”.');}const payload={client_type:$('extraClient').value,closure_profile:$('extraClosureProfile').value,deadline_at:$('extraDeadline').value?new Date($('extraDeadline').value).toISOString():null,store_id:external?null:$('extraStore').value,nome_esterno:external?$('extraExternalName').value.trim():null,indirizzo_esterno:external?$('extraExternalAddress').value.trim():null,titolo:$('extraTitle').value.trim(),numero_target:$('extraTargetNumber').value.trim()||null,categoria_target:$('extraCategory').value,descrizione:$('extraDescription').value.trim()||null,data_richiesta:$('extraRequestDate').value,giorno_intervento:$('extraDate').value||null,note_lorenzo:null,stato:'programmato',con_ordinario:$('extraWithOrdinary').checked,creato_da:profile.id};const {data,error}=await sb.from('extras').insert(payload).select().single();if(error){const msg=String(error.message||error);if((msg.includes("numero_target")||msg.includes("categoria_target"))&&msg.includes("schema cache"))return alert("Database non aggiornato: esegui MIGRAZIONE-V74.sql su Supabase, poi riprova.");if(msg.includes("con_ordinario")&&msg.includes("schema cache"))return alert("Database non aggiornato: esegui MIGRAZIONE-V59.sql su Supabase, poi riprova.");return alert(msg)}if(structuredRows.length){try{await createExtraWorkItems(data.id,structuredRows)}catch(workErr){await sb.from('extras').delete().eq('id',data.id);return alert('Impossibile creare le lavorazioni. Esegui la migrazione V108 su Supabase.\n'+workErr.message)}}if(workers.length){const r=await sb.from('extra_workers').insert(workers.map(profile_id=>({extra_id:data.id,profile_id})));if(r.error)return alert(r.error.message)}if(payload.giorno_intervento&&workers.length){try{extraWorkers.push(...workers.map(profile_id=>({extra_id:data.id,profile_id})));await ensureStandaloneExtraInProgramming(data,workers)}catch(err){return alert('Extra creato, ma inserimento nella programmazione non riuscito: '+err.message)}}const path=`extra/${data.id}/richiesta-${Date.now()}.pdf`;try{await uploadFile(path,pdf);await addAttachment({tipo:'pdf_richiesta',extra_id:data.id,storage_path:path,nome_file:pdf.name,mime_type:pdf.type,dimensione_bytes:pdf.size,caricato_da:profile.id})}catch(err){return alert('Extra creato, ma PDF non caricato: '+err.message)}$('extraDialog').close();toast(workers.length?'Extra creato':'Extra creato · da programmare e assegnare');await loadAll()};
+$('extraForm').onsubmit=async e=>{
+  e.preventDefault();
+  const retro=retroExtraCreateContext;
+  let workers=[...$('extraWorkers').querySelectorAll('input:checked')].map(x=>x.value),external=$('extraDestination').value==='external',pdf=$('extraPdf').files[0],closureMode=$('extraClosureProfile').value;
+  if(!pdf)return alert('Allega il PDF della richiesta.');
+  if(retro){
+    const intervention=interventions.find(x=>x.id===retro.interventionId),store=stores.find(x=>x.id===retro.storeId);
+    if(!intervention||!store)return alert('Il passaggio ordinario selezionato non è più disponibile.');
+    $('extraClient').value=retro.client;$('extraClosureProfile').value=`${retro.client}_ordinario`;$('extraDestination').value='store';$('extraStore').value=retro.storeId;$('extraWithOrdinary').checked=true;$('extraDate').value=retro.interventionDate;
+    external=false;closureMode=`${retro.client}_ordinario`;
+  }
+  const duplicateTarget=findExistingExtraByTarget($('extraTargetNumber').value);
+  if(duplicateTarget){showDuplicateTargetWarning(duplicateTarget);const st=stores.find(s=>s.id===duplicateTarget.store_id);const noun=($('extraClient').value==='intesa'?'Ticket':'Target');return alert(`${noun} ${$('extraTargetNumber').value.trim()} già presente${st?.nome?` su ${st.nome}`:''}. Apri l’extra esistente invece di crearne un duplicato.`);}
+  const structuredRows=$('extraStructured')?.checked?workEditorRows('extraWorkItemsEditor'):[];
+  if($('extraStructured')?.checked&&!structuredRows.length)return alert('Aggiungi almeno una lavorazione.');
+  if(!external){const chosen=stores.find(s=>s.id===$('extraStore').value);if(!chosen)return alert('Seleziona una sede valida.');if((chosen.client_type||'eurospin')!==$('extraClient').value)return alert('La sede selezionata non appartiene al cliente scelto.');if(retro&&chosen.id!==retro.storeId)return alert('Per questa chiusura devi usare la stessa sede del passaggio ordinario selezionato.');}
+  if(closureMode==='intesa_ordinario'||closureMode==='eurospin_ordinario'){const expected=closureMode==='intesa_ordinario'?'intesa':'eurospin';if($('extraClient').value!==expected)return alert('Il modello di chiusura non corrisponde al cliente selezionato.');if(external)return alert(closureMode==='intesa_ordinario'?'Il ticket Intesa incluso nell’ordinario deve essere collegato a una filiale.':'Il target Eurospin incluso nell’ordinario deve essere collegato a un punto vendita.');if(!$('extraWithOrdinary').checked)return alert('Per questa modalità attiva “Da fare insieme al passaggio ordinario”.');}
+  const now=new Date().toISOString();
+  const payload={client_type:$('extraClient').value,closure_profile:$('extraClosureProfile').value,deadline_at:$('extraDeadline').value?new Date($('extraDeadline').value).toISOString():null,store_id:external?null:$('extraStore').value,nome_esterno:external?$('extraExternalName').value.trim():null,indirizzo_esterno:external?$('extraExternalAddress').value.trim():null,titolo:$('extraTitle').value.trim(),numero_target:$('extraTargetNumber').value.trim()||null,categoria_target:$('extraCategory').value,descrizione:$('extraDescription').value.trim()||null,data_richiesta:$('extraRequestDate').value,giorno_intervento:retro?retro.interventionDate:($('extraDate').value||null),note_lorenzo:retro?'Chiuso retroattivamente perché già eseguito nel passaggio ordinario.':null,stato:retro?'completato':'programmato',con_ordinario:retro?true:$('extraWithOrdinary').checked,creato_da:profile.id};
+  if(retro){const intervention=interventions.find(x=>x.id===retro.interventionId);Object.assign(payload,{schedule_item_id:retro.scheduleItemId,closed_by:profile.id,closed_at:intervention?.closed_at||now,convalidato_da:profile.id,convalidato_il:now});}
+  const {data,error}=await sb.from('extras').insert(payload).select().single();
+  if(error){const msg=String(error.message||error);if((msg.includes('numero_target')||msg.includes('categoria_target'))&&msg.includes('schema cache'))return alert('Database non aggiornato: esegui MIGRAZIONE-V74.sql su Supabase, poi riprova.');if(msg.includes('con_ordinario')&&msg.includes('schema cache'))return alert('Database non aggiornato: esegui MIGRAZIONE-V59.sql su Supabase, poi riprova.');return alert(msg)}
+  if(structuredRows.length){try{await createExtraWorkItems(data.id,structuredRows)}catch(workErr){await sb.from('extras').delete().eq('id',data.id);return alert('Impossibile creare le lavorazioni. Esegui la migrazione V108 su Supabase.\n'+workErr.message)}}
+  if(workers.length){const r=await sb.from('extra_workers').insert(workers.map(profile_id=>({extra_id:data.id,profile_id})));if(r.error)return alert(r.error.message)}
+  if(!retro&&payload.giorno_intervento&&workers.length){try{extraWorkers.push(...workers.map(profile_id=>({extra_id:data.id,profile_id})));await ensureStandaloneExtraInProgramming(data,workers)}catch(err){return alert('Extra creato, ma inserimento nella programmazione non riuscito: '+err.message)}}
+  const path=`extra/${data.id}/richiesta-${Date.now()}.pdf`;
+  try{await uploadFile(path,pdf);await addAttachment({tipo:'pdf_richiesta',extra_id:data.id,storage_path:path,nome_file:pdf.name,mime_type:pdf.type,dimensione_bytes:pdf.size,caricato_da:profile.id})}catch(err){return alert('Extra creato, ma PDF non caricato: '+err.message)}
+  $('extraDialog').close();
+  if(retro){
+    const storeId=retro.storeId,noun=retro.client==='intesa'?'Ticket':'Target',number=$('extraTargetNumber').value.trim();
+    writeClientAudit('INSERT','extras',`${noun} ${number||data.id} aggiunto e chiuso su passaggio ordinario già effettuato`,{entity_type:'extra',entity_id:data.id,intervention_id:retro.interventionId,store_id:storeId});
+    retroExtraCreateContext=null;
+    toast(`${noun} creato e già chiuso`);
+    await loadAll();const refreshed=stores.find(x=>x.id===storeId);if(refreshed)showHistory(refreshed,true);
+  }else{toast(workers.length?'Extra creato':'Extra creato · da programmare e assegnare');await loadAll()}
+};
 $('extraEditDestination').onchange=toggleExtraEditDestination;
 $('extraEditStoreSearch')?.addEventListener('input',()=>renderExtraEditStoreOptions());
 $('extraEditForm').onsubmit=async e=>{

@@ -1,8 +1,9 @@
-const CACHE='overgreen-v183';
+const CACHE='overgreen-v185';
 self.addEventListener('install',e=>e.waitUntil(self.skipWaiting()));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(fetch(e.request,{cache:'no-store'}).catch(()=>caches.match(e.request)));});
 
+// V185 — Target Eurospin sempre visibile nei report cliente PDF extra.
 // V183 — PDF completo Intesa: unione di report singoli completi, uno per ogni intervento; filtro cliente applicato anche ai report attività.
 self.addEventListener('push',event=>{
   let data={};

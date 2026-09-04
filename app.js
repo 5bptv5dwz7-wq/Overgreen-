@@ -1,4 +1,4 @@
-const APP_VERSION='V185';
+const APP_VERSION='V186';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -2117,14 +2117,17 @@ async function createSingleClientReportFile(kind,row){
   const pdf=await PDFDocument.create(),regular=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold),green=rgb(.02,.35,.18),dark=rgb(.08,.18,.13),muted=rgb(.38,.45,.41),border=rgb(.82,.87,.84),pageW=595.28,pageH=841.89,margin=48;
   let page=pdf.addPage([pageW,pageH]),y=pageH-56;
   const newPage=()=>{page=pdf.addPage([pageW,pageH]);y=pageH-55;return page};
-  page.drawText('OVERGREEN',{x:margin,y,size:24,font:bold,color:green});page.drawText(pdfSafeText(fmt(date)),{x:pageW-margin-bold.widthOfTextAtSize(pdfSafeText(fmt(date)),14),y:y+4,size:14,font:bold,color:dark});
+  page.drawText('OVERGREEN',{x:margin,y,size:24,font:bold,color:green});
+  const dateText=pdfSafeText(fmt(date));
+  if(!isOrd&&row.numero_target){
+    const targetText=`TARGET N° ${pdfSafeText(row.numero_target)}`,targetSize=16,targetWidth=bold.widthOfTextAtSize(targetText,targetSize);
+    page.drawText(targetText,{x:pageW-margin-targetWidth,y:y+4,size:targetSize,font:bold,color:green});
+    page.drawText(dateText,{x:pageW-margin-bold.widthOfTextAtSize(dateText,10),y:y-13,size:10,font:regular,color:muted});
+  }else{
+    page.drawText(dateText,{x:pageW-margin-bold.widthOfTextAtSize(dateText,14),y:y+4,size:14,font:bold,color:dark});
+  }
   page.drawText('Report intervento per il cliente',{x:margin,y:y-20,size:10,font:regular,color:muted});page.drawLine({start:{x:margin,y:y-35},end:{x:pageW-margin,y:y-35},thickness:3,color:green});y-=65;
   page.drawText(pdfSafeText(clientLabel(st||row)).toUpperCase(),{x:margin,y,size:9,font:bold,color:muted});y-=24;
-  if(!isOrd&&row.numero_target){
-    const targetText=`TARGET N° ${pdfSafeText(row.numero_target)}`;
-    page.drawText(targetText,{x:margin,y,size:14,font:bold,color:green});
-    y-=22;
-  }
   page.drawText(pdfSafeText(title),{x:margin,y,size:18,font:bold,color:green});y-=18;if(place){y=drawWrappedPdfText(page,regular,place,margin,y,pageW-margin*2,10,muted,13);y-=8}
   const boxes=[['DATA INTERVENTO',fmt(date)],['ORARIO DI CHIUSURA',fmtClosedAt(row.closed_at)],['OPERATORI',names.join(', ')||'Non indicati'],['TIPOLOGIA',isOrd?'Intervento ordinario':'Lavoro extra']];
   const boxW=(pageW-margin*2-10)/2,boxH=52;for(let i=0;i<4;i++){const col=i%2,rowN=Math.floor(i/2),x=margin+col*(boxW+10),by=y-rowN*(boxH+10)-boxH;page.drawRectangle({x,y:by,width:boxW,height:boxH,borderColor:border,borderWidth:1});page.drawText(boxes[i][0],{x:x+10,y:by+34,size:7,font:regular,color:muted});drawWrappedPdfText(page,bold,boxes[i][1],x+10,by+18,boxW-20,10,dark,11)}y-=boxH*2+28;

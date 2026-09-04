@@ -1,4 +1,4 @@
-const APP_VERSION='V186';
+const APP_VERSION='V187';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -2108,6 +2108,14 @@ function ordinaryIncludedExtrasForReport(intervention){
 function reportLinkedExtraKind(e){
   return clientType(e)==='intesa'?'Ticket Intesa':clientType(e)==='eurospin'?'Target Eurospin':'Extra associato';
 }
+function addPdfGeneratedAtFooter(doc,font,color){
+  const generatedAt=new Intl.DateTimeFormat('it-IT',{dateStyle:'short',timeStyle:'medium'}).format(new Date());
+  const text=pdfSafeText(`Generato il ${generatedAt}`);
+  for(const p of doc.getPages()){
+    const size=7.5,w=font.widthOfTextAtSize(text,size);
+    p.drawText(text,{x:Math.max(24,p.getWidth()-42-w),y:20,size,font,color});
+  }
+}
 async function createSingleClientReportFile(kind,row){
   if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
   const {PDFDocument,StandardFonts,rgb}=PDFLib,isOrd=kind==='ordinary',st=stores.find(s=>s.id===row.store_id),names=reportWorkerNames(kind,row.id),pics=attachments.filter(a=>a.tipo==='foto_generica'&&(isOrd?a.intervention_id===row.id:a.extra_id===row.id)),linkedOrdinaryExtras=isOrd?ordinaryIncludedExtrasForReport(row):[];
@@ -2218,6 +2226,7 @@ async function createSingleClientReportFile(kind,row){
     page.drawText('Nessuna documentazione fotografica allegata',{x:margin,y,size:10,font:regular,color:muted});
   }
   pdf.setTitle(`Report intervento ${pdfSafeText(title)}`);pdf.setAuthor('Overgreen');pdf.setCreator('Overgreen Cloud');pdf.setProducer('Overgreen Cloud');
+  addPdfGeneratedAtFooter(pdf,regular,muted);
   const bytes=await pdf.save({useObjectStreams:true,addDefaultPage:false});
   const safeFilePart=value=>pdfSafeText(value).replace(/[\/:*?"<>|]/g,' ').replace(/\s+/g,' ').trim()||'Intervento';
   const dateForFile=String(date||today()).split('-').reverse().join('-');
@@ -2381,6 +2390,7 @@ async function createDailyReportFile(mode='compact'){
   if(data.ordinary.length){addSection('Interventi ordinari');for(const row of data.ordinary)await drawJob('ordinary',row);}
   if(data.extra.length){addSection('Lavori extra');for(const row of data.extra)await drawJob('extra',row);}
   pdf.setTitle(`Report attivita Overgreen ${pdfSafeText(data.period?.short||data.date)}`);pdf.setAuthor('Overgreen');pdf.setCreator('Overgreen Cloud');pdf.setProducer('Overgreen Cloud');
+  addPdfGeneratedAtFooter(pdf,regular,muted);
   const bytes=await pdf.save({useObjectStreams:true,addDefaultPage:false});
   const periodSafe=pdfSafeText(data.period?.short||data.date).replace(/[\/:*?"<>|]/g,' ').replace(/\s+/g,' ').trim();
   const fileName=`Report attivita ${mode==='full'?'completo':'sintetico'} - ${periodSafe}.pdf`,file=new File([bytes],fileName,{type:'application/pdf'});
@@ -3501,6 +3511,7 @@ async function generateComplexExtraReportPdf(e,button){
  const fields=[['LAVORO',e.titolo],['CLIENTE',clientLabel(e)],['LUOGO',st?.nome||e.nome_esterno||'Non indicato'],['INDIRIZZO',st?.indirizzo||e.indirizzo_esterno||'Non indicato'],['RICHIESTA',fmt(extraRequestDate(e))],['ESECUZIONE',fmt(e.giorno_intervento)],['TARGET / TICKET',e.numero_target||'Non indicato']];for(const [label,value] of fields){page.drawText(label,{x:margin,y,size:8,font:bold,color:muted});const lines=wrapPdfText(pdfSafeText(value),regular,10.5,w-110);lines.slice(0,2).forEach((line,i)=>page.drawText(line,{x:margin+110,y:y-i*14,size:10.5,font:regular}));y-=27}
  y-=4;page.drawLine({start:{x:margin,y},end:{x:pageW-margin,y},thickness:1,color:rgb(.82,.88,.84)});y-=22;page.drawText(`LAVORAZIONI (${items.length})`,{x:margin,y,size:10,font:bold,color:green});y-=18;for(let i=0;i<items.length;i++){for(const line of wrapPdfText(pdfSafeText(`${i+1}. ${items[i].titolo} — ${workStateLabel(items[i].stato)}`),regular,10,w)){page.drawText(line,{x:margin,y,size:10,font:regular});y-=14}}page.drawText('Generato da Overgreen Cloud',{x:margin,y:22,size:8,font:regular,color:muted});
  for(let i=0;i<items.length;i++){const item=items[i],before=workPhotosForItem(item.id,'prima'),after=workPhotosForItem(item.id,'dopo'),pairs=Math.max(before.length,after.length,1);for(let pair=0;pair<pairs;pair++){page=doc.addPage([pageW,pageH]);y=790;page.drawText(`${i+1}. ${pdfSafeText(item.titolo)}`,{x:margin,y,size:16,font:bold,color:green});y-=25;page.drawText(`STATO: ${pdfSafeText(workStateLabel(item.stato)).toUpperCase()}`,{x:margin,y,size:9,font:bold,color:muted});y-=20;const noteHistory=workNotesForItem(item.id),noteText=noteHistory.length?noteHistory.map(n=>`${workNoteDate(n)} · ${workNoteAuthor(n)}: ${n.nota}`).join('\n'):item.nota||'';if(noteText){page.drawText('NOTE / AVANZAMENTO',{x:margin,y,size:8,font:bold,color:muted});y-=14;for(const line of wrapPdfText(pdfSafeText(noteText),regular,9.5,w).slice(0,9)){page.drawText(line,{x:margin,y,size:9.5,font:regular});y-=13}y-=8}if(!before.length&&!after.length){page.drawText('Nessuna fotografia allegata a questa lavorazione.',{x:margin,y,size:10,font:regular,color:muted});continue}const gap=16,cellW=(w-gap)/2,imgH=Math.min(570,y-50),slots=[{p:before[pair],label:'PRIMA',x:margin},{p:after[pair],label:'DOPO',x:margin+cellW+gap}];for(const slot of slots){page.drawText(slot.label,{x:slot.x,y,size:10,font:bold,color:slot.label==='PRIMA'?muted:green});if(!slot.p){page.drawText('Foto non presente',{x:slot.x,y:y-28,size:9,font:regular,color:muted});continue}try{const bytes=await fetchWorkPhotoBytes(slot.p),img=await embedUprightImage(doc,bytes,String(slot.p.mime_type||'').toLowerCase()),scale=Math.min(cellW/img.width,imgH/img.height);page.drawImage(img,{x:slot.x+(cellW-img.width*scale)/2,y:y-25-img.height*scale,width:img.width*scale,height:img.height*scale})}catch{page.drawText('Foto non disponibile',{x:slot.x,y:y-28,size:9,font:regular,color:muted})}}}}
+ addPdfGeneratedAtFooter(doc,regular,muted);
  const bytes=await doc.save(),blob=new Blob([bytes],{type:'application/pdf'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`report-lavorazioni-${pdfSafeName(e.titolo)}-${e.giorno_intervento||today()}.pdf`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('Report lavorazioni generato')
  }catch(err){console.error(err);alert('Impossibile generare il report: '+(err.message||String(err)))}finally{if(button){button.disabled=false;button.textContent=old}}
 }
@@ -3575,6 +3586,7 @@ async function buildExtraClosurePdfBlob(e,packageQuality=.68,packageMaxSide=1500
     }
     page.drawText('Generato da Overgreen Cloud',{x:margin,y:22,size:8,font:regular,color:muted});
     await appendAttachmentForPackage(doc,requestFile,packageQuality,packageMaxSide);await appendAttachmentForPackage(doc,reportOvergreen,packageQuality,packageMaxSide);await appendAttachmentForPackage(doc,reportEurospin,packageQuality,packageMaxSide);
+    addPdfGeneratedAtFooter(doc,regular,muted);
     const bytes=await doc.save();
     return new Blob([bytes],{type:'application/pdf'});
   }
@@ -3628,6 +3640,7 @@ async function generateExtraClosurePdf(e,button){
     }
     page.drawText('Generato da Overgreen Cloud',{x:margin,y:22,size:8,font:regular,color:muted});
     await appendAttachmentAsFullPage(doc,requestFile);await appendAttachmentAsFullPage(doc,reportOvergreen);await appendAttachmentAsFullPage(doc,reportEurospin);
+    addPdfGeneratedAtFooter(doc,regular,muted);
     const bytes=await doc.save(),blob=new Blob([bytes],{type:'application/pdf'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`chiusura-extra-${pdfSafeName(e.titolo)}-${e.giorno_intervento||today()}.pdf`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('Chiusura PDF generata');
   }catch(err){console.error(err);alert('Impossibile generare la chiusura: '+(err.message||String(err)))}finally{if(button){button.disabled=false;button.textContent=old}}
 }

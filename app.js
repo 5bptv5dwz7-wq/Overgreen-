@@ -1,4 +1,4 @@
-const APP_VERSION='V189';
+const APP_VERSION='V190';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -3405,6 +3405,7 @@ function openSchedulePdfDialog(){
   if(!admin())return;
   const def=schedulePdfDateRangeDefault();
   $('schedulePdfFrom').value=def.from;$('schedulePdfTo').value=def.from;
+  preparedScheduleProgramPdf=null;$('schedulePdfReady')?.classList.add('hidden');$('schedulePdfShareBtn')?.classList.add('hidden');
   openDialog('schedulePdfDialog');
 }
 function schedulePdfGroups(from,to){
@@ -3483,10 +3484,26 @@ async function shareScheduleProgramPdf(data){
   if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){await navigator.share({title:'Programma lavori Overgreen',text:'Programma complessivo dei lavori',files:[file]});toast(`PDF programma pronto (${sizeKb} KB)`)}
   else{const url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download=fileName;a.rel='noopener';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast(`PDF programma scaricato (${sizeKb} KB)`)}
 }
+let preparedScheduleProgramPdf=null;
 async function exportScheduleProgramPdf(){
   const from=$('schedulePdfFrom').value,to=$('schedulePdfTo').value;if(!from||!to)return alert('Seleziona il periodo.');if(to<from)return alert('La data finale non può essere precedente a quella iniziale.');
   const btn=$('schedulePdfCreateBtn'),old=btn.textContent;btn.disabled=true;btn.textContent='Creo il PDF…';
-  try{const data=await createScheduleProgramPdf(from,to);$('schedulePdfDialog').close();await shareScheduleProgramPdf(data)}catch(err){if(err?.name!=='AbortError')alert('Impossibile creare il PDF programma: '+(err.message||String(err)))}finally{btn.disabled=false;btn.textContent=old}
+  const shareBtn=$('schedulePdfShareBtn'),status=$('schedulePdfReady');
+  if(shareBtn)shareBtn.classList.add('hidden');if(status)status.classList.add('hidden');preparedScheduleProgramPdf=null;
+  try{
+    preparedScheduleProgramPdf=await createScheduleProgramPdf(from,to);
+    if(status){status.textContent=`PDF pronto · ${preparedScheduleProgramPdf.sizeKb} KB`;status.classList.remove('hidden')}
+    if(shareBtn)shareBtn.classList.remove('hidden');
+    btn.textContent='Rigenera PDF';toast('PDF programma pronto');
+  }catch(err){alert('Impossibile creare il PDF programma: '+(err.message||String(err)));btn.textContent=old}
+  finally{btn.disabled=false}
+}
+async function sharePreparedScheduleProgramPdf(){
+  if(!preparedScheduleProgramPdf)return alert('Prima crea il PDF.');
+  const btn=$('schedulePdfShareBtn'),old=btn.textContent;btn.disabled=true;btn.textContent='Apro condivisione…';
+  try{await shareScheduleProgramPdf(preparedScheduleProgramPdf)}
+  catch(err){if(err?.name!=='AbortError')alert('Impossibile condividere il PDF: '+(err.message||String(err)))}
+  finally{btn.disabled=false;btn.textContent=old}
 }
 
 function extrasForSchedule(scheduleId){
@@ -5054,7 +5071,7 @@ $('extraEditForm').onsubmit=async e=>{
 $('duplicateScheduleForm').onsubmit=async e=>{e.preventDefault();const source=$('duplicateScheduleId').value;if(source)openReuseScheduleDialog({type:'schedule',id:source});$('duplicateScheduleDialog').close()};
 $('reuseScheduleForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const btn=e.submitter||$('reuseScheduleForm').querySelector('[type=submit]'),old=btn.textContent;btn.disabled=true;btn.textContent='Creazione…';try{await createScheduleFromReuse()}finally{btn.disabled=false;btn.textContent=old}};
 $('reuseScheduleSearch').oninput=renderReuseScheduleStores;
-$('exportSchedulePdfBtn')?.addEventListener('click',openSchedulePdfDialog);$('schedulePdfForm')&&( $('schedulePdfForm').onsubmit=async e=>{e.preventDefault();await exportScheduleProgramPdf()} );
+$('exportSchedulePdfBtn')?.addEventListener('click',openSchedulePdfDialog);$('schedulePdfForm')&&( $('schedulePdfForm').onsubmit=async e=>{e.preventDefault();await exportScheduleProgramPdf()} );$('schedulePdfShareBtn')?.addEventListener('click',sharePreparedScheduleProgramPdf);
 $('openScheduleHistoryBtn').onclick=openScheduleHistory;
 $('openActivityHistoryBtn').onclick=openActivityHistory;
 $('activityCompleteForm').onsubmit=e=>{e.preventDefault();saveActivityCompletion()};

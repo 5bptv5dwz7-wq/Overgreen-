@@ -823,7 +823,7 @@ document.addEventListener('DOMContentLoaded', function(){
 }
 </style>
 
-<dialog id="schedulePdfDialog"><form id="schedulePdfForm"><div class="dialog-head"><div><h2>PDF programma</h2><p class="muted">Crea un programma complessivo, ordinato per giorno e squadra, pronto da condividere.</p></div><button type="button" data-close>×</button></div><div class="planner-grid"><label>Dal<input id="schedulePdfFrom" type="date" required></label><label>Al<input id="schedulePdfTo" type="date" required></label></div><p class="muted">Per il solo giorno seguente lascia la stessa data in entrambi i campi. Per più giorni scegli un intervallo.</p><button id="schedulePdfCreateBtn" type="submit">Crea e condividi PDF</button></form></dialog>
+<dialog id="schedulePdfDialog"><form id="schedulePdfForm"><div class="dialog-head"><div><h2>PDF programma</h2><p class="muted">Crea un programma complessivo, ordinato per giorno e squadra, pronto da condividere.</p></div><button type="button" data-close>×</button></div><div class="planner-grid"><label>Dal<input id="schedulePdfFrom" type="date" required></label><label>Al<input id="schedulePdfTo" type="date" required></label></div><p class="muted">Per il solo giorno seguente lascia la stessa data in entrambi i campi. Per più giorni scegli un intervallo.</p><button id="schedulePdfCreateBtn" type="submit">Crea PDF</button><p id="schedulePdfReady" class="muted hidden" style="margin-top:12px"><strong>PDF pronto</strong></p><button id="schedulePdfShareBtn" type="button" class="primary hidden" style="margin-top:8px">Condividi PDF</button></form></dialog>
 </body></html>
 
 <style>

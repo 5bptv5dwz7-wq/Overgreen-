@@ -1,4 +1,4 @@
-const APP_VERSION='V192';
+const APP_VERSION='V193';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -3576,13 +3576,50 @@ async function exportScheduleProgramPdf(){
   finally{btn.disabled=false}
 }
 async function sharePreparedScheduleProgramPdf(){
-  if(!preparedScheduleProgramPdf)return alert('Prima crea il PDF.');
-  const btn=$('schedulePdfShareBtn'),old=btn.textContent;btn.disabled=true;btn.textContent='Apro condivisione…';
-  try{await shareScheduleProgramPdf(preparedScheduleProgramPdf)}
-  catch(err){if(err?.name!=='AbortError')alert('Impossibile condividere il PDF: '+(err.message||String(err)))}
-  finally{btn.disabled=false;btn.textContent=old}
-}
+  if(!preparedScheduleProgramPdf?.file)return alert('Prima crea il PDF.');
+  const data=preparedScheduleProgramPdf;
+  const file=data.file;
+  const btn=$('schedulePdfShareBtn'),old=btn.textContent;
+  btn.disabled=true;btn.textContent='Apro condivisione…';
 
+  try{
+    // Su iOS la chiamata a navigator.share deve partire direttamente dal tap.
+    if(navigator.share){
+      try{
+        if(!navigator.canShare || navigator.canShare({files:[file]})){
+          await navigator.share({
+            title:data.title||'Programma lavori Overgreen',
+            text:'Programma complessivo dei lavori Overgreen',
+            files:[file]
+          });
+          toast('Condivisione aperta');
+          return;
+        }
+      }catch(err){
+        if(err?.name==='AbortError')return;
+        console.warn('navigator.share fallito, uso fallback',err);
+      }
+    }
+
+    // Fallback robusto per PWA/iPhone/browser che non accettano File Share.
+    const url=URL.createObjectURL(file);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=data.fileName||file.name||'Programma Overgreen.pdf';
+    a.target='_blank';
+    a.rel='noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+    toast('PDF aperto/scaricato');
+  }catch(err){
+    alert('Impossibile condividere il PDF: '+(err.message||String(err)));
+  }finally{
+    btn.disabled=false;
+    btn.textContent=old;
+  }
+}
 function extrasForSchedule(scheduleId){
   return extras.filter(e=>e.schedule_id===scheduleId&&!['completato'].includes(e.stato));
 }
@@ -5148,7 +5185,7 @@ $('extraEditForm').onsubmit=async e=>{
 $('duplicateScheduleForm').onsubmit=async e=>{e.preventDefault();const source=$('duplicateScheduleId').value;if(source)openReuseScheduleDialog({type:'schedule',id:source});$('duplicateScheduleDialog').close()};
 $('reuseScheduleForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const btn=e.submitter||$('reuseScheduleForm').querySelector('[type=submit]'),old=btn.textContent;btn.disabled=true;btn.textContent='Creazione…';try{await createScheduleFromReuse()}finally{btn.disabled=false;btn.textContent=old}};
 $('reuseScheduleSearch').oninput=renderReuseScheduleStores;
-$('exportSchedulePdfBtn')?.addEventListener('click',openSchedulePdfDialog);$('schedulePdfShareBtn')?.addEventListener('click',sharePreparedScheduleProgramPdf);
+$('exportSchedulePdfBtn')?.addEventListener('click',openSchedulePdfDialog);
 $('openScheduleHistoryBtn').onclick=openScheduleHistory;
 $('openActivityHistoryBtn').onclick=openActivityHistory;
 $('activityCompleteForm').onsubmit=e=>{e.preventDefault();saveActivityCompletion()};
@@ -5669,7 +5706,7 @@ sb.auth.onAuthStateChange(async(event,s)=>{
   }
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=192').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=193').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

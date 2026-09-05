@@ -1,4 +1,4 @@
-const APP_VERSION='V190';
+const APP_VERSION='V191';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -3480,9 +3480,11 @@ async function createScheduleProgramPdf(from,to){
   return {file,fileName,sizeKb:Math.max(1,Math.round(file.size/1024))};
 }
 async function shareScheduleProgramPdf(data){
-  const {file,fileName,sizeKb}=data;
-  if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){await navigator.share({title:'Programma lavori Overgreen',text:'Programma complessivo dei lavori',files:[file]});toast(`PDF programma pronto (${sizeKb} KB)`)}
-  else{const url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download=fileName;a.rel='noopener';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast(`PDF programma scaricato (${sizeKb} KB)`)}
+  if(!data)return;
+  await shareClientReportData({
+    ...data,
+    title:'Programma lavori Overgreen'
+  });
 }
 let preparedScheduleProgramPdf=null;
 async function exportScheduleProgramPdf(){
@@ -5592,7 +5594,7 @@ sb.auth.onAuthStateChange(async(event,s)=>{
   }
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=191').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

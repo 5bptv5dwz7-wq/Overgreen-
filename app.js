@@ -1,4 +1,4 @@
-const APP_VERSION='V191';
+const APP_VERSION='V192';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -3433,51 +3433,126 @@ function schedulePdfGroups(from,to){
   return groups.sort((a,b)=>String(a.schedule.giorno).localeCompare(String(b.schedule.giorno))||String(a.members.join(' ')).localeCompare(String(b.members.join(' ')),'it'));
 }
 async function createScheduleProgramPdf(from,to){
-  if(!window.PDFLib)throw new Error('Motore PDF non disponibile.');
-  const groups=schedulePdfGroups(from,to);if(!groups.length)throw new Error('Nessun lavoro programmato nel periodo selezionato.');
-  const {PDFDocument,StandardFonts,rgb}=PDFLib,pdf=await PDFDocument.create(),regular=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold);
-  const green=rgb(.02,.35,.18),dark=rgb(.08,.18,.13),muted=rgb(.38,.45,.41),border=rgb(.82,.87,.84),soft=rgb(.96,.98,.97);
-  const W=595.28,H=841.89,M=42,CW=W-M*2;let page,y;
-  const newPage=()=>{page=pdf.addPage([W,H]);y=H-M;page.drawText('OVERGREEN',{x:M,y,size:10,font:bold,color:green});page.drawText('Programma lavori',{x:W-M-95,y,size:9,font:regular,color:muted});y-=24};
-  const ensure=h=>{if(y-h<M+28)newPage()};
-  const text=(value,font,size,x,maxWidth,color=dark,lineH=size*1.25)=>{for(const line of wrapPdfText(value,font,size,maxWidth)){ensure(lineH+2);page.drawText(line,{x,y,size,font,color});y-=lineH}};
-  newPage();
-  page.drawText('PROGRAMMA COMPLESSIVO',{x:M,y,size:20,font:bold,color:green});y-=25;
-  const period=from===to?fmt(from):`${fmt(from)} - ${fmt(to)}`;page.drawText(pdfSafeText(period),{x:M,y,size:12,font:bold,color:dark});y-=12;
-  page.drawText(`${groups.reduce((n,g)=>n+g.jobs.length,0)} lavori programmati`,{x:M,y,size:9,font:regular,color:muted});y-=26;
-  let lastDay='';
-  for(const g of groups){
-    const day=g.schedule.giorno;
-    if(day!==lastDay){ensure(50);if(lastDay)y-=7;page.drawRectangle({x:M,y:y-30,width:CW,height:34,color:green});page.drawText(pdfSafeText(fmt(day).toUpperCase()),{x:M+12,y:y-19,size:13,font:bold,color:rgb(1,1,1)});y-=44;lastDay=day}
-    ensure(55);const team=g.members.join(' + ')||'Squadra non indicata';page.drawText(pdfSafeText(team),{x:M,y,size:12,font:bold,color:dark});y-=16;
-    if(g.schedule.nota_generale){text('Nota giornata: '+g.schedule.nota_generale,regular,8.5,M,CW,muted,11);y-=4}
-    for(let idx=0;idx<g.jobs.length;idx++){
-      const job=g.jobs[idx];let title='',sub='',detail='';
-      if(job.kind==='ordinary'){
-        const st=stores.find(x=>x.id===job.item.store_id),linked=linkedExtrasForScheduleItem(job.item.id);
-        title=`${idx+1}. ${st?.nome||'Sede'}`;sub=[clientLabel(st),st?.citta,st?.indirizzo].filter(Boolean).join(' - ');
-        const notes=[];if(String(st?.next_visit_note||'').trim())notes.push('DA FARE: '+st.next_visit_note.trim());if(linked.length)notes.push('Extra collegati: '+linked.map(e=>`${e.titolo}${e.numero_target?' #'+e.numero_target:''}`).join('; '));detail=notes.join(' | ');
-      }else if(job.kind==='extra'){
-        const e=job.extra,st=stores.find(x=>x.id===e.store_id);title=`${idx+1}. EXTRA - ${e.titolo||'Lavoro extra'}`;sub=[clientLabel(e),st?.nome||e.nome_esterno,e.numero_target?`Target/Ticket ${e.numero_target}`:null].filter(Boolean).join(' - ');detail=[st?.indirizzo||e.indirizzo_esterno,e.descrizione].filter(Boolean).join(' | ');
-      }else{
-        const a=job.activity,st=stores.find(x=>x.id===a.store_id),meta=activityTypeMeta(a.tipo);title=`${idx+1}. ${meta.label.toUpperCase()} - ${a.titolo||meta.label}`;sub=[a.ora?String(a.ora).slice(0,5):null,st?.nome,a.indirizzo].filter(Boolean).join(' - ');detail=a.note||'';
-      }
-      const titleLines=wrapPdfText(title,bold,10.5,CW-30),subLines=wrapPdfText(sub,regular,8.5,CW-30),detailLines=detail?wrapPdfText(detail,regular,8,CW-30):[];
-      const boxH=16+titleLines.length*13+subLines.length*11+detailLines.length*10+8;ensure(boxH+6);
-      page.drawRectangle({x:M,y:y-boxH,width:CW,height:boxH,color:soft,borderColor:border,borderWidth:.7});let ty=y-16;
-      for(const ln of titleLines){page.drawText(ln,{x:M+12,y:ty,size:10.5,font:bold,color:dark});ty-=13}
-      for(const ln of subLines){page.drawText(ln,{x:M+12,y:ty,size:8.5,font:regular,color:muted});ty-=11}
-      for(const ln of detailLines){page.drawText(ln,{x:M+12,y:ty,size:8,font:regular,color:dark});ty-=10}
-      y-=boxH+7;
+  if(!window.PDFLib?.PDFDocument)throw new Error('Motore PDF non caricato. Chiudi e riapri l’app e riprova.');
+  const groups=schedulePdfGroups(from,to);
+  if(!groups.length)throw new Error('Non risultano lavori programmati nel periodo selezionato.');
+
+  const {PDFDocument,StandardFonts,rgb}=window.PDFLib;
+  const pdf=await PDFDocument.create();
+  const regular=await pdf.embedFont(StandardFonts.Helvetica);
+  const bold=await pdf.embedFont(StandardFonts.HelveticaBold);
+  const green=rgb(.02,.35,.18),dark=rgb(.08,.18,.13),muted=rgb(.38,.45,.41),line=rgb(.82,.87,.84);
+
+  const W=595.28,H=841.89,M=42,CW=W-M*2;
+  let page=null,y=0;
+
+  const addPage=()=>{
+    page=pdf.addPage([W,H]);
+    y=H-M;
+    page.drawText('OVERGREEN',{x:M,y,size:11,font:bold,color:green});
+    page.drawText('PROGRAMMA LAVORI',{x:W-M-115,y,size:9,font:bold,color:muted});
+    y-=25;
+  };
+  const ensure=(needed)=>{
+    if(!page)addPage();
+    if(y-needed<M+25)addPage();
+  };
+  const linesFor=(value,font,size,maxWidth)=>{
+    const safe=pdfSafeText(value);
+    if(!safe)return [];
+    return wrapPdfText(safe,font,size,maxWidth);
+  };
+  const drawLines=(value,font,size,x,maxWidth,color=dark,lineHeight=size*1.25)=>{
+    const lines=linesFor(value,font,size,maxWidth);
+    for(const ln of lines){
+      ensure(lineHeight+2);
+      page.drawText(pdfSafeText(ln),{x,y,size,font,color});
+      y-=lineHeight;
     }
-    y-=8;
+  };
+
+  addPage();
+  page.drawText('Programma complessivo',{x:M,y,size:20,font:bold,color:green});y-=26;
+  const period=from===to?fmt(from):`${fmt(from)} - ${fmt(to)}`;
+  drawLines(period,bold,12,M,CW,dark,15);
+  const totalJobs=groups.reduce((n,g)=>n+g.jobs.length,0);
+  drawLines(`${totalJobs} lavori programmati`,regular,9,M,CW,muted,12);
+  y-=10;
+
+  let previousDay='';
+  for(const g of groups){
+    const day=String(g.schedule?.giorno||'');
+    if(day!==previousDay){
+      ensure(42);
+      if(previousDay)y-=6;
+      page.drawText(pdfSafeText(fmt(day).toUpperCase()),{x:M,y,size:14,font:bold,color:green});
+      y-=9;
+      page.drawLine({start:{x:M,y},end:{x:W-M,y},thickness:1,color:line});
+      y-=18;
+      previousDay=day;
+    }
+
+    const team=pdfSafeText((g.members||[]).join(' + ')||'Squadra non indicata');
+    ensure(30);
+    page.drawText(team,{x:M,y,size:11,font:bold,color:dark});y-=16;
+
+    if(g.schedule?.nota_generale){
+      drawLines(`Nota giornata: ${g.schedule.nota_generale}`,regular,8.5,M,CW,muted,11);
+      y-=3;
+    }
+
+    let visualNumber=0;
+    for(const job of g.jobs){
+      visualNumber++;
+      let title='',sub='',detail='';
+
+      if(job.kind==='ordinary'){
+        const st=stores.find(x=>x.id===job.item?.store_id);
+        title=`${visualNumber}. ${st?.nome||'Sede'}`;
+        sub=[clientLabel(st),st?.citta,st?.indirizzo].filter(Boolean).join(' - ');
+        const notes=[];
+        if(String(st?.next_visit_note||'').trim())notes.push(`Da fare: ${st.next_visit_note.trim()}`);
+        const linked=linkedExtrasForScheduleItem(job.item?.id)||[];
+        if(linked.length)notes.push('Extra collegati: '+linked.map(e=>`${e.titolo||'Extra'}${e.numero_target?' #'+e.numero_target:''}`).join('; '));
+        detail=notes.join(' | ');
+      }else if(job.kind==='extra'){
+        const e=job.extra||{},st=stores.find(x=>x.id===e.store_id);
+        title=`${visualNumber}. EXTRA - ${e.titolo||'Lavoro extra'}`;
+        sub=[clientLabel(e),st?.nome||e.nome_esterno,e.numero_target?`Target/Ticket ${e.numero_target}`:null].filter(Boolean).join(' - ');
+        detail=[st?.indirizzo||e.indirizzo_esterno,e.descrizione].filter(Boolean).join(' | ');
+      }else{
+        const a=job.activity||{},st=stores.find(x=>x.id===a.store_id),meta=activityTypeMeta(a.tipo);
+        title=`${visualNumber}. ${(meta?.label||'Attivita').toUpperCase()} - ${a.titolo||meta?.label||'Attivita'}`;
+        sub=[a.ora?String(a.ora).slice(0,5):null,st?.nome,a.indirizzo].filter(Boolean).join(' - ');
+        detail=a.note||'';
+      }
+
+      const titleLines=linesFor(title,bold,10.5,CW-20);
+      const subLines=linesFor(sub,regular,8.5,CW-20);
+      const detailLines=linesFor(detail,regular,8,CW-20);
+      const needed=titleLines.length*13+subLines.length*11+detailLines.length*10+18;
+      ensure(Math.max(needed,28));
+
+      for(const ln of titleLines){page.drawText(pdfSafeText(ln),{x:M+8,y,size:10.5,font:bold,color:dark});y-=13}
+      for(const ln of subLines){page.drawText(pdfSafeText(ln),{x:M+8,y,size:8.5,font:regular,color:muted});y-=11}
+      for(const ln of detailLines){page.drawText(pdfSafeText(ln),{x:M+8,y,size:8,font:regular,color:dark});y-=10}
+      y-=7;
+    }
+    y-=7;
   }
+
   const generated=new Intl.DateTimeFormat('it-IT',{dateStyle:'short',timeStyle:'short'}).format(new Date());
-  for(const p of pdf.getPages()){p.drawText(pdfSafeText(`Generato da Overgreen ${APP_VERSION} - ${generated}`),{x:M,y:18,size:7,font:regular,color:muted})}
-  pdf.setTitle(`Programma Overgreen ${pdfSafeText(period)}`);pdf.setAuthor('Overgreen');
-  const bytes=await pdf.save({useObjectStreams:true,addDefaultPage:false});
-  const fileName=`Programma Overgreen - ${from===to?from:from+' - '+to}.pdf`,file=new File([bytes],fileName,{type:'application/pdf'});
-  return {file,fileName,sizeKb:Math.max(1,Math.round(file.size/1024))};
+  for(const p of pdf.getPages()){
+    p.drawText(pdfSafeText(`Overgreen ${APP_VERSION} - generato ${generated}`),{x:M,y:17,size:7,font:regular,color:muted});
+  }
+
+  pdf.setTitle(pdfSafeText(`Programma Overgreen ${period}`));
+  pdf.setAuthor('Overgreen');
+  const bytes=await pdf.save();
+  const fileName=`Programma Overgreen - ${from===to?from:from+' - '+to}.pdf`;
+  const file=new File([bytes],fileName,{type:'application/pdf'});
+  if(!file.size)throw new Error('Il PDF generato è vuoto.');
+  return {file,fileName,title:'Programma lavori Overgreen',sizeKb:Math.max(1,Math.round(file.size/1024))};
 }
 async function shareScheduleProgramPdf(data){
   if(!data)return;
@@ -3497,7 +3572,7 @@ async function exportScheduleProgramPdf(){
     if(status){status.textContent=`PDF pronto · ${preparedScheduleProgramPdf.sizeKb} KB`;status.classList.remove('hidden')}
     if(shareBtn)shareBtn.classList.remove('hidden');
     btn.textContent='Rigenera PDF';toast('PDF programma pronto');
-  }catch(err){alert('Impossibile creare il PDF programma: '+(err.message||String(err)));btn.textContent=old}
+  }catch(err){const msg='Impossibile creare il PDF programma: '+(err.message||String(err));if(status){status.textContent=msg;status.classList.remove('hidden')}alert(msg);btn.textContent=old}
   finally{btn.disabled=false}
 }
 async function sharePreparedScheduleProgramPdf(){
@@ -5073,7 +5148,7 @@ $('extraEditForm').onsubmit=async e=>{
 $('duplicateScheduleForm').onsubmit=async e=>{e.preventDefault();const source=$('duplicateScheduleId').value;if(source)openReuseScheduleDialog({type:'schedule',id:source});$('duplicateScheduleDialog').close()};
 $('reuseScheduleForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const btn=e.submitter||$('reuseScheduleForm').querySelector('[type=submit]'),old=btn.textContent;btn.disabled=true;btn.textContent='Creazione…';try{await createScheduleFromReuse()}finally{btn.disabled=false;btn.textContent=old}};
 $('reuseScheduleSearch').oninput=renderReuseScheduleStores;
-$('exportSchedulePdfBtn')?.addEventListener('click',openSchedulePdfDialog);$('schedulePdfForm')&&( $('schedulePdfForm').onsubmit=async e=>{e.preventDefault();await exportScheduleProgramPdf()} );$('schedulePdfShareBtn')?.addEventListener('click',sharePreparedScheduleProgramPdf);
+$('exportSchedulePdfBtn')?.addEventListener('click',openSchedulePdfDialog);$('schedulePdfShareBtn')?.addEventListener('click',sharePreparedScheduleProgramPdf);
 $('openScheduleHistoryBtn').onclick=openScheduleHistory;
 $('openActivityHistoryBtn').onclick=openActivityHistory;
 $('activityCompleteForm').onsubmit=e=>{e.preventDefault();saveActivityCompletion()};
@@ -5594,7 +5669,7 @@ sb.auth.onAuthStateChange(async(event,s)=>{
   }
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=191').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=192').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

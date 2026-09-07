@@ -1,4 +1,4 @@
-const APP_VERSION='V195';
+const APP_VERSION='V196';
 const cfg = window.OVERGREEN_CONFIG;
 if (!cfg?.supabaseUrl || !cfg?.supabaseKey) throw new Error('Configurazione Supabase mancante.');
 if (!window.supabase?.createClient) throw new Error('Libreria Supabase non caricata.');
@@ -138,12 +138,13 @@ async function uploadInterventionPhotoJob(job){
   job.lastStage='attachment_insert';await putUploadJob(job);
   let added;
   try{
-    added=await addAttachment({tipo:'foto_generica',intervention_id:interventionId,storage_path:path,nome_file:file.name||job.fileName,mime_type:file.type||job.mimeType,dimensione_bytes:file.size,caricato_da:job.actorProfileId||profile.id});
+    const found=await sb.from('attachments').select('*').eq('intervention_id',interventionId).eq('storage_path',path).limit(1);
+    if(found.error)throw found.error;
+    added=found.data?.[0]||await addAttachment({tipo:'foto_generica',intervention_id:interventionId,storage_path:path,nome_file:file.name||job.fileName,mime_type:file.type||job.mimeType,dimensione_bytes:file.size,caricato_da:job.actorProfileId||profile.id});
   }catch(err){
-    try{await sb.storage.from('documenti').remove([path])}catch{}
     throw new Error(`ATTACHMENT_INSERT: ${err?.message||err}`);
   }
-  if(!added){try{await sb.storage.from('documenti').remove([path])}catch{};throw new Error('ATTACHMENT_INSERT: nessuna riga restituita da Supabase')}
+  if(!added)throw new Error('ATTACHMENT_INSERT: nessuna riga restituita da Supabase');
   console.info('V112-37 FOTO',job.id,'attachment_insert_ok',added.id);
   if(!attachments.some(a=>a.id===added.id||a.storage_path===added.storage_path))attachments.push(added);
   await deleteUploadJob(job.id);
@@ -1156,26 +1157,9 @@ function effectiveScheduleState(item){
 }
 
 async function reconcileProgrammingConsistency(){
-  if(!admin())return;
-  const validItemIds=new Set(scheduleItems.map(x=>x.id));
-  const fixes=scheduleItems.filter(item=>['completato','in_attesa'].includes(item.stato)&&!interventions.some(i=>interventionHasScheduleItem(i,item.id)));
-  for(const item of fixes){
-    const {error}=await sb.from('schedule_items').update({stato:'da_fare'}).eq('id',item.id);
-    if(error)console.warn('Ripristino programmazione non riuscito:',item.id,error.message);else item.stato='da_fare';
-  }
-  const orphanExtras=extras.filter(e=>e.schedule_item_id&&!validItemIds.has(e.schedule_item_id)&&e.stato!=='completato');
-  for(const e of orphanExtras){
-    const {error}=await sb.from('extras').update({schedule_item_id:null}).eq('id',e.id);
-    if(error)console.warn('Scollegamento extra orfano non riuscito:',e.id,error.message);else e.schedule_item_id=null;
-  }
-  const emptySchedules=schedules.filter(s=>!scheduleItems.some(i=>i.schedule_id===s.id)&&!extras.some(e=>e.schedule_id===s.id&&e.stato!=='completato'));
-  for(const sch of emptySchedules){
-    let r=await sb.from('schedule_members').delete().eq('schedule_id',sch.id);
-    if(r.error){console.warn('Pulizia membri programmazione vuota non riuscita:',r.error.message);continue}
-    r=await sb.from('schedules').delete().eq('id',sch.id);
-    if(r.error)console.warn('Pulizia programmazione vuota non riuscita:',r.error.message);
-    else{schedules=schedules.filter(x=>x.id!==sch.id);scheduleMembers=scheduleMembers.filter(x=>x.schedule_id!==sch.id)}
-  }
+  // V196: una lettura locale incompleta/vecchia non autorizza cancellazioni
+  // o riparazioni nel database. Il rollover server resta separato.
+  return;
 }
 function dashboardOrdinaryCompletionMs(item){
   const related=interventions.filter(i=>interventionHasScheduleItem(i,item?.id)&&!i.multi_day_open);
@@ -2896,13 +2880,41 @@ async function renderPending(){
     c.querySelector('[data-re]')?.addEventListener('click',()=>openAttachment(re));c.querySelector('[data-ro]')?.addEventListener('click',()=>openAttachment(ro));c.querySelector('[data-ok]').onclick=()=>approveExtra(e);$('pendingList').appendChild(c);if(pics.length)hydrateExtraPhotos(c,pics);
   }
 }
-async function approveIntervention(i){try{const sync=await interventionPhotoSyncState(i.id);if(sync.expected>sync.actual){alert(`Impossibile convalidare: sono state ricevute ${sync.actual} foto su ${sync.expected} attese.\n\nAttendi che il telefono del dipendente completi la sincronizzazione e premi Aggiorna.`);return}}catch(err){alert('Impossibile verificare le foto prima della convalida: '+(err?.message||err));return}const now=new Date().toISOString();const {error}=await sb.from('interventions').update({stato:'convalidato',convalidato_da:profile.id,convalidato_il:now}).eq('id',i.id);if(error)return alert(error.message);const {error:e2}=await sb.from('stores').update({ultimo_passaggio:interventionEndDate(i),next_visit_note:i.next_visit_note||null}).eq('id',i.store_id);if(e2)return alert(e2.message);const ids=[...(i.schedule_item_ids||[])];if(i.schedule_item_id&&!ids.includes(i.schedule_item_id))ids.push(i.schedule_item_id);if(ids.length){await sb.from('schedule_items').update({stato:'completato'}).in('id',ids);const linkedTickets=extras.filter(e=>ids.includes(e.schedule_item_id)&&isOrdinaryIncludedExtra(e)&&e.stato!=='completato');if(linkedTickets.length){const r=await sb.from('extras').update({stato:'completato',convalidato_da:profile.id,convalidato_il:now,closed_at:now}).in('id',linkedTickets.map(e=>e.id));if(r.error)return alert('Intervento convalidato, ma ticket/target incluso non aggiornato: '+r.error.message)}}toast('Intervento convalidato');await loadAll()}
-async function rejectIntervention(i){const reason=prompt('Motivo del rifiuto','')||'';const {error}=await sb.from('interventions').update({stato:'rifiutato',motivo_rifiuto:reason,convalidato_da:profile.id,convalidato_il:new Date().toISOString()}).eq('id',i.id);if(error)return alert(error.message);const ids=[...(i.schedule_item_ids||[])];if(i.schedule_item_id&&!ids.includes(i.schedule_item_id))ids.push(i.schedule_item_id);const lastId=ids[ids.length-1];if(lastId)await sb.from('schedule_items').update({stato:'da_fare'}).eq('id',lastId);if(ids.length){const linkedTickets=extras.filter(e=>ids.includes(e.schedule_item_id)&&isOrdinaryIncludedExtra(e));if(linkedTickets.length)await sb.from('extras').update({stato:'programmato',closed_by:null,closed_at:null,convalidato_da:null,convalidato_il:null}).in('id',linkedTickets.map(e=>e.id))}toast('Intervento rifiutato');await loadAll()}
+// V196: i cambi di stato collegati sono una sola transazione server.
+async function refreshAfterSave(){
+  try{await loadAll();return true}catch(err){
+    console.warn('Dati salvati; aggiornamento schermata fallito',err);
+    toast('Salvato. Aggiornamento non riuscito: premi Aggiorna, non rifare la chiusura.');return false;
+  }
+}
+async function refreshStoreLastVisit(storeId){
+  const r=await sb.rpc('overgreen_refresh_last_visit_v196',{p_store_id:storeId});
+  if(r.error)throw new Error('Aggiornamento ultimo passaggio non riuscito. Verifica MIGRAZIONE-V196.sql: '+r.error.message);
+}
+async function transitionIntervention(i,action,reason='',itemId=null){
+  if(!admin())throw new Error('Operazione riservata agli amministratori.');
+  const r=await sb.rpc('overgreen_transition_intervention_v196',{p_id:i.id,p_action:action,p_reason:reason,p_item_id:itemId});
+  if(r.error)throw new Error('Operazione non completata. Verifica MIGRAZIONE-V196.sql: '+r.error.message);
+}
+const interventionTransitions=new Set();
+async function approveIntervention(i){
+  if(!admin()||interventionTransitions.has(i.id))return;
+  interventionTransitions.add(i.id);
+  try{await transitionIntervention(i,'approve');toast('Intervento convalidato');await refreshAfterSave()}
+  catch(err){alert(err.message)}finally{interventionTransitions.delete(i.id)}
+}
+async function rejectIntervention(i){
+  if(!admin()||interventionTransitions.has(i.id))return;
+  const reason=prompt('Motivo del rifiuto','');if(reason===null)return;
+  interventionTransitions.add(i.id);
+  try{await transitionIntervention(i,'reject',reason);toast('Intervento rifiutato');await refreshAfterSave()}
+  catch(err){alert(err.message)}finally{interventionTransitions.delete(i.id)}
+}
 
 async function reopenOrdinaryIntervention(item,store){
   if(!admin()||!item)return;
   const closed=interventions
-    .filter(i=>i.schedule_item_id===item.id&&i.stato==='convalidato')
+    .filter(i=>interventionHasScheduleItem(i,item.id)&&i.stato==='convalidato')
     .sort((a,b)=>String(b.closed_at||b.created_at||'').localeCompare(String(a.closed_at||a.created_at||'')))[0];
   if(!closed)return alert('Non è stata trovata una chiusura convalidata da riaprire. Aggiorna i dati e riprova.');
   const reason=prompt(`Motivo della riapertura di ${store?.nome||'questo intervento'}:`,`Ora o fotografie da correggere`);
@@ -2910,16 +2922,9 @@ async function reopenOrdinaryIntervention(item,store){
   const message=`Riaperto da ${profile?.nome||'Lorenzo'} il ${new Intl.DateTimeFormat('it-IT',{dateStyle:'short',timeStyle:'short'}).format(new Date())}${String(reason||'').trim()?` · ${String(reason).trim()}`:''}`;
   if(!confirm('L’intervento tornerà “Da eseguire” per la squadra assegnata. La chiusura precedente resterà archiviata nello storico. Procedere?'))return;
   try{
-    const r=await sb.from('interventions').update({stato:'rifiutato',motivo_rifiuto:message}).eq('id',closed.id);
-    if(r.error)throw r.error;
-    const sr=await sb.from('schedule_items').update({stato:'da_fare'}).eq('id',item.id);
-    if(sr.error)throw sr.error;
-    const {data:previous,error:previousError}=await sb.from('interventions').select('data_intervento').eq('store_id',closed.store_id).eq('stato','convalidato').neq('id',closed.id).order('data_intervento',{ascending:false}).limit(1);
-    if(previousError)throw previousError;
-    const storeUpdate=await sb.from('stores').update({ultimo_passaggio:previous?.[0]?.data_intervento||null}).eq('id',closed.store_id);
-    if(storeUpdate.error)throw storeUpdate.error;
+    await transitionIntervention(closed,'reopen',message,item.id);
     toast('Intervento riaperto: il dipendente può richiuderlo');
-    await loadAll();
+    await refreshAfterSave();
   }catch(err){alert('Impossibile riaprire l’intervento: '+(err.message||String(err)))}
 }
 
@@ -3036,12 +3041,8 @@ async function deleteScheduleItem(item,store){
       current.posizione=wanted;
     }
   }
-  if(!remaining.length){
-    let r=await sb.from('schedule_members').delete().eq('schedule_id',item.schedule_id);if(r.error)return alert(r.error.message);
-    r=await sb.from('schedules').delete().eq('id',item.schedule_id);if(r.error)return alert(r.error.message);
-    scheduleMembers=scheduleMembers.filter(x=>x.schedule_id!==item.schedule_id);
-    schedules=schedules.filter(x=>x.id!==item.schedule_id);
-  }
+  // Conservare la giornata e la squadra: può contenere attività o extra,
+  // anche aggiunti nel frattempo da un altro dispositivo.
   toast(linked.length?'Punto vendita rimosso · extra scollegati':'Punto vendita rimosso dalla programmazione');
   renderSchedules();renderDashboard();renderStores();
   await loadAll();
@@ -3300,8 +3301,43 @@ function resetActivityCompletePhotos(){activityCompletePhotoFiles=[];const box=$
 function renderActivityCompletePhotoPreview(){const box=$('activityCompletePhotoPreview'),label=$('activityCompletePhotoLabel'),clear=$('clearActivityCompletePhotos');if(!box||!label)return;box.innerHTML='';label.textContent=activityCompletePhotoFiles.length?`${activityCompletePhotoFiles.length} foto selezionat${activityCompletePhotoFiles.length===1?'a':'e'}`:'Nessuna foto';clear?.classList.toggle('hidden',!activityCompletePhotoFiles.length);for(const f of activityCompletePhotoFiles){const card=document.createElement('div');card.className='ordinary-photo-thumb';const img=document.createElement('img');img.src=URL.createObjectURL(f);img.alt='Anteprima';img.onload=()=>URL.revokeObjectURL(img.src);card.appendChild(img);box.appendChild(card)}}
 function addActivityCompletePhotos(files){for(const f of [...files||[]])if(f?.type?.startsWith('image/'))activityCompletePhotoFiles.push(f);renderActivityCompletePhotoPreview()}
 function openActivityCompleteDialog(a){if(!a)return;resetActivityCompletePhotos();$('activityCompleteId').value=a.id;$('activityCompleteTitle').textContent=`${activityTypeMeta(a.tipo).icon} ${a.titolo||activityTypeMeta(a.tipo).label}`;$('activityCompleteNotes').value=a.completion_notes||'';openDialog('activityCompleteDialog')}
-async function uploadScheduleActivityPhoto(activityId,originalFile){const file=await compressImage(originalFile),safe=(file.name||originalFile.name||'foto.jpg').replace(/[^a-zA-Z0-9._-]/g,'-'),path=`attivita/${activityId}/${Date.now()}-${Math.random().toString(36).slice(2)}-${safe}`;await uploadFile(path,file);const {data,error}=await sb.from('schedule_activity_photos').insert({activity_id:activityId,storage_path:path,nome_file:file.name||originalFile.name,mime_type:file.type||'image/jpeg',dimensione_bytes:file.size,caricato_da:profile.id}).select().single();if(error){await sb.storage.from('documenti').remove([path]);throw error}scheduleActivityPhotos.push(data);return data}
-async function saveActivityCompletion(){const id=$('activityCompleteId').value,a=scheduleActivities.find(x=>x.id===id);if(!a)return;const btn=$('activityCompleteForm').querySelector('[type=submit]'),old=btn.textContent;btn.disabled=true;try{const notes=$('activityCompleteNotes').value.trim()||null,now=new Date().toISOString();let r=await sb.from('schedule_activities').update({stato:'completato',completed_at:now,completed_by:profile.id,completion_notes:notes}).eq('id',id);if(r.error)throw r.error;for(let n=0;n<activityCompletePhotoFiles.length;n++){btn.textContent=`Carico foto ${n+1}/${activityCompletePhotoFiles.length}…`;await uploadScheduleActivityPhoto(id,activityCompletePhotoFiles[n])}$('activityCompleteDialog').close();toast(`Attività completata${activityCompletePhotoFiles.length?' · '+activityCompletePhotoFiles.length+' foto':''}`);resetActivityCompletePhotos();await loadAll()}catch(err){alert('Chiusura attività non riuscita: '+(err.message||String(err)))}finally{btn.disabled=false;btn.textContent=old}}
+const activityUploadKeys=new WeakMap();
+async function uploadScheduleActivityPhoto(activityId,originalFile){
+  let keys=activityUploadKeys.get(originalFile);if(!keys){keys=new Map();activityUploadKeys.set(originalFile,keys)}
+  if(!keys.has(activityId))keys.set(activityId,crypto.randomUUID());
+  const id=keys.get(activityId),found=await sb.from('schedule_activity_photos').select('*').eq('id',id).maybeSingle();
+  if(found.error)throw found.error;
+  let data=found.data;
+  if(!data){
+    const file=await compressImage(originalFile),safe=(file.name||originalFile.name||'foto.jpg').replace(/[^a-zA-Z0-9._-]/g,'-');
+    const path='attivita/'+activityId+'/'+id+'-'+safe;
+    const up=await sb.storage.from('documenti').upload(path,file,{upsert:true,contentType:file.type||'image/jpeg'});
+    if(up.error)throw up.error;
+    const r=await sb.from('schedule_activity_photos').insert({id,activity_id:activityId,storage_path:path,nome_file:file.name||originalFile.name,mime_type:file.type||'image/jpeg',dimensione_bytes:file.size,caricato_da:profile.id}).select().single();
+    if(r.error)throw r.error;data=r.data;
+  }
+  if(!data)throw new Error('Foto non confermata; file conservato per recupero.');
+  if(!scheduleActivityPhotos.some(p=>p.id===data.id))scheduleActivityPhotos.push(data);
+  return data;
+}
+async function saveActivityCompletion(){
+  const id=$('activityCompleteId').value,a=scheduleActivities.find(x=>x.id===id);if(!a)return;
+  const btn=$('activityCompleteForm').querySelector('[type=submit]'),old=btn.textContent;if(btn.disabled)return;
+  btn.disabled=true;
+  try{
+    const notes=$('activityCompleteNotes').value.trim()||null,total=activityCompletePhotoFiles.length;
+    while(activityCompletePhotoFiles.length){
+      btn.textContent='Carico foto '+(total-activityCompletePhotoFiles.length+1)+'/'+total+'…';
+      await uploadScheduleActivityPhoto(id,activityCompletePhotoFiles[0]);
+      activityCompletePhotoFiles.shift();renderActivityCompletePhotoPreview();
+    }
+    const r=await sb.from('schedule_activities').update({stato:'completato',completed_at:new Date().toISOString(),completed_by:profile.id,completion_notes:notes}).eq('id',id).select('id').single();
+    if(r.error)throw r.error;
+    $('activityCompleteDialog').close();toast('Attività completata');resetActivityCompletePhotos();await refreshAfterSave();
+  }catch(err){alert('Attività non confermata: '+(err.message||String(err))+'. Le foto già caricate restano conservate.')}
+  finally{btn.disabled=false;btn.textContent=old}
+}
+
 async function reopenScheduleActivity(a){if(!a||!confirm(`Riaprire “${a.titolo||'questa attività'}”? Tornerà tra le attività da fare.`))return;const r=await sb.from('schedule_activities').update({stato:'da_fare',completed_at:null,completed_by:null}).eq('id',a.id);if(r.error)return alert(r.error.message);toast('Attività riaperta');$('activityHistoryDialog')?.close();await loadAll()}
 function openActivityConsuntivoDialog(a){if(!a)return;$('activityConsuntivoId').value=a.id;$('activityConsuntivoTitle').textContent=a.titolo||activityTypeMeta(a.tipo).label;$('activityConsuntivoMinutes').value=a.consuntivo_minutes??'';$('activityConsuntivoKm').value=a.consuntivo_km??'';$('activityConsuntivoSpese').value=a.consuntivo_spese??'';$('activityConsuntivoOutcome').value=a.consuntivo_esito||'';$('activityConsuntivoNotes').value=a.consuntivo_note||'';openDialog('activityConsuntivoDialog')}
 async function saveActivityConsuntivo(){const id=$('activityConsuntivoId').value,a=scheduleActivities.find(x=>x.id===id);if(!a)return;const payload={consuntivo_minutes:$('activityConsuntivoMinutes').value?Number($('activityConsuntivoMinutes').value):null,consuntivo_km:$('activityConsuntivoKm').value?Number($('activityConsuntivoKm').value):null,consuntivo_spese:$('activityConsuntivoSpese').value?Number($('activityConsuntivoSpese').value):null,consuntivo_esito:$('activityConsuntivoOutcome').value.trim()||null,consuntivo_note:$('activityConsuntivoNotes').value.trim()||null,consuntivato_at:new Date().toISOString(),consuntivato_da:profile.id};const r=await sb.from('schedule_activities').update(payload).eq('id',id);if(r.error)return alert(r.error.message);$('activityConsuntivoDialog').close();toast('Consuntivo salvato');await loadAll();renderActivityHistory()}
@@ -3426,7 +3462,8 @@ function schedulePdfGroups(from,to){
   const linked=new Set(groups.map(g=>g.schedule.id));
   const standalone=extras.filter(e=>!e.schedule_id&&!e.schedule_item_id&&inRange(e.giorno_intervento)&&!['completato','in_attesa'].includes(e.stato)).sort((a,b)=>String(a.giorno_intervento).localeCompare(String(b.giorno_intervento))||String(a.titolo||'').localeCompare(String(b.titolo||''),'it'));
   for(const e of standalone){
-    const key=`standalone:${e.giorno_intervento}`;let g=groups.find(x=>x.key===key);
+    const memberIds=[...new Set(extraWorkers.filter(w=>w.extra_id===e.id).map(w=>w.profile_id))].sort();
+    const key=JSON.stringify(['standalone',e.giorno_intervento,memberIds]);let g=groups.find(x=>x.key===key);
     if(!g){g={key,schedule:{id:key,giorno:e.giorno_intervento,nota_generale:null},members:extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean),jobs:[]};groups.push(g)}
     g.jobs.push({kind:'extra',position:999999,extra:e});
   }
@@ -3562,13 +3599,26 @@ async function shareScheduleProgramPdf(data){
   });
 }
 let preparedScheduleProgramPdf=null;
+function invalidateScheduleProgramPdf(){
+  preparedScheduleProgramPdf=null;
+  $('schedulePdfReady')?.classList.add('hidden');
+  $('schedulePdfShareBtn')?.classList.add('hidden');
+}
+document.addEventListener('input',e=>{
+  if(['schedulePdfFrom','schedulePdfTo'].includes(e.target?.id))invalidateScheduleProgramPdf();
+});
 async function exportScheduleProgramPdf(){
   const from=$('schedulePdfFrom').value,to=$('schedulePdfTo').value;if(!from||!to)return alert('Seleziona il periodo.');if(to<from)return alert('La data finale non può essere precedente a quella iniziale.');
   const btn=$('schedulePdfCreateBtn'),old=btn.textContent;btn.disabled=true;btn.textContent='Creo il PDF…';
   const shareBtn=$('schedulePdfShareBtn'),status=$('schedulePdfReady');
   if(shareBtn)shareBtn.classList.add('hidden');if(status)status.classList.add('hidden');preparedScheduleProgramPdf=null;
   try{
-    preparedScheduleProgramPdf=await createScheduleProgramPdf(from,to);
+    const result=await createScheduleProgramPdf(from,to);
+    if(from!==$('schedulePdfFrom').value||to!==$('schedulePdfTo').value){
+      invalidateScheduleProgramPdf();btn.textContent=old;
+      return toast('Periodo cambiato: premi Crea PDF per le nuove date.');
+    }
+    preparedScheduleProgramPdf={...result,from,to};
     if(status){status.textContent=`PDF pronto · ${preparedScheduleProgramPdf.sizeKb} KB`;status.classList.remove('hidden')}
     if(shareBtn)shareBtn.classList.remove('hidden');
     btn.textContent='Rigenera PDF';toast('PDF programma pronto');
@@ -3577,6 +3627,9 @@ async function exportScheduleProgramPdf(){
 }
 async function sharePreparedScheduleProgramPdf(){
   if(!preparedScheduleProgramPdf?.file)return alert('Prima crea il PDF.');
+  if(preparedScheduleProgramPdf.from!==$('schedulePdfFrom').value||preparedScheduleProgramPdf.to!==$('schedulePdfTo').value){
+    invalidateScheduleProgramPdf();return alert('Le date sono cambiate. Rigenera il PDF.');
+  }
   const data=preparedScheduleProgramPdf;
   const file=data.file;
   const btn=$('schedulePdfShareBtn'),old=btn.textContent;
@@ -4604,7 +4657,7 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
       const tagged=dayNote?`[${fmt(day)}] ${dayNote}`:'';
       const mergedNotes=[previousNotes,tagged].filter(Boolean).join('\n');
       const ids=[...(existingOpen.schedule_item_ids||[])];if(scheduleItemId&&!ids.includes(scheduleItemId))ids.push(scheduleItemId);
-      const update={data_fine:day,note:mergedNotes||null,next_visit_note:nextVisitNote||null,multi_day_open:continueAnotherDay,schedule_item_ids:ids,closed_by:continueAnotherDay?null:profile.id,closed_at:continueAnotherDay?null:new Date().toISOString(),stato:continueAnotherDay?existingOpen.stato:(admin()?'convalidato':'in_attesa'),convalidato_da:continueAnotherDay?existingOpen.convalidato_da:(admin()?profile.id:null),convalidato_il:continueAnotherDay?existingOpen.convalidato_il:(admin()?new Date().toISOString():null),foto_attese:priorPhotoCount+files.length,foto_sincronizzate:priorPhotoCount,photo_sync_notified_at:continueAnotherDay?existingOpen.photo_sync_notified_at:null,photo_upload_status:files.length?'pending':(priorPhotoCount?'synced':'none'),photo_upload_error:null,photo_upload_updated_at:new Date().toISOString()};
+      const update={data_fine:day,note:mergedNotes||null,next_visit_note:nextVisitNote||null,multi_day_open:continueAnotherDay,schedule_item_ids:ids,closed_by:continueAnotherDay?null:profile.id,closed_at:continueAnotherDay?null:new Date().toISOString(),stato:continueAnotherDay?existingOpen.stato:(admin()?'convalidato':'in_attesa'),convalidato_da:continueAnotherDay?existingOpen.convalidato_da:(admin()?profile.id:null),convalidato_il:continueAnotherDay?existingOpen.convalidato_il:(admin()?new Date().toISOString():null),foto_attese:Math.max(priorPhotoCount,Number(existingOpen.foto_attese)||0)+files.length,foto_sincronizzate:priorPhotoCount,photo_sync_notified_at:continueAnotherDay?existingOpen.photo_sync_notified_at:null,photo_upload_status:files.length?'pending':(priorPhotoCount?'synced':'none'),photo_upload_error:null,photo_upload_updated_at:new Date().toISOString()};
       const r=await sb.from('interventions').update(update).eq('id',existingOpen.id).select().single();if(r.error)throw r.error;data=r.data;
       if(!continueAnotherDay){
         const {data:stillOpen,error:verifyError}=await sb.from('interventions').select('id').eq('store_id',storeId).eq('multi_day_open',true);
@@ -4646,7 +4699,7 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
       if(r.error)console.warn('Stato programmazione non aggiornato:',r.error.message);
       scheduleItems.filter(x=>linkedScheduleIds.has(x.id)).forEach(x=>x.stato=nextState);
     }
-    if(!continueAnotherDay&&admin()){const r=await sb.from('stores').update({ultimo_passaggio:day,next_visit_note:nextVisitNote||null}).eq('id',storeId);if(r.error)throw r.error}
+    if(!continueAnotherDay&&admin())await refreshStoreLastVisit(storeId);
     if(!continueAnotherDay&&linkedIncludedExtras.length){const includedState=admin()?'completato':'in_attesa',now=new Date().toISOString(),r=await sb.from('extras').update({stato:includedState,giorno_intervento:day,closed_by:profile.id,closed_at:now,convalidato_da:admin()?profile.id:null,convalidato_il:admin()?now:null}).in('id',linkedIncludedExtras.map(e=>e.id));if(r.error)throw new Error('Intervento salvato, ma aggiornamento ticket/target incluso non riuscito: '+r.error.message)}
     let photoSync=null;
     if(files.length){
@@ -4665,7 +4718,7 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
 $('doneForm').onsubmit=async e=>{e.preventDefault();await saveOrdinaryIntervention(false,e.submitter||$('doneForm').querySelector('[type=submit]'))};
 $('doneContinueBtn').onclick=async e=>{await saveOrdinaryIntervention(true,e.currentTarget)};
 $('retroTicketForm')&&( $('retroTicketForm').onsubmit=async e=>{e.preventDefault();const btn=e.submitter||$('retroTicketForm').querySelector('[type=submit]'),old=btn.textContent;btn.disabled=true;btn.textContent='Salvataggio…';try{await saveRetroOrdinaryTicket()}catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=old}} );
-$('historyEditForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const btn=e.submitter||$('historyEditForm').querySelector('[type=submit]'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Salvataggio…';try{const id=$('historyEditId').value,workers=[...$('historyEditWorkers').querySelectorAll('input:checked')].map(x=>x.value),newPhotos=[...historyEditPhotoFiles];if(!workers.length)throw new Error('Seleziona almeno un operatore.');const {error}=await sb.from('interventions').update({data_intervento:$('historyEditDate').value,closed_at:$('historyEditClosedAt').value?new Date($('historyEditClosedAt').value).toISOString():null,note:$('historyEditNotes').value.trim()||null}).eq('id',id);if(error)throw error;let r=await sb.from('intervention_workers').delete().eq('intervention_id',id);if(r.error)throw r.error;r=await sb.from('intervention_workers').insert(workers.map(profile_id=>({intervention_id:id,profile_id})));if(r.error)throw r.error;for(let n=0;n<newPhotos.length;n++){btn.textContent=`Caricamento foto ${n+1}/${newPhotos.length}…`;const file=await compressImage(newPhotos[n]),safe=(file.name||`foto-${n+1}.jpg`).replace(/[^a-zA-Z0-9._-]/g,'-'),path=`interventi/${id}/${Date.now()}-${n}-${safe}`;await uploadFile(path,file);const added=await addAttachment({tipo:'foto_generica',intervention_id:id,storage_path:path,nome_file:file.name||safe,mime_type:file.type||'image/jpeg',dimensione_bytes:file.size,caricato_da:profile.id});if(!added){await sb.storage.from('documenti').remove([path]);throw new Error('Registrazione della nuova foto non riuscita.')}attachments.push(added)}const intervention=interventions.find(x=>x.id===id);if(intervention?.stato==='convalidato')await sb.from('stores').update({ultimo_passaggio:$('historyEditDate').value}).eq('id',intervention.store_id);historyEditPhotoFiles=[];$('historyEditDialog').close();toast(newPhotos.length?`Intervento aggiornato · ${newPhotos.length} foto aggiunte`:'Storico aggiornato');await loadAll();const st=stores.find(x=>x.id===intervention?.store_id);if(st)showHistory(st)}catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=oldText}};
+$('historyEditForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const btn=e.submitter||$('historyEditForm').querySelector('[type=submit]'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Salvataggio…';try{const id=$('historyEditId').value,workers=[...$('historyEditWorkers').querySelectorAll('input:checked')].map(x=>x.value),newPhotos=[...historyEditPhotoFiles];if(!workers.length)throw new Error('Seleziona almeno un operatore.');const {error}=await sb.rpc('overgreen_edit_history_v196',{p_id:id,p_day:$('historyEditDate').value,p_closed_at:$('historyEditClosedAt').value?new Date($('historyEditClosedAt').value).toISOString():null,p_note:$('historyEditNotes').value.trim()||null,p_workers:workers});if(error)throw error;for(let n=0;n<newPhotos.length;n++){btn.textContent=`Caricamento foto ${n+1}/${newPhotos.length}…`;const file=await compressImage(newPhotos[n]),safe=(file.name||`foto-${n+1}.jpg`).replace(/[^a-zA-Z0-9._-]/g,'-'),path=`interventi/${id}/${Date.now()}-${n}-${safe}`;await uploadFile(path,file);const added=await addAttachment({tipo:'foto_generica',intervention_id:id,storage_path:path,nome_file:file.name||safe,mime_type:file.type||'image/jpeg',dimensione_bytes:file.size,caricato_da:profile.id});if(!added){await sb.storage.from('documenti').remove([path]);throw new Error('Registrazione della nuova foto non riuscita.')}attachments.push(added)}const intervention=interventions.find(x=>x.id===id);historyEditPhotoFiles=[];$('historyEditDialog').close();toast(newPhotos.length?`Intervento aggiornato · ${newPhotos.length} foto aggiunte`:'Storico aggiornato');await refreshAfterSave();const st=stores.find(x=>x.id===intervention?.store_id);if(st)showHistory(st)}catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=oldText}};
 $('userEditForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const payload={action:'update',user_id:$('userEditId').value,nome:$('userEditName').value.trim(),email:$('userEditEmail').value.trim(),ruolo:$('userEditRole').value,attivo:$('userEditActive').checked};if(!payload.nome||!payload.email)return alert('Nome ed email sono obbligatori.');const btn=e.submitter;btn.disabled=true;const old=btn.textContent;btn.textContent='Salvataggio…';try{const {data,error}=await sb.functions.invoke('manage-user',{body:payload});if(error||data?.error)throw new Error(data?.error||error.message);$('userEditDialog').close();toast('Utente aggiornato');await loadAll();await renderCloudEmployeeList()}catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=old}};
 $('addScheduleItemsForm').onsubmit=async e=>{
   e.preventDefault();if(!admin())return;
@@ -5523,10 +5576,46 @@ $('documentScannerMode')?.addEventListener('click',e=>{const modes=['document','
 $('documentScannerDetect')?.addEventListener('click',autoDetectDocumentCorners);$('documentScannerFull')?.addEventListener('click',()=>{documentScannerState.corners=defaultDocumentCorners();documentScannerState.autoDetected=false;$('documentScannerDetectionStatus').textContent='Foto intera selezionata · puoi comunque trascinare gli angoli';renderDocumentScannerPreview(false)});$('documentScannerRotate')?.addEventListener('click',()=>{documentScannerState.rotation=(documentScannerState.rotation+90)%360;toast('Rotazione applicata al documento finale')});$('documentScannerUse')?.addEventListener('click',useScannedDocument);
 $('documentScannerDialog')?.addEventListener('cancel',e=>{e.preventDefault();closeDocumentScanner()});
 
+let extraSaveBusy=false;
+const extraUploadKeys=new WeakMap();
+async function saveExtraUpload(extraId,tipo,originalFile,uploadedPaths){
+  let keys=extraUploadKeys.get(originalFile);if(!keys){keys=new Map();extraUploadKeys.set(originalFile,keys)}
+  const key=JSON.stringify([extraId,tipo]);if(!keys.has(key))keys.set(key,crypto.randomUUID());
+  const id=keys.get(key);
+  const existing=await sb.from('attachments').select('*').eq('id',id).maybeSingle();
+  if(existing.error)throw existing.error;
+  let added=existing.data;
+  if(!added){
+    const file=originalFile.type?.startsWith('image/')?await compressImage(originalFile):originalFile;
+    const safe=(file.name||originalFile.name||'documento').replace(/[^a-zA-Z0-9._-]/g,'-');
+    const path='extra/'+extraId+'/'+id+'-'+safe;
+    const up=await sb.storage.from('documenti').upload(path,file,{upsert:true,contentType:file.type||'application/octet-stream'});
+    if(up.error)throw up.error;uploadedPaths.push(path);
+    added=await addAttachment({id,tipo,extra_id:extraId,storage_path:path,nome_file:file.name||originalFile.name,mime_type:file.type,dimensione_bytes:file.size,caricato_da:profile.id});
+  }
+  if(!added)throw new Error('Allegato non confermato. Il file viene conservato per il recupero.');
+  if(!attachments.some(a=>a.id===added.id))attachments.unshift(added);
+  return added;
+}
+function setExtraSaveBusy(busy){
+  for(const id of ['closeExtraFinalBtn','closeExtraPartialBtn'])if($(id))$(id).disabled=busy;
+}
+async function cleanupReplacedAttachments(rows){
+  for(const row of rows){
+    try{
+      const r=await sb.from('attachments').delete().eq('id',row.id).select('id');
+      if(r.error)throw r.error;
+      if(!r.data?.length)throw new Error('Nessuna riga rimossa');
+      attachments=attachments.filter(a=>a.id!==row.id);
+      // Il file precedente resta nello Storage per recupero manuale.
+    }catch(err){console.warn('Vecchio allegato conservato',err);toast('Salvato; un vecchio allegato resta da verificare.');}
+  }
+}
 async function saveExtraPartial(){
   const btn=$('closeExtraPartialBtn');if(!btn)return;
-  const oldText=btn.textContent;btn.disabled=true;btn.textContent='Salvo parziale…';
-  const uploadedPaths=[];
+  const oldText=btn.textContent;if(extraSaveBusy)return;extraSaveBusy=true;setExtraSaveBusy(true);
+  btn.disabled=true;btn.textContent='Salvo parziale…';
+  const uploadedPaths=[],replacedAttachments=[];
   try{
     const id=$('closeExtraId').value,extra=extras.find(x=>x.id===id),profileMode=$('closeExtraForm').dataset.profile||'eurospin';
     if(!extra)throw new Error('Extra non trovato. Aggiorna i dati e riprova.');
@@ -5536,46 +5625,37 @@ async function saveExtraPartial(){
 
     if(overgreenFile){
       btn.textContent='Carico file Overgreen…';
-      const file=overgreenFile.type?.startsWith('image/')?await compressImage(overgreenFile):overgreenFile;
-      const safe=(file.name||overgreenFile.name||'overgreen.pdf').replace(/[^a-zA-Z0-9._-]/g,'-');
-      const path=`extra/${id}/rapportino_overgreen-${Date.now()}-${safe}`;
-      await uploadFile(path,file);uploadedPaths.push(path);
-      const previous=attachments.filter(a=>a.extra_id===id&&a.tipo==='rapportino_overgreen');
-      const added=await addAttachment({tipo:'rapportino_overgreen',extra_id:id,storage_path:path,nome_file:file.name||overgreenFile.name,mime_type:file.type||overgreenFile.type,dimensione_bytes:file.size,caricato_da:profile.id});
-      if(!added)throw new Error('Registrazione del file Overgreen non riuscita.');
-      for(const old of previous){await sb.storage.from('documenti').remove([old.storage_path]);await sb.from('attachments').delete().eq('id',old.id)}
+      const added=await saveExtraUpload(id,'rapportino_overgreen',overgreenFile,uploadedPaths);
+      replacedAttachments.push(...attachments.filter(a=>a.extra_id===id&&a.tipo==='rapportino_overgreen'&&a.id!==added.id));
     }
-
     for(let n=0;n<photos.length;n++){
-      btn.textContent=`Carico foto ${n+1}/${photos.length}…`;
-      const compressed=await compressImage(photos[n]);
-      const safe=(compressed.name||photos[n].name||`foto-${n+1}.jpg`).replace(/[^a-zA-Z0-9._-]/g,'-');
-      const path=`extra/${id}/foto-${Date.now()}-${Math.random().toString(36).slice(2)}-${safe}`;
-      await uploadFile(path,compressed);uploadedPaths.push(path);
-      const added=await addAttachment({tipo:'foto_generica',extra_id:id,storage_path:path,nome_file:compressed.name||photos[n].name,mime_type:compressed.type||'image/jpeg',dimensione_bytes:compressed.size,caricato_da:profile.id});
-      if(!added)throw new Error('Registrazione foto non riuscita.');
+      btn.textContent='Carico foto '+(n+1)+'/'+photos.length+'…';
+      await saveExtraUpload(id,'foto_generica',photos[n],uploadedPaths);
     }
 
     
-    const {error}=await sb.from('extras').update({stato:'da_integrare',note_lorenzo:notes,closed_by:null,closed_at:null}).eq('id',id);
+    const {error}=await sb.from('extras').update({stato:'da_integrare',note_lorenzo:notes,closed_by:null,closed_at:null}).eq('id',id).select('id').single();
     if(error)throw error;
-    notifyAdminClosure('extra',id,photos.length);
+    // Un parziale non è una chiusura: nessuna falsa notifica di completamento.
+    await cleanupReplacedAttachments(replacedAttachments);
     $('closeExtraDialog').close();$('closeExtraForm').reset();resetScannedExtraDocuments();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
     toast(`Parziale salvato · extra ancora aperto${photos.length?' · '+photos.length+' foto':''}${overgreenFile?' · file Overgreen':''}`);
-    await loadAll();
+    await refreshAfterSave();
     if(combinedExtraClosureQueue.length)setTimeout(()=>openNextCombinedExtraClosure(),250);
   }catch(err){
-    if(uploadedPaths.length)try{await sb.storage.from('documenti').remove(uploadedPaths)}catch(cleanErr){console.warn('Pulizia upload incompleta',cleanErr)}
+    // Non rimuovere file già caricati: possono essere registrati o recuperabili.
+    if(uploadedPaths.length)console.warn('File conservati dopo errore di salvataggio',uploadedPaths.length);
     alert(err.message||String(err));
-  }finally{btn.disabled=false;btn.textContent=oldText}
+  }finally{extraSaveBusy=false;setExtraSaveBusy(false);btn.disabled=false;btn.textContent=oldText}
 }
 $('closeExtraPartialBtn')?.addEventListener('click',saveExtraPartial);
 
 $('closeExtraForm').onsubmit=async e=>{
   e.preventDefault();
-  const btn=e.submitter,oldText=btn.textContent;
+  const btn=e.submitter||$('closeExtraFinalBtn'),oldText=btn.textContent;
+  if(extraSaveBusy)return;extraSaveBusy=true;setExtraSaveBusy(true);
   btn.disabled=true;btn.textContent='Preparazione…';
-  const uploadedPaths=[];
+  const uploadedPaths=[],replacedAttachments=[];
   try{
     const id=$('closeExtraId').value,profileMode=$('closeExtraForm').dataset.profile||'eurospin',ticket=$('closeExtraTicket').value.trim()||null;
     const structuredItems=workItemsForExtra(id);
@@ -5597,51 +5677,36 @@ $('closeExtraForm').onsubmit=async e=>{
     if(profileMode==='eurospin'&&!newOvergreen&&!existingOvergreen)throw new Error('Per la chiusura definitiva serve anche il file Overgreen. Se lo hai già caricato in un parziale non devi ricaricarlo.');
     if(profileMode==='intesa'&&!ticket)throw new Error('Inserisci il numero ticket o ordine.');
     const structuredHasPhotos=workItemsForExtra(id).some(w=>workPhotosForItem(w.id).length>0)||structuredCloseRows().some(r=>r.before.length||r.after.length);
-    if(profileMode==='intesa'&&!photos.length&&!structuredHasPhotos)throw new Error('Per Intesa serve almeno una foto, generica oppure collegata a una lavorazione.');
+    const existingGenericPhotos=attachments.some(a=>a.extra_id===id&&a.tipo==='foto_generica');
+    if(profileMode==='intesa'&&!photos.length&&!structuredHasPhotos&&!existingGenericPhotos)throw new Error('Per Intesa serve almeno una foto, generica oppure collegata a una lavorazione.');
 
-    // Evita doppioni se il dipendente riprova dopo un errore: sostituisce i vecchi rapportini.
+    // Identificativi stabili: un retry nella stessa finestra riusa gli allegati.
     for(const [tipo,originalFile] of reports){
-      btn.textContent=tipo==='rapportino_eurospin'?'Preparo file Eurospin…':tipo==='rapportino_overgreen'?'Preparo file Overgreen…':'Preparo documento cliente…';
-      // Se il rapportino/verbale è una foto, la comprime prima dell'upload. I PDF restano invariati.
-      const file=originalFile.type?.startsWith('image/')?await compressImage(originalFile):originalFile;
-      const safe=(file.name||originalFile.name||'rapportino.pdf').replace(/[^a-zA-Z0-9._-]/g,'-');
-      const path=`extra/${id}/${tipo}-${Date.now()}-${safe}`;
-      btn.textContent=tipo==='rapportino_eurospin'?'Carico file Eurospin…':tipo==='rapportino_overgreen'?'Carico file Overgreen…':'Carico documento cliente…';
-      await uploadFile(path,file);uploadedPaths.push(path);
-      const previous=attachments.filter(a=>a.extra_id===id&&a.tipo===tipo);
-      const added=await addAttachment({tipo,extra_id:id,storage_path:path,nome_file:file.name||originalFile.name,mime_type:file.type||originalFile.type,dimensione_bytes:file.size,caricato_da:profile.id});
-      if(!added)throw new Error('Registrazione allegato non riuscita.');
-      for(const old of previous){
-        await sb.storage.from('documenti').remove([old.storage_path]);
-        await sb.from('attachments').delete().eq('id',old.id);
-      }
+      btn.textContent='Carico documento…';
+      const added=await saveExtraUpload(id,tipo,originalFile,uploadedPaths);
+      replacedAttachments.push(...attachments.filter(a=>a.extra_id===id&&a.tipo===tipo&&a.id!==added.id));
     }
-
     for(let n=0;n<photos.length;n++){
-      btn.textContent=`Comprimo foto ${n+1}/${photos.length}…`;
-      const compressed=await compressImage(photos[n]);
-      const safe=(compressed.name||photos[n].name||`foto-${n+1}.jpg`).replace(/[^a-zA-Z0-9._-]/g,'-');
-      const path=`extra/${id}/foto-${Date.now()}-${Math.random().toString(36).slice(2)}-${safe}`;
-      btn.textContent=`Carico foto ${n+1}/${photos.length}…`;
-      await uploadFile(path,compressed);uploadedPaths.push(path);
-      const added=await addAttachment({tipo:'foto_generica',extra_id:id,storage_path:path,nome_file:compressed.name||photos[n].name,mime_type:compressed.type||'image/jpeg',dimensione_bytes:compressed.size,caricato_da:profile.id});
-      if(!added)throw new Error('Registrazione foto non riuscita.');
+      btn.textContent='Carico foto '+(n+1)+'/'+photos.length+'…';
+      await saveExtraUpload(id,'foto_generica',photos[n],uploadedPaths);
     }
 
     
 
     btn.textContent='Invio a Lorenzo…';
-    const {error}=await sb.from('extras').update({stato:'in_attesa',note_lorenzo:notes,closed_by:profile.id,closed_at:new Date().toISOString()}).eq('id',id);
+    const {error}=await sb.from('extras').update({stato:'in_attesa',note_lorenzo:notes,closed_by:profile.id,closed_at:new Date().toISOString()}).eq('id',id).select('id').single();
     if(error)throw error;
+    await cleanupReplacedAttachments(replacedAttachments);
+    void notifyAdminClosure('extra',id,photos.length);
     $('closeExtraDialog').close();$('closeExtraForm').reset();resetScannedExtraDocuments();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
     toast(`Extra inviato a Lorenzo${photos.length?' · '+photos.length+' foto':''}`);
-    await loadAll();
+    await refreshAfterSave();
     if(combinedExtraClosureQueue.length)setTimeout(()=>openNextCombinedExtraClosure(),250);
   }catch(err){
-    // Rimuove dallo Storage i file del tentativo non registrati correttamente.
-    if(uploadedPaths.length)try{await sb.storage.from('documenti').remove(uploadedPaths)}catch(cleanErr){console.warn('Pulizia upload incompleta',cleanErr)}
+    // Non rimuovere file già caricati: possono essere registrati o recuperabili.
+    if(uploadedPaths.length)console.warn('File conservati dopo errore di salvataggio',uploadedPaths.length);
     alert(err.message);
-  }finally{btn.disabled=false;btn.textContent=oldText}
+  }finally{extraSaveBusy=false;setExtraSaveBusy(false);btn.disabled=false;btn.textContent=oldText}
 };
 
 
@@ -5706,7 +5771,7 @@ sb.auth.onAuthStateChange(async(event,s)=>{
   }
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=195').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=196').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

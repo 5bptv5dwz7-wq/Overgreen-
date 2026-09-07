@@ -1,4 +1,4 @@
-const APP_VERSION='V198';
+const APP_VERSION='V199';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -1077,7 +1077,7 @@ async function loadAll(){
   const renderStarted=performance.now();
   // Prima mostriamo l'interfaccia. Le manutenzioni correttive non devono più
   // tenere l'utente davanti a uno schermo vuoto/nero.
-  renderStores();renderWorkers();renderReportFilters();renderPending();renderScheduleFilters();renderSchedules();renderExtras();renderWorkContacts();renderDashboard();if($('statsView'))renderStats();ensureCloudSettingsUi();renderCloudEmployeeList();cleanupPhotoRecoveryRows().catch(()=>{});updateSyncUi();processUploadQueue();handleNotificationDeepLink();
+  renderStores();renderWorkers();renderSchedulePicker();renderReportFilters();renderPending();renderScheduleFilters();renderSchedules();renderExtras();renderWorkContacts();renderDashboard();if($('statsView'))renderStats();ensureCloudSettingsUi();renderCloudEmployeeList();cleanupPhotoRecoveryRows().catch(()=>{});updateSyncUi();processUploadQueue();handleNotificationDeepLink();
   const lastUpdate=$('syncStatus');if(lastUpdate)lastUpdate.textContent='Ultimo aggiornamento dati: '+new Date().toLocaleTimeString('it-IT');
   startupPerf.render=performance.now()-renderStarted;
   startupPerf.total=performance.now()-loadStarted;
@@ -1832,7 +1832,7 @@ function openShareStorePicker(){
 // Alias mantenuto per compatibilità con eventuali richiami meno recenti.
 const openAppleMaps=openGoogleMaps;
 
-const travelCacheKey='overgreen-travel-cache-v1';
+const travelCacheKey='overgreen-travel-cache-v2';
 let travelRenderToken=0;
 let scheduleTravelRenderToken=0;
 function readTravelCache(){try{return JSON.parse(localStorage.getItem(travelCacheKey)||'{}')}catch{return {}}}
@@ -1843,7 +1843,8 @@ function routeStoreForAddress(address){
   return stores.find(st=>normalizedRouteAddress(routeAddressForStore(st)).toLowerCase()===key)||null;
 }
 function storedRoutePoint(address){
-  const st=routeStoreForAddress(address),rawLat=st?.route_latitude,rawLon=st?.route_longitude,lat=Number(rawLat),lon=Number(rawLon);
+  const st=routeStoreForAddress(address);if(normalizedRouteAddress(st?.route_geocode_label).toLowerCase()==='italia')return null;
+  const rawLat=st?.route_latitude,rawLon=st?.route_longitude,lat=Number(rawLat),lon=Number(rawLon);
   return st&&rawLat!==null&&rawLat!==undefined&&rawLon!==null&&rawLon!==undefined&&Number.isFinite(lat)&&Number.isFinite(lon)?{lat,lon,source:'saved-store',resolvedAddress:st.route_geocode_label||routeAddressForStore(st),approximate:false}:null;
 }
 async function persistRoutePoint(address,value){
@@ -1954,6 +1955,7 @@ async function lookupStoreAddressOnline(){
   }finally{btn.disabled=false;btn.textContent=old}
 }
 async function geocodeRouteAddress(address){
+  if(!normalizedRouteAddress(address)||normalizedRouteAddress(address).toLowerCase()==='italia')throw new Error('Indirizzo non trovato: specificare almeno la sede o la città');
   const normalized=normalizedRouteAddress(address),key='geo2:'+normalized.toLowerCase(),cache=readTravelCache();
   const saved=storedRoutePoint(normalized);if(saved)return saved;
   if(cache[key]&&Date.now()-cache[key].savedAt<1000*60*60*24*180)return cache[key].value;
@@ -1978,6 +1980,7 @@ async function geocodeRouteAddress(address){
     }
   }
   if(!value)throw new Error(`Indirizzo non trovato: ${normalized}\nTentativi: ${attempts.join(' | ')}`);
+  if(!routeStoreForAddress(normalized)?.indirizzo)value.approximate=true;
   value.originalAddress=normalized;
   cache[key]={savedAt:Date.now(),value};writeTravelCache(cache);persistRoutePoint(normalized,value);
   return value;
@@ -1992,8 +1995,8 @@ async function routeBetweenAddresses(from,to){
   const route=data.routes?.[0];if(!route)throw new Error('Percorso stradale non trovato');
   const value={km:route.distance/1000,minutes:Math.max(1,Math.round(route.duration/60)),approximate:!!(p1.approximate||p2.approximate),fromResolved:p1.resolvedAddress||a,toResolved:p2.resolvedAddress||b};cache[key]={savedAt:Date.now(),value};writeTravelCache(cache);return value;
 }
-function routeAddressForStore(st){return [st?.indirizzo,st?.citta,'Italia'].filter(Boolean).join(', ')}
-function routeAddressForExtra(e,st){return [st?.indirizzo||e?.indirizzo_esterno,st?.citta,'Italia'].filter(Boolean).join(', ')}
+function routeAddressForStore(st){const place=[st?.indirizzo,st?.citta].filter(Boolean);if(!place.length&&st?.nome)place.push(st.nome);return place.length?[...place,'Italia'].join(', '):''}
+function routeAddressForExtra(e,st){if(st)return routeAddressForStore(st);const place=e?.indirizzo_esterno||e?.nome_esterno;return place?[place,'Italia'].join(', '):''}
 function formatTravelMinutes(minutes){const h=Math.floor(minutes/60),m=minutes%60;return h?`${h} h${m?' '+m+' min':''}`:`${m} min`}
 
 function travelErrorLabel(err){

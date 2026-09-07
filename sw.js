@@ -1,7 +1,26 @@
-const CACHE='overgreen-v193';
+const CACHE='overgreen-v194';
 self.addEventListener('install',e=>e.waitUntil(self.skipWaiting()));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
-self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(fetch(e.request,{cache:'no-store'}).catch(()=>caches.match(e.request)));});
+self.addEventListener('fetch',e=>{
+  if(e.request.method!=='GET')return;
+  const url=new URL(e.request.url);
+  // Non memorizzare API Supabase, URL firmati o risorse di domini esterni.
+  if(url.origin!==self.location.origin)return;
+  e.respondWith((async()=>{
+    try{
+      const response=await fetch(e.request,{cache:'no-store'});
+      if(response.ok){
+        const cache=await caches.open(CACHE);
+        await cache.put(e.request,response.clone());
+      }
+      return response;
+    }catch(err){
+      const cached=await caches.match(e.request);
+      if(cached)return cached;
+      throw err;
+    }
+  })());
+});
 
 // V186 — Target N° dei report cliente extra in alto a destra come Genera chiusura.
 // V183 — PDF completo Intesa: unione di report singoli completi, uno per ogni intervento; filtro cliente applicato anche ai report attività.

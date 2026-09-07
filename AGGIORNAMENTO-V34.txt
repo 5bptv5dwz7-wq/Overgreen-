@@ -1,5 +1,0 @@
-OVERGREEN CLOUD V34
-
-- Il riquadro 'Programmati' della Dashboard apre direttamente la pagina Programmazione.
-- All'apertura vengono mostrate tutte le date programmate.
-- Rimosso il collegamento alla lista punti vendita filtrata.

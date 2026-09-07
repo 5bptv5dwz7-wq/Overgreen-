@@ -1,0 +1,10 @@
+{
+  "name": "overgreen-tests",
+  "private": true,
+  "scripts": {
+    "test": "node flows.cjs && node --test operations.cjs operations-ui.cjs"
+  },
+  "devDependencies": {
+    "linkedom": "0.18.12"
+  }
+}

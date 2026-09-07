@@ -1,0 +1,68 @@
+/* V200: styles are scoped to the operational page and its dashboard links. */
+.ops-shortcuts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 10px}
+.ops-shortcuts button{display:flex;align-items:center;justify-content:space-between;text-align:left;border:1px solid #c8ded1!important;background:#f0f8f3!important;color:#174b32!important;border-radius:12px;padding:12px!important;min-height:60px;box-shadow:none!important;gap:8px}
+.ops-shortcuts strong{display:block;font-size:14px}.ops-shortcuts small{display:block;font-size:11px;margin-top:3px;line-height:1.3}.ops-shortcuts b{font-size:22px}
+#operationsView{--ops-green:#18543a;--ops-muted:#5b6c62;display:grid;gap:12px}
+#operationsView.hidden{display:none!important}
+#operationsView .ops-hero{padding:18px;border:1px solid #cce2d3;border-radius:16px;background:linear-gradient(120deg,#eaf5ed,#f9fbf8)}
+#operationsView .ops-hero h2{font-size:23px;margin:4px 0 6px;letter-spacing:-.4px;color:#163f2c}
+#operationsView .ops-hero p{margin:4px 0;line-height:1.45}
+#operationsView .ops-hero-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+#operationsView .ops-updated{font-size:11px;color:var(--ops-muted);margin-top:9px}
+#operationsView .ops-tabs{display:flex;gap:6px;padding:5px;background:#e9efeb;border-radius:12px}
+#operationsView .ops-tabs button{flex:1;background:transparent!important;border:0!important;color:#455e50!important;min-height:44px;box-shadow:none!important}
+#operationsView .ops-tabs button[aria-pressed="true"]{background:#fff!important;color:var(--ops-green)!important;box-shadow:0 2px 5px #1b422512!important}
+#operationsView .ops-filters{display:grid;grid-template-columns:1fr 2fr;gap:10px;padding:13px;background:#fff;border:1px solid #e0e8e2;border-radius:13px}
+#operationsView label{min-width:0;font-size:12px;margin:0;color:#334e3d}
+#operationsView label input,#operationsView label select{width:100%;min-height:44px;margin-top:5px}
+#operationsView .ops-categories{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+#operationsView .ops-categories button{background:#fff!important;border:1px solid #d6e0d9!important;color:#365943!important;box-shadow:none!important;min-height:40px;padding:8px 11px!important;font-size:12px}
+#operationsView .ops-categories button[aria-pressed="true"]{background:var(--ops-green)!important;border-color:var(--ops-green)!important;color:#fff!important}
+#operationsView .ops-categories b{display:inline-block;margin-left:6px;opacity:.9}
+#operationsView .ops-result-count{font-size:12px;color:var(--ops-muted);margin:0 0 10px}
+#operationsView .ops-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:start}
+#operationsView .ops-card{min-width:0;background:#fff;border:1px solid #dfe6e0;border-left:4px solid #a6b8aa;border-radius:12px;padding:13px}
+#operationsView .ops-card[data-severity="0"]{border-left-color:#b82f30}
+#operationsView .ops-card[data-severity="1"]{border-left-color:#cc7524}
+#operationsView .ops-card[data-severity="3"]{border-left-color:#be991a}
+#operationsView .ops-card-head{display:flex;align-items:center;justify-content:space-between;gap:7px;flex-wrap:wrap;margin-bottom:7px;font-size:11px;color:var(--ops-muted)}
+#operationsView .ops-priority{font-weight:700;border-radius:6px;padding:3px 6px;background:#edf2ee;color:#47634e}
+#operationsView [data-severity="0"] .ops-priority{color:#95282a;background:#fceeed}
+#operationsView [data-severity="1"] .ops-priority{color:#91531b;background:#fff3e7}
+#operationsView [data-severity="3"] .ops-priority{color:#785f0d;background:#fff9dc}
+#operationsView h3{font-size:15px;line-height:1.3;margin:0 0 4px;overflow-wrap:anywhere}
+#operationsView .ops-subtitle{font-size:12px;color:var(--ops-muted);margin:0 0 8px;overflow-wrap:anywhere}
+#operationsView .ops-reasons{margin:9px 0 12px;padding-left:17px;font-size:12px;line-height:1.45}
+#operationsView .ops-reasons li+li{margin-top:5px}
+#operationsView .ops-card .actions{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
+#operationsView .ops-card .actions button{min-height:40px;font-size:12px}
+#operationsView .ops-progress{margin:8px 0;font-size:11px;color:var(--ops-muted)}
+#operationsView progress{display:block;width:100%;height:7px;margin-top:6px;accent-color:#26734a;border:0;border-radius:6px;overflow:hidden}
+#operationsView progress::-webkit-progress-bar{background:#edf1ed}#operationsView progress::-webkit-progress-value{background:#26734a}
+#operationsView .ops-empty{padding:25px 18px;border:1px dashed #bfd3c5;border-radius:13px;background:#f8fbf8;text-align:center;grid-column:1/-1}
+#operationsView .ops-empty p{font-size:13px;color:var(--ops-muted);margin:6px 0 0}
+#operationsView #operationsMore{display:block;margin:14px auto 0;min-height:44px}
+#operationsView .ops-week-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+#operationsView .ops-week-head p{font-size:12px;line-height:1.4;color:var(--ops-muted);margin:0}
+#operationsView .ops-week-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:start}
+#operationsView .ops-day{background:#fff;border:1px solid #dce5df;border-radius:13px;padding:14px;min-width:0}
+#operationsView .ops-day:first-child{border-color:#94bba2}
+#operationsView .ops-day-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:10px}
+#operationsView .ops-day-head small{display:block;color:var(--ops-muted);font-size:11px;margin-top:3px}
+#operationsView .ops-day-total{background:#edf4ef;border-radius:8px;padding:5px 9px;color:var(--ops-green);font-weight:700}
+#operationsView .ops-team{border-top:1px solid #edf1ee;padding:10px 0}
+#operationsView .ops-team strong{font-size:13px;display:block;overflow-wrap:anywhere}
+#operationsView .ops-team p{margin:5px 0;font-size:12px;line-height:1.4;color:var(--ops-muted);overflow-wrap:anywhere}
+#operationsView .ops-team-state{display:flex;flex-wrap:wrap;gap:7px;font-size:11px;color:#3b5d47}
+#operationsView .ops-team-state .ops-pending{color:#895b0e}
+#operationsView .ops-unassigned{background:#fff9ec;padding:10px;border-radius:8px}
+#operationsView .ops-conflict{padding:8px 10px;background:#fff4e5;color:#875112;border-radius:8px;font-size:12px;line-height:1.4}
+#operationsView .ops-open-day{width:100%;min-height:40px;margin-top:8px}
+#operationsView button:focus-visible,.ops-shortcuts button:focus-visible{outline:3px solid #d7a529!important;outline-offset:3px}
+@media(max-width:650px){
+  #operationsView .ops-list,#operationsView .ops-week-grid{grid-template-columns:1fr}
+  #operationsView .ops-filters{grid-template-columns:1fr}
+  #operationsView .ops-hero{padding:14px}#operationsView .ops-hero h2{font-size:21px}
+  #operationsView .ops-hero-head{flex-wrap:wrap}#operationsView .ops-hero-head button{min-height:40px}
+  .ops-shortcuts button{padding:10px!important}.ops-shortcuts strong{font-size:12px}.ops-shortcuts small{font-size:10px}
+}

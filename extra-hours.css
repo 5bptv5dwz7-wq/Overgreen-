@@ -1,0 +1,35 @@
+/* V201: scoped report viewer and manual hours. */
+#extraHoursDialog{width:min(1120px,96vw);max-width:1120px;max-height:94dvh;padding:0;border:0;border-radius:18px;color:#17251d;background:#fff}
+#extraHoursDialog::backdrop{background:rgba(9,26,18,.65)}
+#extraHoursDialog .eh-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:18px 20px;border-bottom:1px solid #dce6df}
+#extraHoursDialog .eh-head h2{margin:0 0 6px;font-size:1.35rem}
+#extraHoursDialog .eh-head p{margin:0;overflow-wrap:anywhere}
+#extraHoursDialog .eh-layout{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(260px,1fr);gap:20px;padding:20px}
+#extraHoursDialog .eh-preview{min-width:0}
+#extraHoursDialog .eh-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+#extraHoursDialog button{min-height:44px;margin:0}
+#extraHoursDialog button:disabled{opacity:.45;cursor:default}
+#extraHoursDialog .eh-toolbar button{padding:8px 12px}
+#extraHoursDialog .eh-page{min-width:80px;text-align:center;font-size:.85rem}
+#extraHoursDialog .eh-viewport{height:54dvh;min-height:220px;overflow:auto;background:#e9eeeb;border:1px solid #d4ded7;border-radius:10px;overscroll-behavior:contain;touch-action:pan-x pan-y pinch-zoom}
+#extraHoursDialog .eh-viewport canvas,#extraHoursDialog .eh-viewport img{display:block;max-width:none;margin:10px auto;background:white;box-shadow:0 2px 10px #0002}
+#extraHoursDialog .eh-preview-message{padding:10px 0;min-height:24px;margin:0;font-size:.88rem}
+#extraHoursDialog .eh-form{display:flex;flex-direction:column;gap:14px;align-self:start;padding:0}
+#extraHoursDialog .eh-form label{font-weight:700;display:block}
+#extraHoursDialog input{width:100%;box-sizing:border-box;font-size:1.35rem;margin-top:8px;padding:12px}
+#extraHoursDialog .eh-hint{line-height:1.5;font-size:.9rem;margin:0;color:#496151}
+#extraHoursDialog .eh-notice{background:#fff6d9;border:1px solid #e8cc76;border-radius:10px;padding:12px;margin:0;font-size:.9rem}
+#extraHoursDialog .eh-feedback{min-height:24px;margin:0;overflow-wrap:anywhere;font-size:.92rem}
+#extraHoursDialog .eh-feedback[data-error="true"]{color:#aa2530}
+#extraHoursDialog .eh-feedback[data-error="false"]{color:#075b31}
+#extraHoursDialog .eh-meta{margin:0;font-size:.85rem;color:#496151}
+#extraHoursDialog [hidden]{display:none!important}
+@media(max-width:700px){
+  #extraHoursDialog{width:96vw;max-height:96dvh}
+  #extraHoursDialog .eh-head{padding:14px}
+  #extraHoursDialog .eh-layout{grid-template-columns:minmax(0,1fr);padding:14px;gap:14px}
+  #extraHoursDialog .eh-viewport{height:32dvh;min-height:160px}
+  #extraHoursDialog .eh-toolbar{gap:5px}
+  #extraHoursDialog .eh-toolbar button{padding:8px 10px}
+  #extraHoursDialog .eh-form{gap:10px}
+}

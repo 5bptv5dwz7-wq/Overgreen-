@@ -1,4 +1,4 @@
-const APP_VERSION='V201';
+const APP_VERSION='V202';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -515,6 +515,7 @@ function setView(name){
 
 function syncImpersonationUi(){
   if(typeof closeExtraHoursForRole==='function')closeExtraHoursForRole();
+  if(typeof syncExtraEconomicsRole==='function')syncExtraEconomicsRole();
   const active=impersonating();
   if($('userLabel'))$('userLabel').textContent=active?`${profile.nome} · Vista dipendente (tu: ${realProfile.nome})`:`${profile.nome} · ${admin()?'Amministratore':'Dipendente'}`;
   if($('settingsUser'))$('settingsUser').textContent=active?`Stai operando come ${profile.nome} — sessione reale: ${session?.user?.email||realProfile?.email||''}`:`${profile.nome} — ${session?.user?.email||''}`;
@@ -1073,6 +1074,7 @@ async function loadAll(){
   const impersonatedTarget=realProfile.ruolo==='admin'&&impersonatedId?profiles.find(x=>x.id===impersonatedId&&x.attivo!==false&&x.ruolo!=='admin'):null;
   if(impersonatedId&&!impersonatedTarget)sessionStorage.removeItem(IMPERSONATE_PROFILE_KEY);
   profile=impersonatedTarget||realProfile;
+  if(typeof loadExtraEconomics==='function')await loadExtraEconomics();
   syncImpersonationUi();
 
   if(typeof operationsDataUpdatedAt!=='undefined')operationsDataUpdatedAt=new Date();
@@ -4239,8 +4241,9 @@ function extraCard(e){
   c.dataset.extraCardId=e.id;
   c.innerHTML=`<div class="extra-card-heading"><div>${clientBadge(e)}<h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3></div><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span></div><p><strong>${esc(e.titolo)}</strong></p>${e.numero_target?`<p class="target-number"><strong>Numero target:</strong> ${esc(e.numero_target)}</p>`:''}${e.descrizione?`<p>${esc(e.descrizione)}</p>`:''}${structured?`<div class="linked-extra-reminder"><strong>📋 ${structuredItems.length} lavorazioni</strong><p>${structuredItems.map(w=>`${workStateIcon(w.stato)} ${esc(w.titolo)}`).join(' · ')}</p></div>`:''}${deadlineLabel(e)}<div class="extra-date-summary"><p><strong>Richiesta:</strong> ${fmt(extraRequestDate(e))}</p><span class="elapsed-days">⏱ ${esc(elapsedDaysLabel(e))}</span><p><strong>Esecuzione:</strong> ${e.giorno_intervento?fmt(e.giorno_intervento):'Da programmare'}</p></div>${e.con_ordinario?`<p class="linked-ordinary-label">${isIntesaOrdinaryTicket(e)?'🎫 Ticket incluso nel passaggio ordinario · nessun documento richiesto in chiusura':'🔗 Da fare insieme al passaggio ordinario'}</p>`:''}${partialOpen?'<span class="extra-partial-badge">↪ Parziale · da continuare</span>':`<p class="muted">${esc(stateLabel)}</p>`}<p class="assignment-label"><strong>${esc(assignmentLabel)}</strong></p>${showProgress?`<div class="extra-closure-details">${showClosure?`<div class="closure-stamp">🕒 Chiuso: ${esc(closureText(e))}</div><strong>Note finali</strong>`:'<strong>Avanzamento parziale</strong>'}<div class="history-note ${e.note_lorenzo?'':'muted'}">${esc(e.note_lorenzo||(partialOpen?'Nessuna nota parziale inserita':'Nessuna nota inserita'))}</div><div class="pending-photo-head"><strong>Foto del lavoro</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-extra-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div>`:''}<div class="actions">${extraMapsDestination(e,st)?'<button class="secondary" data-extra-map>Maps</button>':''}${pdf?'<button class="secondary" data-pdf>Apri PDF richiesta</button>':''}${structured?'<button class="secondary" data-work-progress>📋 Lavorazioni</button>':''}${showClosure&&reportEurospin?'<button class="secondary" data-report-eurospin>File Eurospin</button>':''}${showProgress&&reportOvergreen?'<button class="secondary" data-report-overgreen>File Overgreen</button>':''}${showClosure&&!reportEurospin?'<span class="muted">File Eurospin non presente</span>':''}${showClosure&&!reportOvergreen?'<span class="muted">File Overgreen non presente</span>':''}${structured&&['in_attesa','completato'].includes(e.stato)?'<button data-generate-work-report>Genera report lavorazioni</button>':''}${e.stato==='completato'&&!isIntesaOrdinaryTicket(e)?'<button data-generate-closure>Genera chiusura</button>':''}${admin()&&e.stato==='completato'?'<button class="secondary" data-edit-closure>Modifica chiusura</button>':''}${!isIntesaOrdinaryTicket(e)&&['programmato','ricevuto','da_integrare'].includes(e.stato)&&(admin()||isAssignedToMe)?`<button data-close-extra>${structured?'Chiudi definitivamente':(partialOpen?'Continua / chiudi lavoro':'Chiudi lavoro')}</button>`:''}${admin()&&e.stato==='in_attesa'?'<button data-approve-extra>Convalida</button>':''}${admin()&&!e.con_ordinario&&!extraIsScheduled(e)&&!['in_attesa','completato'].includes(e.stato)?'<button class="secondary" data-program-extra>📅 Programma</button>':''}${admin()?'<button class="secondary" data-edit-extra>Modifica</button><button class="danger-btn" data-delete-extra>Elimina</button>':''}</div>`;
   if(admin()&&clientType(e)==='eurospin'&&typeof openExtraHours==='function'){
-    const hoursButton=document.createElement('button');hoursButton.type='button';hoursButton.className='secondary';hoursButton.dataset.extraHours='';hoursButton.textContent='Ore e rapportino';hoursButton.onclick=()=>openExtraHours(e);
+    const hoursButton=document.createElement('button');hoursButton.type='button';hoursButton.className='secondary';hoursButton.dataset.extraHours='';hoursButton.textContent='Economia e rapportino';hoursButton.onclick=()=>openExtraHours(e);
     c.querySelector('.actions').prepend(hoursButton);
+    if(typeof appendExtraEconomicsSummary==='function')appendExtraEconomicsSummary(c,e);
   }
   c.querySelector('[data-extra-map]')?.addEventListener('click',()=>openExtraMaps(e,st));
   c.querySelector('[data-pdf]')?.addEventListener('click',()=>openAttachment(pdf));
@@ -4381,6 +4384,7 @@ async function ensureStandaloneExtraInProgramming(extra,workerIds=null){
 }
 function renderExtras(){
   const root=$('extrasList');if(!root)return;root.innerHTML='';
+  if(admin()&&typeof openExtraEconomicsBook==='function'){const bar=document.createElement('div');bar.className='actions';const b=document.createElement('button');b.type='button';b.textContent='Economia Eurospin · riepilogo e Excel';b.className='secondary';b.onclick=openExtraEconomicsBook;bar.appendChild(b);root.appendChild(bar)}
   const search=($('extraSearchInput')?.value||'').trim().toLocaleLowerCase('it');
   const categoryFilter=$('extraCategoryFilter')?.value||'all';
   $('clearExtraSearch')?.classList.toggle('hidden',!search);
@@ -5773,7 +5777,7 @@ sb.auth.onAuthStateChange(async(event,s)=>{
   }
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=201').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=202').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

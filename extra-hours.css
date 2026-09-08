@@ -4,8 +4,8 @@
 #extraHoursDialog .eh-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:18px 20px;border-bottom:1px solid #dce6df}
 #extraHoursDialog .eh-head h2{margin:0 0 6px;font-size:1.35rem}
 #extraHoursDialog .eh-head p{margin:0;overflow-wrap:anywhere}
-#extraHoursDialog .eh-layout{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(260px,1fr);gap:20px;padding:20px}
-#extraHoursDialog .eh-preview{min-width:0}
+#extraHoursDialog .eh-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(340px,1fr);gap:20px;padding:20px}
+#extraHoursDialog .eh-preview{min-width:0;position:sticky;top:110px;align-self:start;background:white;z-index:2}
 #extraHoursDialog .eh-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
 #extraHoursDialog button{min-height:44px;margin:0}
 #extraHoursDialog button:disabled{opacity:.45;cursor:default}
@@ -24,12 +24,41 @@
 #extraHoursDialog .eh-feedback[data-error="false"]{color:#075b31}
 #extraHoursDialog .eh-meta{margin:0;font-size:.85rem;color:#496151}
 #extraHoursDialog [hidden]{display:none!important}
+#extraHoursDialog .eh-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#extraHoursDialog .eh-form label{margin:0}
+#extraHoursDialog .eh-form input,#extraHoursDialog .eh-form select{font-size:1rem}
+#extraHoursDialog .eh-form #extraHoursInput{font-size:1.35rem}
+#extraHoursDialog .eh-check{display:flex;gap:8px;align-items:center;font-size:.9rem}
+#extraHoursDialog .eh-check input{width:22px;margin:0;flex:0 0 22px}
+#extraHoursDialog .eh-section-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+#extraHoursDialog .eh-expense-row{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(70px,1fr) 44px;gap:6px;align-items:end;margin-top:6px}
+#extraHoursDialog .eh-expense-row input{min-width:0;padding:10px;font-size:.9rem}
+#extraHoursDialog .eh-summary{background:#f0f7f2;border:1px solid #c6dfce;border-radius:14px;padding:14px}
+#extraHoursDialog .eh-summary p{display:flex;gap:10px;justify-content:space-between;margin:0 0 10px;font-size:.9rem}
+#extraHoursDialog .eh-summary p:last-of-type{padding-top:10px;border-top:1px solid #c6dfce;font-weight:bold}
+#extraHoursDialog .eh-summary small{color:#496151}
+.extra-economic-card{background:#f2f7f3;border-left:3px solid #4b9668;border-radius:8px;padding:10px 12px;margin:12px 0;font-size:.9rem}
+.extra-economic-card small{display:block;margin-top:5px;color:#526659}
+.economics-book{width:min(1050px,96vw)}
+.economics-filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.economics-totals{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
+.economics-totals>div{padding:14px;border-radius:12px;background:#eaf4ed}
+.economics-totals strong{display:block;font-size:1.5rem;margin-bottom:5px}
+.economics-totals span{font-size:.85rem}
+.economic-book-row{display:flex;justify-content:space-between;gap:14px;border-top:1px solid #dce6df;padding:14px 0}
+.economic-book-row>div{min-width:0;overflow-wrap:anywhere}
+.economic-book-row>div:last-child{display:flex;flex-direction:column;gap:8px;align-items:flex-end;flex-shrink:0}
+.economic-book-row p{margin:6px 0;font-size:.9rem}
+.economic-book-row small{color:#526659}
 @media(max-width:700px){
   #extraHoursDialog{width:96vw;max-height:96dvh}
   #extraHoursDialog .eh-head{padding:14px}
   #extraHoursDialog .eh-layout{grid-template-columns:minmax(0,1fr);padding:14px;gap:14px}
   #extraHoursDialog .eh-viewport{height:32dvh;min-height:160px}
+  #extraHoursDialog .eh-preview{top:102px}
   #extraHoursDialog .eh-toolbar{gap:5px}
   #extraHoursDialog .eh-toolbar button{padding:8px 10px}
   #extraHoursDialog .eh-form{gap:10px}
+  .economics-filters{grid-template-columns:1fr 1fr}
+  .economics-totals strong{font-size:1.15rem}
 }

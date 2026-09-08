@@ -1,0 +1,36 @@
+<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Overgreen · prova economia</title></head><body>
+<script>
+// Visual test harness. Synthetic PDF and in-memory data only: no Supabase connection.
+(async()=>{
+  if(!new URLSearchParams(location.search).has('embedded')){
+    document.body.style.cssText='margin:20px;background:#dbe6df;font:16px system-ui';
+    document.body.innerHTML='<h1>Prova economia · dati fittizi</h1><p>Nessun collegamento a Supabase. I dati di questa prova si azzerano ricaricando.</p><button id="phone">Telefono</button> <button id="desktop">Desktop</button><br><iframe title="App di prova" style="display:block;margin-top:16px;width:390px;height:844px;border:1px solid #abc;border-radius:12px" src="economics-preview.html?embedded=1"></iframe>';
+    const frame=document.querySelector('iframe');document.getElementById('phone').onclick=()=>frame.style.width='390px';document.getElementById('desktop').onclick=()=>frame.style.width='1080px';return;
+  }
+  const root=new URL('../',location.href),response=await fetch(new URL('index.html',root)),source=new DOMParser().parseFromString(await response.text(),'text/html');
+  for(const style of source.querySelectorAll('style'))document.head.appendChild(style.cloneNode(true));
+  for(const link of source.querySelectorAll('link[rel="stylesheet"]')){const copy=link.cloneNode();copy.href=new URL(link.getAttribute('href'),root);document.head.appendChild(copy)}
+  document.body.innerHTML='<main><h1>Economia · prova</h1><p>Target fittizio. Salvataggio solo in memoria.</p><button id="open">Apri extra di prova</button> <button id="book">Riepilogo di prova</button></main>';
+  for(const id of ['extraHoursDialog','extraEconomicsBook'])document.body.appendChild(source.getElementById(id).cloneNode(true));
+  const load=url=>new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=url;script.onload=resolve;script.onerror=reject;document.head.appendChild(script)});
+  await load('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js');
+  await load('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+  await load('https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js');
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const pdf=await PDFLib.PDFDocument.create();
+  for(let i=1;i<=2;i++){const page=pdf.addPage([595,842]);page.drawText('RAPPORTINO DI PROVA - EUROSPIN',{x:40,y:770,size:18});page.drawText('Documento sintetico, privo di dati reali',{x:40,y:735,size:12});page.drawText('Pagina '+i+' / 2',{x:40,y:695,size:14});page.drawText(i===1?'Operatori: 2':'Ore complessive: 6',{x:40,y:650,size:18});page.drawText('Pulizie con attrezzature - uscita apposita',{x:40,y:605,size:14})}
+  const pdfUrl=URL.createObjectURL(new Blob([await pdf.save()],{type:'application/pdf'}));
+  let record=null;const report={id:'report-test',extra_id:'extra-test',tipo:'rapportino_eurospin',nome_file:'rapportino-prova.pdf',mime_type:'application/pdf',storage_path:'synthetic',created_at:'2026-09-08T10:00:00Z'};
+  Object.assign(window,{
+    $:id=>document.getElementById(id),admin:()=>true,clientType:e=>e.client_type,stores:[],today:()=> '2026-09-08',
+    extras:[{id:'extra-test',client_type:'eurospin',categoria_target:'pulizie',nome_esterno:'Punto vendita di prova',titolo:'Pulizia parcheggio',numero_target:'QA-202',stato:'completato',giorno_intervento:'2026-09-08'}],
+    extraWorkers:[{extra_id:'extra-test',profile_id:'a'},{extra_id:'extra-test',profile_id:'b'}],attachments:[report],
+    esc:s=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'),
+    signedAttachmentUrl:async()=>pdfUrl,openAttachment:()=>window.open(pdfUrl,'_blank'),renderExtras:()=>{},loadAll:async()=>{},
+    readAllRows:async()=>({data:record?[record]:[]}),
+    sb:{from(table){const q={select(){return q},eq(){return q},order(){return q},limit(){return q},async maybeSingle(){return {data:table==='extra_labor_hours'?record:table==='attachments'?report:window.extras[0]}}};return q},async rpc(name,args){record={...args.p_values,...window.OvergreenEconomics.rates(args.p_values.pricing_category,args.p_values.equipment),extra_id:args.p_extra_id,source_attachment_id:args.p_source_attachment_id,revision:(record?.revision||0)+1,updated_at:new Date().toISOString()};return {data:{record,calculation:window.OvergreenEconomics.calculate(record)}}}}
+  });
+  for(const path of ['extra-economics.js','extra-economics-ui.js','extra-hours.js'])await load(new URL(path+'?v=202',root));
+  document.getElementById('open').onclick=()=>openExtraHours(window.extras[0]);document.getElementById('book').onclick=openExtraEconomicsBook;
+})().catch(error=>{document.body.appendChild(document.createTextNode('Errore prova: '+error.message))});
+</script></body></html>

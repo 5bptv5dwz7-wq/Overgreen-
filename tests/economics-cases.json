@@ -1,0 +1,393 @@
+[
+  {
+    "name": "verde: 2 operatori x 3 ore, uscita apposita",
+    "input": {
+      "total_hours": 6,
+      "pricing_mode": "tariffa",
+      "pricing_category": "verde",
+      "dedicated_trip": true,
+      "operator_count": 2,
+      "equipment": false,
+      "quote_amount": null,
+      "quote_status": "bozza",
+      "quote_exit_included": false,
+      "quote_reference": "",
+      "expenses": [],
+      "economic_notes": ""
+    },
+    "expected": {
+      "total": 32000,
+      "quotePending": false,
+      "complete": true,
+      "labor": 12000,
+      "exit": 20000
+    }
+  },
+  {
+    "name": "verde: già sul posto",
+    "input": {
+      "total_hours": 6,
+      "pricing_mode": "tariffa",
+      "pricing_category": "verde",
+      "dedicated_trip": false,
+      "operator_count": 2,
+      "equipment": false,
+      "quote_amount": null,
+      "quote_status": "bozza",
+      "quote_exit_included": false,
+      "quote_reference": "",
+      "expenses": [],
+      "economic_notes": ""
+    },
+    "expected": {
+      "total": 12000,
+      "quotePending": false,
+      "complete": true,
+      "labor": 12000,
+      "exit": 0
+    }
+  },
+  {
+    "name": "pulizie: consuntivo con spese",
+    "input": {
+      "total_hours": 9,
+      "pricing_mode": "consuntivo",
+      "pricing_category": "pulizie",
+      "dedicated_trip": true,
+      "operator_count": 3,
+      "equipment": false,
+      "quote_amount": null,
+      "quote_status": "bozza",
+      "quote_exit_included": false,
+      "quote_reference": "",
+      "expenses": [
+        {
+          "description": "Materiali",
+          "amount": 18.45
+        },
+        {
+          "description": "Parcheggio",
+          "amount": 11.55
+        }
+      ],
+      "economic_notes": ""
+    },
+    "expected": {
+      "total": 34200,
+      "quotePending": false,
+      "complete": true,
+      "labor": 16200,
+      "exit": 15000
+    }
+  },
+  {
+    "name": "pulizie: attrezzature su tutte le ore",
+    "input": {
+      "total_hours": 9,
+      "pricing_mode": "consuntivo",
+      "pricing_category": "pulizie",
+      "dedicated_trip": true,
+      "operator_count": 3,
+      "equipment": true,
+      "quote_amount": null,
+      "quote_status": "bozza",
+      "quote_exit_included": false,
+      "quote_reference": "",
+      "expenses": [
+        {
+          "description": "Materiali",
+          "amount": 30
+        }
+      ],
+      "economic_notes": ""
+    },
+    "expected": {
+      "total": 38700,
+      "quotePending": false,
+      "complete": true,
+      "labor": 20700,
+      "exit": 15000
+    }
+  },
+  {
+    "name": "verde: consuntivo con uscita e spesa",
+    "input": {
+      "total_hours": 2.5,
+      "pricing_mode": "consuntivo",
+      "pricing_category": "verde",
+      "dedicated_trip": true,
+      "operator_count": 1,
+      "equipment": false,
+      "quote_amount": null,
+      "quote_status": "bozza",
+      "quote_exit_included": false,
+      "quote_reference": "",
+      "expenses": [
+        {
+          "description": "Materiali",
+          "amount": 20
+        }
+      ],
+      "economic_notes": ""
+    },
+    "expected": {
+      "total": 17000,
+      "quotePending": false,
+      "complete": true,
+      "labor": 5000,
+      "exit": 10000
+    }
+  },
+  {
+    "name": "preventivo: non somma la manodopera",
+    "input": {
+      "total_hours": 8,
+      "pricing_mode": "preventivo",
+      "pricing_category": "verde",
+      "dedicated_trip": true,
+      "operator_count": 2,
+      "equipment": false,
+      "quote_amount": 1000,
+      "quote_status": "accettato",
+      "quote_exit_included": false,
+      "quote_reference": "",
+      "expenses": [
+        {
+          "description": "Spesa extra concordata",
+          "amount": 30
+        }
+      ],
+      "economic_notes": ""
+    },
+    "expected": {
+      "total": 123000,
+      "quotePending": false,
+      "complete": true,
+      "labor": 16000,
+      "exit": 20000
+    }
+  },
+  {
+    "name": "preventivo: uscita già inclusa",
+    "input": {
+      "total_hours": 6,
+      "pricing_mode": "preventivo",
+      "pricing_category": "verde",
+      "dedicated_trip": true,
+      "operator_count": 2,
+      "equipment": false,
+      "quote_amount": 1000,
+      "quote_status": "accettato",
+      "quote_exit_included": true,
+      "quote_reference": "",
+      "expenses": [
+        {
+          "description": "Spesa extra concordata",
+          "amount": 30
+        }
+      ],
+      "economic_notes": ""
+    },
+    "expected": {
+      "total": 103000,
+      "quotePending": false,
+      "complete": true,
+      "labor": 12000,
+      "exit": 0
+    }
+  },
+  {
+    "name": "preventivo: già sul posto senza ore",
+    "input": {
+      "total_hours": null,
+      "pricing_mode": "preventivo",
+      "pricing_category": "verde",
+      "dedicated_trip": false,
+      "operator_count": 2,
+      "equipment": false,
+      "quote_amount": 1000,
+      "quote_status": "accettato",
+      "quote_exit_included": false,
+      "quote_reference": "",
+      "expenses": [],
+      "economic_notes": ""
+    },
+    "expected": {
+      "total": 100000,
+      "quotePending": false,
+      "complete": true,
+      "exit": 0
+    }
+  },
+  {
+    "name": "preventivo in bozza escluso dal totale riepilogo",
+    "input": {
+      "total_hours": 6,
+      "pricing_mode": "preventivo",
+      "pricing_category": "verde",
+      "dedicated_trip": true,
+      "operator_count": 2,
+      "equipment": false,
+      "quote_amount": 1000,
+      "quote_status": "bozza",
+      "quote_exit_included": false,
+      "quote_reference": "",
+      "expenses": [],
+      "economic_notes": ""
+    },
+    "expected": {
+      "total": 120000,
+      "quotePending": true,
+      "complete": true,
+      "labor": 12000,
+      "exit": 20000
+    }
+  },
+  {
+    "name": "ore mancanti: non diventano zero",
+    "input": {
+      "total_hours": null,
+      "pricing_mode": "tariffa",
+      "pricing_category": "verde",
+      "dedicated_trip": true,
+      "operator_count": 2,
+      "equipment": false,
+      "quote_amount": null,
+      "quote_status": "bozza",
+      "quote_exit_included": false,
+      "quote_reference": "",
+      "expenses": [],
+      "economic_notes": ""
+    },
+    "expected": {
+      "total": null,
+      "quotePending": false,
+      "complete": false
+    }
+  },
+  {
+    "name": "uscita non dichiarata: bozza",
+    "input": {
+      "total_hours": 6,
+      "pricing_mode": "tariffa",
+      "pricing_category": "verde",
+      "dedicated_trip": null,
+      "operator_count": 2,
+      "equipment": false,
+      "quote_amount": null,
+      "quote_status": "bozza",
+      "quote_exit_included": false,
+      "quote_reference": "",
+      "expenses": [],
+      "economic_notes": ""
+    },
+    "expected": {
+      "total": null,
+      "quotePending": false,
+      "complete": false
+    }
+  },
+  {
+    "name": "operatori mancanti: bozza",
+    "input": {
+      "total_hours": 6,
+      "pricing_mode": "tariffa",
+      "pricing_category": "verde",
+      "dedicated_trip": true,
+      "operator_count": null,
+      "equipment": false,
+      "quote_amount": null,
+      "quote_status": "bozza",
+      "quote_exit_included": false,
+      "quote_reference": "",
+      "expenses": [],
+      "economic_notes": ""
+    },
+    "expected": {
+      "total": null,
+      "quotePending": false,
+      "complete": false
+    }
+  },
+  {
+    "name": "pulizie: centesimi esatti",
+    "input": {
+      "total_hours": 2.33,
+      "pricing_mode": "tariffa",
+      "pricing_category": "pulizie",
+      "dedicated_trip": true,
+      "operator_count": 1,
+      "equipment": true,
+      "quote_amount": null,
+      "quote_status": "bozza",
+      "quote_exit_included": false,
+      "quote_reference": "",
+      "expenses": [],
+      "economic_notes": ""
+    },
+    "expected": {
+      "total": 10359,
+      "quotePending": false,
+      "complete": true,
+      "labor": 5359,
+      "exit": 5000
+    }
+  },
+  {
+    "name": "zero ore esplicite con uscita",
+    "input": {
+      "total_hours": 0,
+      "pricing_mode": "tariffa",
+      "pricing_category": "verde",
+      "dedicated_trip": true,
+      "operator_count": 2,
+      "equipment": false,
+      "quote_amount": null,
+      "quote_status": "bozza",
+      "quote_exit_included": false,
+      "quote_reference": "",
+      "expenses": [],
+      "economic_notes": ""
+    },
+    "expected": {
+      "total": 20000,
+      "quotePending": false,
+      "complete": true,
+      "labor": 0,
+      "exit": 20000
+    }
+  },
+  {
+    "name": "decimali spese esatti",
+    "input": {
+      "total_hours": 0,
+      "pricing_mode": "tariffa",
+      "pricing_category": "verde",
+      "dedicated_trip": false,
+      "operator_count": 2,
+      "equipment": false,
+      "quote_amount": null,
+      "quote_status": "bozza",
+      "quote_exit_included": false,
+      "quote_reference": "",
+      "expenses": [
+        {
+          "description": "A",
+          "amount": 0.1
+        },
+        {
+          "description": "B",
+          "amount": 0.2
+        }
+      ],
+      "economic_notes": ""
+    },
+    "expected": {
+      "total": 30,
+      "quotePending": false,
+      "complete": true,
+      "labor": 0,
+      "exit": 0
+    }
+  }
+]

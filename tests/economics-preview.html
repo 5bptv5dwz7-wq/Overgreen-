@@ -7,7 +7,7 @@
     document.body.innerHTML='<h1>Prova economia · dati fittizi</h1><p>Nessun collegamento a Supabase. I dati di questa prova si azzerano ricaricando.</p><button id="phone">Telefono</button> <button id="desktop">Desktop</button><br><iframe title="App di prova" style="display:block;margin-top:16px;width:390px;height:844px;border:1px solid #abc;border-radius:12px" src="economics-preview.html?embedded=1"></iframe>';
     const frame=document.querySelector('iframe');document.getElementById('phone').onclick=()=>frame.style.width='390px';document.getElementById('desktop').onclick=()=>frame.style.width='1080px';return;
   }
-  const root=new URL('../',location.href),response=await fetch(new URL('index.html',root)),source=new DOMParser().parseFromString(await response.text(),'text/html');
+  const root=new URL('../',location.href),response=await fetch(new URL('index.html?v=202.1',root)),source=new DOMParser().parseFromString(await response.text(),'text/html');
   for(const style of source.querySelectorAll('style'))document.head.appendChild(style.cloneNode(true));
   for(const link of source.querySelectorAll('link[rel="stylesheet"]')){const copy=link.cloneNode();copy.href=new URL(link.getAttribute('href'),root);document.head.appendChild(copy)}
   document.body.innerHTML='<main><h1>Economia · prova</h1><p>Target fittizio. Salvataggio solo in memoria.</p><button id="open">Apri extra di prova</button> <button id="book">Riepilogo di prova</button></main>';

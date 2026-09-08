@@ -1,20 +1,22 @@
 /* V201: scoped report viewer and manual hours. */
 #extraHoursDialog{width:min(1120px,96vw);max-width:1120px;max-height:94dvh;padding:0;border:0;border-radius:18px;color:#17251d;background:#fff}
+#extraHoursDialog[open]{display:flex;flex-direction:column;height:94dvh;overflow:hidden}
 #extraHoursDialog::backdrop{background:rgba(9,26,18,.65)}
-#extraHoursDialog .eh-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:18px 20px;border-bottom:1px solid #dce6df}
+#extraHoursDialog .eh-head{position:static;flex:0 0 auto;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:18px 20px;border-bottom:1px solid #dce6df}
 #extraHoursDialog .eh-head h2{margin:0 0 6px;font-size:1.35rem}
 #extraHoursDialog .eh-head p{margin:0;overflow-wrap:anywhere}
-#extraHoursDialog .eh-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(340px,1fr);gap:20px;padding:20px}
-#extraHoursDialog .eh-preview{min-width:0;position:sticky;top:110px;align-self:start;background:white;z-index:2}
+#extraHoursDialog .eh-layout{display:grid;flex:1;min-height:0;overflow:hidden;grid-template-columns:minmax(0,1.2fr) minmax(340px,1fr);gap:20px;padding:20px}
+#extraHoursDialog .eh-preview{display:flex;flex-direction:column;min-width:0;min-height:0;align-self:stretch;background:white}
 #extraHoursDialog .eh-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
 #extraHoursDialog button{min-height:44px;margin:0}
 #extraHoursDialog button:disabled{opacity:.45;cursor:default}
 #extraHoursDialog .eh-toolbar button{padding:8px 12px}
 #extraHoursDialog .eh-page{min-width:80px;text-align:center;font-size:.85rem}
-#extraHoursDialog .eh-viewport{height:54dvh;min-height:220px;overflow:auto;background:#e9eeeb;border:1px solid #d4ded7;border-radius:10px;overscroll-behavior:contain;touch-action:pan-x pan-y pinch-zoom}
+#extraHoursDialog .eh-viewport{flex:1;min-height:0;overflow:auto;background:#e9eeeb;border:1px solid #d4ded7;border-radius:10px;overscroll-behavior:contain;touch-action:pan-x pan-y pinch-zoom}
 #extraHoursDialog .eh-viewport canvas,#extraHoursDialog .eh-viewport img{display:block;max-width:none;margin:10px auto;background:white;box-shadow:0 2px 10px #0002}
 #extraHoursDialog .eh-preview-message{padding:10px 0;min-height:24px;margin:0;font-size:.88rem}
-#extraHoursDialog .eh-form{display:flex;flex-direction:column;gap:14px;align-self:start;padding:0}
+#extraHoursDialog .eh-form{display:flex;flex-direction:column;gap:14px;align-self:stretch;min-height:0;overflow:auto;overscroll-behavior:contain;padding:0 3px 8px 0}
+#extraHoursDialog .eh-form>*{flex:0 0 auto}
 #extraHoursDialog .eh-form label{font-weight:700;display:block}
 #extraHoursDialog input{width:100%;box-sizing:border-box;font-size:1.35rem;margin-top:8px;padding:12px}
 #extraHoursDialog .eh-hint{line-height:1.5;font-size:.9rem;margin:0;color:#496151}
@@ -53,9 +55,7 @@
 @media(max-width:700px){
   #extraHoursDialog{width:96vw;max-height:96dvh}
   #extraHoursDialog .eh-head{padding:14px}
-  #extraHoursDialog .eh-layout{grid-template-columns:minmax(0,1fr);padding:14px;gap:14px}
-  #extraHoursDialog .eh-viewport{height:32dvh;min-height:160px}
-  #extraHoursDialog .eh-preview{top:102px}
+  #extraHoursDialog .eh-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(170px,40%) minmax(0,1fr);padding:14px;gap:14px}
   #extraHoursDialog .eh-toolbar{gap:5px}
   #extraHoursDialog .eh-toolbar button{padding:8px 10px}
   #extraHoursDialog .eh-form{gap:10px}

@@ -23,7 +23,7 @@ Si possono salvare bozze incomplete. I dati mancanti rimangono distinti da zero,
 - Filtri per mese, categoria, modalità e stato del lavoro. Il mese si riferisce alla data di esecuzione, con data richiesta come ripiego.
 - I preventivi non accettati e le voci incomplete o da verificare sono esclusi dal totale complessivo, ma rimangono visibili ed esportabili con il loro stato.
 - Excel economico dedicato, con dettaglio di ore, uscite, spese, preventivo e note. Il totale non attesta l’emissione o il pagamento di una fattura.
-- L’anteprima Eurospin rimane nello stesso pannello, con pagine e zoom. L’Excel Eurospin preesistente rimane disponibile come documento distinto.
+- L’anteprima Eurospin rimane nello stesso pannello, con pagine e zoom. Su telefono il documento e i dati hanno scorrimenti separati per evitare sovrapposizioni dei comandi. L’Excel Eurospin preesistente rimane disponibile come documento distinto.
 
 ## Dati e compatibilità
 

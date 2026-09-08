@@ -2,7 +2,7 @@
   "name": "overgreen-tests",
   "private": true,
   "scripts": {
-    "test": "node flows.cjs && node --test operations.cjs operations-ui.cjs extra-hours.cjs extra-economics.cjs extra-documents.cjs"
+    "test": "node flows.cjs && node --test operations.cjs operations-ui.cjs extra-hours.cjs extra-economics.cjs extra-documents.cjs extra-pdf.cjs"
   },
   "devDependencies": {
     "linkedom": "0.18.12"

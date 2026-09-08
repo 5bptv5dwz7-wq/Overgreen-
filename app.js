@@ -1,4 +1,4 @@
-const APP_VERSION='V203';
+const APP_VERSION='V204';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -4887,12 +4887,36 @@ function detectExtraPdfClient(text){
   if(intesa>=6&&intesa>eurospin)return 'intesa';
   return null;
 }
+function eurospinRequestDetails(text){
+  // Read only a labelled request or the message following its greeting.
+  // Never turn the address/header/invoicing instructions into a work description.
+  const flat=String(text||'').replace(/\s+/g,' ').trim();
+  const footer=/\b(?:la\s+fattura|le\s+fatture|dati\s+(?:di\s+)?fatturazione|modalit[aà]\s+di\s+fatturazione|istruzioni\s+(?:per\s+la\s+)?fatturazione|cordiali\s+saluti|distinti\s+saluti|grazie\s+per\s+la\s+collaborazione|informativa\s+(?:sulla\s+)?privacy|ai\s+sensi\s+del|richiesta\s+intervento\s+(?:n[°º.]?|nr\.?|numero)\s*\d)/i;
+  const clean=value=>String(value||'').split(footer)[0].replace(/\s+(?:grazie|saluti)[.!\s]*$/i,'').replace(/^[\s:;,.-]+|[\s;]+$/g,'').trim();
+  const bodyLabel=/(?:descrizione\s+(?:(?:dell['’]?|della|del)\s*)?(?:intervento|richiesta|lavoro)|dettaglio\s+(?:della\s+)?richiesta|lavori\s+da\s+eseguire|testo\s+(?:della\s+)?richiesta)\s*:/i;
+  const subjectMatch=/\boggetto\s*:\s*/i.exec(flat);
+  const bodyMatch=bodyLabel.exec(flat);
+  let subject=subjectMatch?clean(flat.slice(subjectMatch.index+subjectMatch[0].length).split(bodyLabel)[0].split(/\b(?:buongiorno|buonasera|buon\s+giorno)\b/i)[0]):'';
+  let body=bodyMatch?clean(flat.slice(bodyMatch.index+bodyMatch[0].length)):'';
+  if(!body){
+    const greeting=/\b(?:buongiorno|buonasera|buon\s+giorno)\b[\s,:;.]*|\b(?:con\s+la\s+presente\s+)?(?:si\s+richiede|vi\s+chiediamo|si\s+chiede|richiediamo)\b/i.exec(flat);
+    if(greeting)body=clean(flat.slice(greeting.index));
+  }
+  body=body.replace(/^(?:buongiorno|buonasera|buon\s+giorno)[\s,:;.!]*/i,'');
+  const description=[subject,body].filter((part,i,all)=>part&&all.indexOf(part)===i).join('\n')||null;
+  const basis=(subject||body).replace(/^(?:con\s+la\s+presente\s+)?(?:si\s+richiede|vi\s+chiediamo|si\s+chiede|richiediamo)\s+(?:di\s+)?/i,'').trim();
+  let title=basis.split(/(?<=[.!?])\s+/)[0]||null;
+  if(title&&title.length>120){const short=title.slice(0,117);title=short.slice(0,short.lastIndexOf(' ')>65?short.lastIndexOf(' '):117)+'…';}
+  const green=/\b(?:sfalcio|erba|verde|potatur\w*|siep\w*|alber\w*|giardin\w*)\b/i.test(description||'');
+  const cleaning=/\b(?:pulizi\w*|lavagg\w*|igien\w*|sporco|rifiut\w*)\b/i.test(description||'');
+  return {title,description,category:green!==cleaning?(green?'verde':'pulizie'):null};
+}
 function parseEurospinPdf(text){
   const targetMatch=text.match(/Richiesta\s+intervento\s+(?:n[°º.]?|nr\.?|numero)\s*[:\-]?\s*(\d{4,12})/i);
   const dateMatch=text.match(/Richiesta\s+intervento\s+(?:n[°º.]?|nr\.?|numero)\s*[:\-]?\s*\d{4,12}\s+del\s+(\d{1,2}\s*[./-]\s*\d{1,2}\s*[./-]\s*\d{4})/i);
   const pvMatch=text.match(/Punto\s+Vendita\s*:\s*SPESA\s+INTELLIGENTE\s+S\.p\.A\.\s+(.+?)(?=\s+Tel\.|\s+Fax\b|\s+buongiorno\b|\s+La\s+fattura\b)/i);
   const pvRaw=String(pvMatch?.[1]||'').replace(/\s+/g,' ').trim();
-  return {client:'eurospin',number:targetMatch?.[1]||null,requestDate:pdfDateToIso(dateMatch?.[1]||''),locationText:pvRaw||null,title:null,description:null,category:null,text};
+  return {client:'eurospin',number:targetMatch?.[1]||null,requestDate:pdfDateToIso(dateMatch?.[1]||''),locationText:pvRaw||null,...eurospinRequestDetails(text),text};
 }
 function parseIntesaPdf(text){
   // Il ticket può essere stampato con spazi tra le cifre: "1 7 8 4 3 3 1".
@@ -4992,13 +5016,17 @@ $('openDuplicateTargetExtra')?.addEventListener('click',()=>{
 });
 $('extraTargetNumber')?.addEventListener('input',checkDuplicateTargetField);
 
+let extraPdfReadVersion=0;
 async function autoFillExtraFromPdf(file){
+  const readVersion=++extraPdfReadVersion;
+  const initialTitle=$('extraTitle').value,initialDescription=$('extraDescription').value;
   const status=$('extraPdfAutoReadStatus');
   if(!status)return;
   status.classList.remove('hidden');
   status.textContent='🔎 Riconosco il documento…';
   try{
     const text=await readPdfText(file);
+    if(readVersion!==extraPdfReadVersion||$('extraPdf').files?.[0]!==file)return;
     const found=parseKnownExtraPdf(text);
     if(!found.client){
       status.textContent='⚠️ Documento non riconosciuto con sicurezza. Seleziona cliente e compila i dati manualmente.';
@@ -5050,21 +5078,23 @@ async function autoFillExtraFromPdf(file){
       if(selectedStore)filled.push(`${effectiveClient==='intesa'?'filiale':'PV'} ${selectedStore.nome}`);
     }
 
-    // Intesa contiene normalmente anche titolo e dettaglio della richiesta.
-    if(effectiveClient==='intesa'){
-      if(found.title){
+    // Entrambi i clienti: compila solo i dati effettivamente letti nel PDF.
+    if(effectiveClient==='intesa'||effectiveClient==='eurospin'){
+      if(found.title&&$('extraTitle').value===initialTitle){
         $('extraTitle').value=found.title;
         filled.push('titolo');
       }
-      if(found.description)$('extraDescription').value=found.description;
+      if(found.description&&$('extraDescription').value===initialDescription){$('extraDescription').value=found.description;filled.push('descrizione');}
       if(found.category)$('extraCategory').value=found.category;
     }
 
     status.textContent=`✓ ${filled.join(' · ')}`;
+    if(!found.title||!found.description)status.textContent+=' · controlla titolo e descrizione: testo non riconosciuto completamente';
     if(!matchedStore&&!retro&&found.locationText){
       status.textContent+=` · ${effectiveClient==='intesa'?'filiale':'PV'} letto dal PDF ma non trovato con certezza nell'anagrafica`;
     }
   }catch(err){
+    if(readVersion!==extraPdfReadVersion||$('extraPdf').files?.[0]!==file)return;
     console.warn('Lettura automatica PDF non riuscita',err);
     status.textContent='⚠️ Non riesco a leggere automaticamente questo PDF. Puoi compilare i dati manualmente.';
   }
@@ -5072,7 +5102,7 @@ async function autoFillExtraFromPdf(file){
 $('extraPdf')?.addEventListener('change',()=>{
   const file=$('extraPdf').files?.[0];
   if(file)autoFillExtraFromPdf(file);
-  else $('extraPdfAutoReadStatus')?.classList.add('hidden');
+  else {extraPdfReadVersion++;$('extraPdfAutoReadStatus')?.classList.add('hidden');}
 });
 
 function workItemsForExtra(extraId){return extraWorkItems.filter(w=>w.extra_id===extraId).sort((a,b)=>(Number(a.posizione)||0)-(Number(b.posizione)||0))}
@@ -5543,7 +5573,7 @@ sb.auth.onAuthStateChange(async(event,s)=>{
   }
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=203').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=204').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

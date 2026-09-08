@@ -1,4 +1,4 @@
-const APP_VERSION='V202';
+const APP_VERSION='V203';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -5273,251 +5273,21 @@ $('editExtraClosureForm').onsubmit=async e=>{
 };
 
 
-let scannedExtraDocuments={eurospin:null,overgreen:null};
-let documentScannerState={target:null,file:null,bitmap:null,rotation:0,mode:'document',corners:null,autoDetected:false,dragIndex:-1};
-
-function scannerStatusId(target){return target==='eurospin'?'scanEurospinStatus':'scanOvergreenStatus'}
-function updateScannedExtraDocumentStatus(target){const el=$(scannerStatusId(target));if(!el)return;const f=scannedExtraDocuments[target];const direct=$(target==='eurospin'?'reportEurospin':'reportOvergreen')?.files?.[0];if(f){el.textContent='✓ Scansione pronta';el.classList.add('scan-ready')}else if(direct){el.textContent=`✓ ${direct.name||'File selezionato'}`;el.classList.add('scan-ready')}else{el.textContent='Nessun documento';el.classList.remove('scan-ready')}}
-function resetScannedExtraDocuments(){scannedExtraDocuments={eurospin:null,overgreen:null};updateScannedExtraDocumentStatus('eurospin');updateScannedExtraDocumentStatus('overgreen')}
-
-function defaultDocumentCorners(){return [{x:.04,y:.04},{x:.96,y:.04},{x:.96,y:.96},{x:.04,y:.96}]}
-function orderDocumentCorners(points){
-  if(!points||points.length!==4)return defaultDocumentCorners();
-  const p=points.map(x=>({x:Number(x.x),y:Number(x.y)}));
-  const sum=p.map(x=>x.x+x.y),diff=p.map(x=>x.x-x.y);
-  const pick=(arr,fn)=>arr.indexOf(fn(...arr));
-  const tl=p[pick(sum,Math.min)],br=p[pick(sum,Math.max)],tr=p[pick(diff,Math.max)],bl=p[pick(diff,Math.min)];
-  return [tl,tr,br,bl].map(x=>({x:Math.max(0,Math.min(1,x.x)),y:Math.max(0,Math.min(1,x.y))}));
-}
-function polygonAreaNormalized(c){
-  if(!c?.length)return 0;let a=0;
-  for(let i=0;i<c.length;i++){const j=(i+1)%c.length;a+=c[i].x*c[j].y-c[j].x*c[i].y}
-  return Math.abs(a/2)
-}
-function openCvReady(){
-  return !!(window.cv&&cv.Mat&&cv.imread&&cv.findContours);
-}
-async function waitForOpenCv(timeout=4500){
-  if(openCvReady())return true;
-  const started=Date.now();
-  while(Date.now()-started<timeout){
-    await new Promise(r=>setTimeout(r,120));
-    if(openCvReady())return true;
-  }
-  return false;
-}
-function scannerSourceCanvas(maxSide=1500){
-  const b=documentScannerState.bitmap;if(!b)return null;
-  const c=document.createElement('canvas'),scale=Math.min(1,maxSide/Math.max(b.width,b.height));
-  c.width=Math.max(1,Math.round(b.width*scale));c.height=Math.max(1,Math.round(b.height*scale));
-  c.getContext('2d',{alpha:false}).drawImage(b,0,0,c.width,c.height);
-  return c;
-}
-async function detectDocumentCornersOpenCv(){
-  const status=$('documentScannerDetectionStatus');
-  if(status)status.textContent='Analizzo bordi e prospettiva…';
-  const ready=await waitForOpenCv();
-  if(!ready)throw new Error('OpenCV non disponibile: puoi comunque posizionare manualmente i 4 angoli.');
-  const source=scannerSourceCanvas(1300);
-  if(!source)throw new Error('Foto non disponibile.');
-  let src,gray,blur,edges,closed,contours,hierarchy,kernel;
-  try{
-    src=cv.imread(source);
-    gray=new cv.Mat();blur=new cv.Mat();edges=new cv.Mat();closed=new cv.Mat();
-    cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
-    cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0,cv.BORDER_DEFAULT);
-    cv.Canny(blur,edges,55,165);
-    kernel=cv.Mat.ones(5,5,cv.CV_8U);
-    cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,kernel,new cv.Point(-1,-1),2);
-    contours=new cv.MatVector();hierarchy=new cv.Mat();
-    cv.findContours(closed,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE);
-
-    const minArea=source.width*source.height*.13;
-    let best=null,bestScore=0;
-    for(let i=0;i<contours.size();i++){
-      const cnt=contours.get(i),area=Math.abs(cv.contourArea(cnt));
-      if(area<minArea){cnt.delete();continue}
-      const peri=cv.arcLength(cnt,true),approx=new cv.Mat();
-      cv.approxPolyDP(cnt,approx,.018*peri,true);
-      if(approx.rows===4&&cv.isContourConvex(approx)){
-        const pts=[];
-        for(let r=0;r<4;r++)pts.push({x:approx.intPtr(r,0)[0]/source.width,y:approx.intPtr(r,0)[1]/source.height});
-        const ordered=orderDocumentCorners(pts),normArea=polygonAreaNormalized(ordered);
-        const edgeBonus=ordered.reduce((s,p)=>s+(p.x<.12||p.x>.88?1:0)+(p.y<.12||p.y>.88?1:0),0)*.01;
-        const score=normArea+edgeBonus;
-        if(normArea>.12&&score>bestScore){bestScore=score;best=ordered}
-      }
-      approx.delete();cnt.delete();
-    }
-    if(!best)throw new Error('Non ho trovato un contorno abbastanza affidabile.');
-    return best;
-  }finally{
-    [src,gray,blur,edges,closed,contours,hierarchy,kernel].forEach(x=>{try{x?.delete?.()}catch{}})
-  }
-}
-function scannerDisplayGeometry(){
-  const c=$('documentScannerCanvas'),editor=$('documentScannerEditor');
-  if(!c||!editor)return null;
-  const cr=c.getBoundingClientRect(),er=editor.getBoundingClientRect();
-  return {canvas:c,editor,left:cr.left-er.left,top:cr.top-er.top,w:cr.width,h:cr.height};
-}
-function drawScannerPolygon(ctx,w,h,corners){
-  if(!corners?.length)return;
-  ctx.save();ctx.beginPath();ctx.moveTo(corners[0].x*w,corners[0].y*h);
-  for(let i=1;i<4;i++)ctx.lineTo(corners[i].x*w,corners[i].y*h);
-  ctx.closePath();ctx.lineWidth=Math.max(3,w/260);ctx.strokeStyle='rgba(25,190,93,.95)';ctx.stroke();
-  ctx.fillStyle='rgba(22,164,76,.08)';ctx.fill();ctx.restore();
-}
-function renderScannerHandles(){
-  const root=$('documentScannerHandles'),g=scannerDisplayGeometry(),corners=documentScannerState.corners;
-  if(!root||!g||!corners)return;
-  root.innerHTML='';
-  corners.forEach((p,index)=>{
-    const h=document.createElement('div');h.className='scanner-handle';h.dataset.corner=index;
-    h.style.left=`${g.left+p.x*g.w}px`;h.style.top=`${g.top+p.y*g.h}px`;
-    const move=e=>{
-      e.preventDefault();
-      const rect=g.editor.getBoundingClientRect();
-      const x=(e.clientX-rect.left-g.left)/g.w,y=(e.clientY-rect.top-g.top)/g.h;
-      documentScannerState.corners[index]={x:Math.max(0,Math.min(1,x)),y:Math.max(0,Math.min(1,y))};
-      documentScannerState.autoDetected=false;
-      renderDocumentScannerPreview(false);
-      $('documentScannerDetectionStatus').textContent='Angoli corretti manualmente';
-    };
-    h.addEventListener('pointerdown',e=>{h.setPointerCapture?.(e.pointerId);move(e)});
-    h.addEventListener('pointermove',e=>{if(h.hasPointerCapture?.(e.pointerId))move(e)});
-    h.addEventListener('pointerup',e=>{try{h.releasePointerCapture?.(e.pointerId)}catch{}});
-    root.appendChild(h)
-  })
-}
-function applyDocumentLook(ctx,w,h,mode){
-  if(mode==='original')return;
-  const img=ctx.getImageData(0,0,w,h),d=img.data;
-  for(let i=0;i<d.length;i+=4){
-    let r=d[i],g=d[i+1],b=d[i+2];
-    if(mode==='bw'){
-      const y=.299*r+.587*g+.114*b;
-      const v=y>176?255:y<78?12:Math.max(0,Math.min(255,(y-128)*1.72+148));r=g=b=v
-    }else{
-      const avg=(r+g+b)/3;r=avg+(r-avg)*.38;g=avg+(g-avg)*.38;b=avg+(b-avg)*.38;
-      r=(r-128)*1.17+139;g=(g-128)*1.17+139;b=(b-128)*1.17+139;
-      r=Math.max(0,Math.min(255,r));g=Math.max(0,Math.min(255,g));b=Math.max(0,Math.min(255,b))
-    }
-    d[i]=r;d[i+1]=g;d[i+2]=b
-  }
-  ctx.putImageData(img,0,0)
-}
-function renderDocumentScannerPreview(){
-  const st=documentScannerState,b=st.bitmap,c=$('documentScannerCanvas');
-  if(!b||!c)return null;
-  const maxSide=1000,scale=Math.min(1,maxSide/Math.max(b.width,b.height));
-  c.width=Math.max(1,Math.round(b.width*scale));c.height=Math.max(1,Math.round(b.height*scale));
-  const ctx=c.getContext('2d',{alpha:false,willReadFrequently:true});
-  ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(b,0,0,c.width,c.height);
-  drawScannerPolygon(ctx,c.width,c.height,st.corners||defaultDocumentCorners());
-  requestAnimationFrame(renderScannerHandles);
-  return c
-}
-function distancePx(a,b,w,h){return Math.hypot((a.x-b.x)*w,(a.y-b.y)*h)}
-async function renderPerspectiveDocument(fullQuality=true){
-  const st=documentScannerState,b=st.bitmap,corners=orderDocumentCorners(st.corners||defaultDocumentCorners());
-  if(!b)return null;
-  const source=scannerSourceCanvas(fullQuality?2600:1400);if(!source)return null;
-  const sw=source.width,sh=source.height;
-  const p=corners.map(x=>({x:x.x*sw,y:x.y*sh}));
-  let outW=Math.round(Math.max(distancePx(corners[0],corners[1],sw,sh),distancePx(corners[3],corners[2],sw,sh)));
-  let outH=Math.round(Math.max(distancePx(corners[0],corners[3],sw,sh),distancePx(corners[1],corners[2],sw,sh)));
-  const maxOut=fullQuality?2300:1200,scale=Math.min(1,maxOut/Math.max(outW,outH));outW=Math.max(80,Math.round(outW*scale));outH=Math.max(80,Math.round(outH*scale));
-
-  const ready=await waitForOpenCv(2500);
-  let out=document.createElement('canvas');out.width=outW;out.height=outH;
-
-  if(ready){
-    let src,dst,srcTri,dstTri,M;
-    try{
-      src=cv.imread(source);dst=new cv.Mat();
-      srcTri=cv.matFromArray(4,1,cv.CV_32FC2,[p[0].x,p[0].y,p[1].x,p[1].y,p[2].x,p[2].y,p[3].x,p[3].y]);
-      dstTri=cv.matFromArray(4,1,cv.CV_32FC2,[0,0,outW-1,0,outW-1,outH-1,0,outH-1]);
-      M=cv.getPerspectiveTransform(srcTri,dstTri);
-      cv.warpPerspective(src,dst,M,new cv.Size(outW,outH),cv.INTER_CUBIC,cv.BORDER_REPLICATE,new cv.Scalar());
-      cv.imshow(out,dst);
-    }finally{[src,dst,srcTri,dstTri,M].forEach(x=>{try{x?.delete?.()}catch{}})}
-  }else{
-    // Fallback: rectangular crop based on manual corner bounds; still usable if CDN is unavailable.
-    const minX=Math.min(...p.map(x=>x.x)),maxX=Math.max(...p.map(x=>x.x)),minY=Math.min(...p.map(x=>x.y)),maxY=Math.max(...p.map(x=>x.y));
-    out.getContext('2d').drawImage(source,minX,minY,maxX-minX,maxY-minY,0,0,outW,outH);
-  }
-
-  const rot=((st.rotation%360)+360)%360;
-  if(rot){
-    const turned=rot===90||rot===270,rc=document.createElement('canvas');rc.width=turned?out.height:out.width;rc.height=turned?out.width:out.height;
-    const rctx=rc.getContext('2d',{alpha:false});rctx.fillStyle='#fff';rctx.fillRect(0,0,rc.width,rc.height);rctx.save();
-    if(rot===90){rctx.translate(rc.width,0);rctx.rotate(Math.PI/2)}else if(rot===180){rctx.translate(rc.width,rc.height);rctx.rotate(Math.PI)}else{rctx.translate(0,rc.height);rctx.rotate(-Math.PI/2)}
-    rctx.drawImage(out,0,0);rctx.restore();out=rc
-  }
-  applyDocumentLook(out.getContext('2d',{willReadFrequently:true}),out.width,out.height,st.mode);
-  return out
-}
-async function autoDetectDocumentCorners(){
-  const btn=$('documentScannerDetect');if(btn){btn.disabled=true;btn.textContent='⌛ Analizzo…'}
-  try{
-    const corners=await detectDocumentCornersOpenCv();
-    documentScannerState.corners=orderDocumentCorners(corners);documentScannerState.autoDetected=true;
-    $('documentScannerDetectionStatus').textContent='✓ Foglio rilevato automaticamente · trascina gli angoli se serve';
-    $('documentScannerEditor')?.classList.add('scanner-detected');renderDocumentScannerPreview(false)
-  }catch(err){
-    documentScannerState.corners=documentScannerState.corners||defaultDocumentCorners();
-    documentScannerState.autoDetected=false;
-    $('documentScannerDetectionStatus').textContent='⚠️ '+(err?.message||'Rilevamento non riuscito')+' Posiziona i 4 angoli a mano.';
-    renderDocumentScannerPreview(false)
-  }finally{if(btn){btn.disabled=false;btn.textContent='⌗ Rileva bordi'}}
-}
-async function openDocumentScanner(target,file){
-  if(!file?.type?.startsWith('image/'))return;
-  try{
-    documentScannerState.bitmap?.close?.();const bitmap=await createImageBitmap(file);
-    documentScannerState={target,file,bitmap,rotation:0,mode:'document',corners:defaultDocumentCorners(),autoDetected:false,dragIndex:-1};
-    $('documentScannerTitle').textContent=target==='eurospin'?'Rapportino Eurospin':'File Overgreen';
-    $('documentScannerMode').textContent='◐ Documento';$('documentScannerDetectionStatus').textContent='Analizzo automaticamente i bordi…';
-    $('documentScannerEditor')?.classList.remove('scanner-detected');
-    renderDocumentScannerPreview(false);openDialog('documentScannerDialog');
-    setTimeout(()=>autoDetectDocumentCorners(),120)
-  }catch(err){alert('Impossibile aprire la foto: '+(err?.message||err))}
-}
-function closeDocumentScanner(){
-  try{documentScannerState.bitmap?.close?.()}catch{}
-  documentScannerState={target:null,file:null,bitmap:null,rotation:0,mode:'document',corners:null,autoDetected:false,dragIndex:-1};
-  $('documentScannerHandles')?.replaceChildren();$('documentScannerDialog')?.close()
-}
-async function useScannedDocument(){
-  const btn=$('documentScannerUse'),old=btn.textContent;btn.disabled=true;btn.textContent='Raddrizzo documento…';
-  try{
-    const st=documentScannerState;if(!st.target||!st.bitmap)throw new Error('Scansione non disponibile.');
-    const c=await renderPerspectiveDocument(true);if(!c)throw new Error('Impossibile creare la scansione.');
-    const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error('Conversione immagine non riuscita')),'image/jpeg',.9));
-    const label=st.target==='eurospin'?'eurospin':'overgreen',file=new File([blob],`${label}-scansione-${Date.now()}.jpg`,{type:'image/jpeg',lastModified:Date.now()});
-    scannedExtraDocuments[st.target]=file;const input=$(st.target==='eurospin'?'reportEurospin':'reportOvergreen');if(input)input.value='';
-    updateScannedExtraDocumentStatus(st.target);closeDocumentScanner();toast('✓ Documento raddrizzato e acquisito')
-  }catch(err){alert(err.message||String(err))}finally{btn.disabled=false;btn.textContent=old}
-}
-
 function openExtraClosureDialog(extra,fromOrdinary=false){
   if(!extra)return;
   $('closeExtraForm').reset();
-  resetScannedExtraDocuments();
   closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
   $('closeExtraId').value=extra.id;
+  window.ExtraClosureDocuments.reset();
   $('closeExtraForm').dataset.profile=closureProfile(extra);
   const euro=closureProfile(extra)==='eurospin',intesa=closureProfile(extra)==='intesa';
   $('closeEurospinFields').classList.toggle('hidden',!euro);
   $('closeIntesaFields').classList.toggle('hidden',!intesa);
+  $('closeExtraPhotoRequirement').textContent=intesa?'(almeno una foto)':'(facoltative)';
   // I requisiti della chiusura definitiva vengono verificati via JS: nel parziale
   // il file Eurospin non deve essere obbligatorio né caricato.
   $('reportEurospin').required=false;$('reportOvergreen').required=false;$('closeExtraTicket').required=false;
   $('closeExtraNotes').value=extra.note_lorenzo||'';
-  const existingOvergreen=attachments.find(a=>a.extra_id===extra.id&&a.tipo==='rapportino_overgreen');
-  const overInfo=$('closeExtraExistingOvergreen');
-  if(overInfo){overInfo.classList.toggle('hidden',!existingOvergreen);overInfo.textContent=existingOvergreen?`✓ File Overgreen già presente: ${existingOvergreen.nome_file||'documento caricato'}`:''}
   const partialStatus=$('closeExtraPartialStatus');
   if(partialStatus){const isPartial=extra.stato==='da_integrare';partialStatus.classList.toggle('hidden',!isPartial);partialStatus.innerHTML=isPartial?`<strong>↪ Extra già salvato come parziale</strong><p>Puoi aggiungere altre foto o un nuovo file Overgreen e lasciarlo ancora aperto, oppure eseguire ora la chiusura definitiva.</p>`:''}
   renderStructuredClose(extra);
@@ -5526,6 +5296,7 @@ function openExtraClosureDialog(extra,fromOrdinary=false){
   const partialHelp=$('closeExtraPartialBtn')?.nextElementSibling;
   if(partialHelp)partialHelp.classList.toggle('hidden',structured);
   const st=stores.find(s=>s.id===extra.store_id);
+  $('closeExtraContext').textContent=[st?.nome||extra.nome_esterno,extra.numero_target?'Target '+extra.numero_target:null,extra.titolo].filter(Boolean).join(' · ');
   const title=$('closeExtraTitle');
   if(title)title.textContent=fromOrdinary?`Completa extra · ${extra.titolo}`:(extra.stato==='da_integrare'?'Continua extra':'Chiudi extra');
   const info=$('closeExtraLinkedInfo');
@@ -5570,17 +5341,11 @@ function renderCloseExtraPhotoSelection(){
 $('closeExtraPhotos').onchange=e=>{addCloseExtraPhotos(e.target.files);e.target.value=''};
 $('closeExtraCameraPhoto').onchange=e=>{addCloseExtraPhotos(e.target.files);e.target.value=''};
 $('clearCloseExtraPhotos').onclick=()=>{closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection()};
-$('scanEurospinCamera')?.addEventListener('change',e=>{const f=e.target.files?.[0];e.target.value='';if(f)openDocumentScanner('eurospin',f)});
-$('scanOvergreenCamera')?.addEventListener('change',e=>{const f=e.target.files?.[0];e.target.value='';if(f)openDocumentScanner('overgreen',f)});
-$('reportEurospin')?.addEventListener('change',()=>{scannedExtraDocuments.eurospin=null;updateScannedExtraDocumentStatus('eurospin')});
-$('reportOvergreen')?.addEventListener('change',()=>{scannedExtraDocuments.overgreen=null;updateScannedExtraDocumentStatus('overgreen')});
-$('documentScannerClose')?.addEventListener('click',closeDocumentScanner);
-$('documentScannerRetake')?.addEventListener('click',()=>{const target=documentScannerState.target;closeDocumentScanner();setTimeout(()=>$(target==='eurospin'?'scanEurospinCamera':'scanOvergreenCamera')?.click(),80)});
-
-
-$('documentScannerMode')?.addEventListener('click',e=>{const modes=['document','bw','original'],i=modes.indexOf(documentScannerState.mode);documentScannerState.mode=modes[(i+1)%modes.length];e.currentTarget.textContent=documentScannerState.mode==='document'?'◐ Documento':documentScannerState.mode==='bw'?'◑ B/N forte':'◯ Originale';});
-$('documentScannerDetect')?.addEventListener('click',autoDetectDocumentCorners);$('documentScannerFull')?.addEventListener('click',()=>{documentScannerState.corners=defaultDocumentCorners();documentScannerState.autoDetected=false;$('documentScannerDetectionStatus').textContent='Foto intera selezionata · puoi comunque trascinare gli angoli';renderDocumentScannerPreview(false)});$('documentScannerRotate')?.addEventListener('click',()=>{documentScannerState.rotation=(documentScannerState.rotation+90)%360;toast('Rotazione applicata al documento finale')});$('documentScannerUse')?.addEventListener('click',useScannedDocument);
-$('documentScannerDialog')?.addEventListener('cancel',e=>{e.preventDefault();closeDocumentScanner()});
+window.ExtraClosureDocuments.init({
+  existing:target=>attachments.find(a=>a.extra_id===$('closeExtraId').value&&a.tipo==='rapportino_'+target),
+  openExisting:openAttachment,
+  error:message=>alert(message)
+});
 
 let extraSaveBusy=false;
 const extraUploadKeys=new WeakMap();
@@ -5604,6 +5369,7 @@ async function saveExtraUpload(extraId,tipo,originalFile,uploadedPaths){
   return added;
 }
 function setExtraSaveBusy(busy){
+  window.ExtraClosureDocuments.setBusy(busy);
   for(const id of ['closeExtraFinalBtn','closeExtraPartialBtn'])if($(id))$(id).disabled=busy;
 }
 async function cleanupReplacedAttachments(rows){
@@ -5626,8 +5392,8 @@ async function saveExtraPartial(){
     const id=$('closeExtraId').value,extra=extras.find(x=>x.id===id),profileMode=$('closeExtraForm').dataset.profile||'eurospin';
     if(!extra)throw new Error('Extra non trovato. Aggiorna i dati e riprova.');
     const notes=$('closeExtraNotes').value.trim()||null,photos=[...closeExtraPhotoFiles];
-    const overgreenFile=profileMode==='eurospin'?(scannedExtraDocuments.overgreen||$('reportOvergreen').files[0]):null;
-    if(profileMode==='eurospin'&&(scannedExtraDocuments.eurospin||$('reportEurospin').files[0]))throw new Error('Nel parziale non caricare il rapportino Eurospin: va inserito solo alla chiusura definitiva.');
+    const overgreenFile=profileMode==='eurospin'?window.ExtraClosureDocuments.get('overgreen'):null;
+    if(profileMode==='eurospin'&&window.ExtraClosureDocuments.get('eurospin'))throw new Error('Nel parziale non caricare il rapportino Eurospin: va inserito solo alla chiusura definitiva.');
 
     if(overgreenFile){
       btn.textContent='Carico file Overgreen…';
@@ -5644,7 +5410,7 @@ async function saveExtraPartial(){
     if(error)throw error;
     // Un parziale non è una chiusura: nessuna falsa notifica di completamento.
     await cleanupReplacedAttachments(replacedAttachments);
-    $('closeExtraDialog').close();$('closeExtraForm').reset();resetScannedExtraDocuments();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
+    $('closeExtraDialog').close();$('closeExtraForm').reset();window.ExtraClosureDocuments.reset();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
     toast(`Parziale salvato · extra ancora aperto${photos.length?' · '+photos.length+' foto':''}${overgreenFile?' · file Overgreen':''}`);
     await refreshAfterSave();
     if(combinedExtraClosureQueue.length)setTimeout(()=>openNextCombinedExtraClosure(),250);
@@ -5676,8 +5442,8 @@ $('closeExtraForm').onsubmit=async e=>{
     const photos=[...closeExtraPhotoFiles];
     const existingEurospin=attachments.some(a=>a.extra_id===id&&a.tipo==='rapportino_eurospin');
     const existingOvergreen=attachments.some(a=>a.extra_id===id&&a.tipo==='rapportino_overgreen');
-    const newEurospin=profileMode==='eurospin'?(scannedExtraDocuments.eurospin||$('reportEurospin').files[0]):null;
-    const newOvergreen=profileMode==='eurospin'?(scannedExtraDocuments.overgreen||$('reportOvergreen').files[0]):null;
+    const newEurospin=profileMode==='eurospin'?window.ExtraClosureDocuments.get('eurospin'):null;
+    const newOvergreen=profileMode==='eurospin'?window.ExtraClosureDocuments.get('overgreen'):null;
     const reports=profileMode==='eurospin'?[['rapportino_eurospin',newEurospin],['rapportino_overgreen',newOvergreen]].filter(([,file])=>!!file):profileMode==='intesa'&&$('closeExtraGenericDoc').files[0]?[['verbale_cliente',$('closeExtraGenericDoc').files[0]]]:[];
     if(profileMode==='eurospin'&&!newEurospin&&!existingEurospin)throw new Error('Per la chiusura definitiva serve il rapportino Eurospin.');
     if(profileMode==='eurospin'&&!newOvergreen&&!existingOvergreen)throw new Error('Per la chiusura definitiva serve anche il file Overgreen. Se lo hai già caricato in un parziale non devi ricaricarlo.');
@@ -5704,7 +5470,7 @@ $('closeExtraForm').onsubmit=async e=>{
     if(error)throw error;
     await cleanupReplacedAttachments(replacedAttachments);
     void notifyAdminClosure('extra',id,photos.length);
-    $('closeExtraDialog').close();$('closeExtraForm').reset();resetScannedExtraDocuments();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
+    $('closeExtraDialog').close();$('closeExtraForm').reset();window.ExtraClosureDocuments.reset();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
     toast(`Extra inviato a Lorenzo${photos.length?' · '+photos.length+' foto':''}`);
     await refreshAfterSave();
     if(combinedExtraClosureQueue.length)setTimeout(()=>openNextCombinedExtraClosure(),250);
@@ -5777,7 +5543,7 @@ sb.auth.onAuthStateChange(async(event,s)=>{
   }
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=202').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=203').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

@@ -1,0 +1,28 @@
+/* V203: compact document upload cards. */
+#closeExtraDialog{width:min(620px,96vw);max-height:94dvh;overflow:auto}
+#closeExtraForm{min-width:0}
+#closeExtraContext{margin:0 0 12px;line-height:1.4;overflow-wrap:anywhere}
+.document-acquire-block{border:1px solid #d9e5dc;border-radius:14px;padding:12px;margin:10px 0;background:#fbfdfc;min-width:0}
+.document-acquire-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px}
+.document-acquire-head>div{display:grid;gap:3px;min-width:0}
+.document-acquire-head small{color:#607369;font-size:.76rem;font-weight:400}
+.document-acquire-head>span{font-size:.74rem;color:#6b746f;flex-shrink:0}
+.document-ready{color:#17643b!important;font-weight:700}
+.document-acquire-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.document-acquire-actions .file-label{position:relative;display:flex;align-items:center;justify-content:center;text-align:center;margin:0;padding:12px 5px!important;min-height:44px;border:1px solid #c7d9cc;border-radius:10px;background:#edf6ef;color:#155333;cursor:pointer;font-weight:700;font-size:.9rem}
+.document-acquire-actions input[type=file]{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;margin:0;padding:0}
+.document-acquire-actions .file-label:focus-within{outline:2px solid #17643b;outline-offset:2px}
+.document-busy .document-acquire-actions{opacity:.55}
+.document-preview{margin-top:10px;display:grid;gap:8px;min-width:0}
+.document-preview.hidden{display:none}
+.document-file-name{overflow-wrap:anywhere;font-size:.8rem;color:#52665a}
+.document-preview img{display:block;width:100%;height:140px;object-fit:contain;border-radius:8px;background:#edf0ed}
+.document-preview small{color:#607369}
+.document-preview-actions{display:flex;gap:10px;align-items:center}
+.document-preview-actions a,.document-preview-actions button{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:8px 16px;font-size:.85rem;border-radius:9px}
+.document-preview-actions a{color:#175735;background:#eaf3ec;text-decoration:none;font-weight:700}
+#closeExtraForm textarea{min-height:72px}
+#closeExtraForm .ordinary-photo-picker{border-top:1px solid #d9e5dc;margin-top:14px;padding-top:12px}
+#closeExtraForm .ordinary-photo-picker>.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+#closeExtraForm .ordinary-photo-picker .file-help{display:none}
+@media(max-width:380px){.document-acquire-head{flex-wrap:wrap;gap:4px}.document-acquire-actions .file-label{font-size:.8rem}}

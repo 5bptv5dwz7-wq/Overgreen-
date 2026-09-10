@@ -1,4 +1,4 @@
-const APP_VERSION='V205';
+const APP_VERSION='V206';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -107,184 +107,7 @@ async function flushReadyClosureNotifications(interventionId=null){
   }
 }
 
-// ---- V112-37 · Coda persistente + upload reale Supabase ----
-const UPLOAD_DB='overgreen-upload-queue-v1', UPLOAD_STORE='jobs';
-const PHOTO_RECOVERY_DB='overgreen-photo-recovery-v1', PHOTO_RECOVERY_STORE='photos', PHOTO_RECOVERY_TTL=7*24*60*60*1000;
-function openPhotoRecoveryDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(PHOTO_RECOVERY_DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(PHOTO_RECOVERY_STORE))r.result.createObjectStore(PHOTO_RECOVERY_STORE,{keyPath:'id'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
-async function getPhotoRecoveryRows(){const db=await openPhotoRecoveryDb();return new Promise((resolve,reject)=>{const tx=db.transaction(PHOTO_RECOVERY_STORE,'readonly'),r=tx.objectStore(PHOTO_RECOVERY_STORE).getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error)})}
-async function putPhotoRecoveryRow(row){const db=await openPhotoRecoveryDb();return new Promise((resolve,reject)=>{const tx=db.transaction(PHOTO_RECOVERY_STORE,'readwrite');tx.objectStore(PHOTO_RECOVERY_STORE).put(row);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
-async function deletePhotoRecoveryRow(id){const db=await openPhotoRecoveryDb();return new Promise((resolve,reject)=>{const tx=db.transaction(PHOTO_RECOVERY_STORE,'readwrite');tx.objectStore(PHOTO_RECOVERY_STORE).delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
-async function cleanupPhotoRecoveryRows(){try{const rows=await getPhotoRecoveryRows(),cut=Date.now()-PHOTO_RECOVERY_TTL;for(const r of rows)if((r.savedAt||0)<cut)await deletePhotoRecoveryRow(r.id)}catch{}}
-
-let uploadWorkerRunning=false,uploadWorkerPromise=null;
-function openUploadDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(UPLOAD_DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(UPLOAD_STORE))r.result.createObjectStore(UPLOAD_STORE,{keyPath:'id'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
-async function queueTx(mode,fn){const db=await openUploadDb();return new Promise((resolve,reject)=>{const tx=db.transaction(UPLOAD_STORE,mode),st=tx.objectStore(UPLOAD_STORE);let out;try{out=fn(st)}catch(e){reject(e);return}tx.oncomplete=()=>resolve(out);tx.onerror=()=>reject(tx.error)})}
-async function getUploadJobs(){const db=await openUploadDb();return new Promise((resolve,reject)=>{const tx=db.transaction(UPLOAD_STORE,'readonly'),r=tx.objectStore(UPLOAD_STORE).getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error)})}
-async function putUploadJob(job){await queueTx('readwrite',st=>st.put(job));updateSyncUi()}
-async function deleteUploadJob(id){await queueTx('readwrite',st=>st.delete(id));updateSyncUi()}
-async function markInterventionPhotoUpload(interventionId,status,errorText=null){
-  if(!interventionId)return;
-  const r=await syncPhotoMetadata(interventionId,status,errorText);
-  if(r.error)console.warn('V112-37: stato upload foto non aggiornato',r.error.message);
-}
-async function enqueueInterventionPhotos(interventionId,files,stableIds=null){
-  if(!files?.length)return {queued:0};
-  await markInterventionPhotoUpload(interventionId,'pending',null);
-  for(let n=0;n<files.length;n++){
-    const f=files[n];
-    const jobId=stableIds?.[n]||crypto.randomUUID(),job={id:jobId,kind:'intervention-photo',interventionId,actorProfileId:profile?.id||null,file:f,fileName:f.name||`foto-${n+1}.jpg`,mimeType:f.type||'image/jpeg',createdAt:Date.now()+n,retries:0,lastError:'',lastStage:'queued'};
-    await putPhotoRecoveryRow({id:jobId,interventionId,actorProfileId:profile?.id||null,file:f,fileName:job.fileName,mimeType:job.mimeType,savedAt:Date.now(),uploadedAt:null});
-    await putUploadJob(job);
-  }
-  await processUploadQueue();
-  const state=await interventionPhotoSyncState(interventionId);
-  return {queued:files.length,...state};
-}
-async function uploadInterventionPhotoJob(job){
-  const interventionId=job.interventionId;
-  let file=job.file;
-  if(!file)throw new Error('FILE_LOCALE_MANCANTE: la foto non è più disponibile nella coda del dispositivo');
-  console.info('V112-37 FOTO',job.id,'compress_start',interventionId,file.size||0);
-  file=await compressImage(file);
-  console.info('V112-37 FOTO',job.id,'compress_ok',file.size||0);
-  const safe=(file.name||job.fileName||'foto.jpg').replace(/[^a-zA-Z0-9._-]/g,'-');
-  const path=`interventi/${interventionId}/${job.id}-${safe}`;
-  job.lastStage='storage_upload';await putUploadJob(job);
-  console.info('V112-37 FOTO',job.id,'storage_upload_start',path);
-  const up=await sb.storage.from('documenti').upload(path,file,{upsert:true,cacheControl:'3600',contentType:file.type||job.mimeType||'image/jpeg'});
-  if(up.error)throw new Error(`STORAGE_UPLOAD: ${up.error.message||up.error}`);
-  console.info('V112-37 FOTO',job.id,'storage_upload_ok',path);
-  job.lastStage='attachment_insert';await putUploadJob(job);
-  let added;
-  try{
-    const found=await sb.from('attachments').select('*').eq('intervention_id',interventionId).eq('storage_path',path).limit(1);
-    if(found.error)throw found.error;
-    added=found.data?.[0]||await addAttachment({tipo:'foto_generica',intervention_id:interventionId,storage_path:path,nome_file:file.name||job.fileName,mime_type:file.type||job.mimeType,dimensione_bytes:file.size,caricato_da:job.actorProfileId||profile.id});
-  }catch(err){
-    throw new Error(`ATTACHMENT_INSERT: ${err?.message||err}`);
-  }
-  if(!added)throw new Error('ATTACHMENT_INSERT: nessuna riga restituita da Supabase');
-  console.info('V112-37 FOTO',job.id,'attachment_insert_ok',added.id);
-  if(!attachments.some(a=>a.id===added.id||a.storage_path===added.storage_path))attachments.push(added);
-  await deleteUploadJob(job.id);
-  try{const backups=await getPhotoRecoveryRows(),backup=backups.find(x=>x.id===job.id);if(backup){backup.uploadedAt=Date.now();backup.storagePath=path;await putPhotoRecoveryRow(backup)}}catch{}
-  return added;
-}
-async function processUploadQueue(){
-  if(uploadWorkerPromise)return uploadWorkerPromise;
-  if(!session){updateSyncUi();return {processed:0,noSession:true}}
-  uploadWorkerPromise=(async()=>{
-    uploadWorkerRunning=true;updateSyncUi();let processed=0,failed=0;
-    try{
-      const jobs=(await getUploadJobs()).sort((a,b)=>a.createdAt-b.createdAt);
-      const touched=new Set();
-      for(const job of jobs){
-        if(job.kind!=='intervention-photo')continue;
-        touched.add(job.interventionId);
-        if((job.retries||0)>=3){failed++;continue}
-        try{
-          await markInterventionPhotoUpload(job.interventionId,'syncing',null);
-          await uploadInterventionPhotoJob(job);processed++;
-          const st=await interventionPhotoSyncState(job.interventionId);
-          if(st.ready)await markInterventionPhotoUpload(job.interventionId,'synced',null);
-          toast('✓ Foto sincronizzata');
-        }catch(err){
-          job.retries=(job.retries||0)+1;job.lastError=err?.message||String(err);job.failedAt=new Date().toISOString();await putUploadJob(job);failed++;
-          console.error('V112-37 FOTO FALLITA',{job_id:job.id,intervention_id:job.interventionId,stage:job.lastStage,retries:job.retries,error:job.lastError});
-          await markInterventionPhotoUpload(job.interventionId,job.retries>=3?'error':'pending',job.lastError);
-        }
-      }
-      for(const id of touched){
-        try{
-          const st=await interventionPhotoSyncState(id);
-          if(st.ready){await markInterventionPhotoUpload(id,'synced',null);await flushReadyClosureNotifications(id)}
-          const intervention=interventions.find(i=>i.id===id);
-          if(intervention&&$('historyDialog')?.open&&currentHistoryStoreId===intervention.store_id){const store=stores.find(x=>x.id===intervention.store_id);if(store)await showHistory(store,true)}
-        }catch(syncErr){console.warn('V112-37: verifica finale foto fallita',syncErr?.message||syncErr)}
-      }
-      return {processed,failed};
-    }finally{uploadWorkerRunning=false;updateSyncUi();try{const pending=(await getUploadJobs()).some(j=>(j.retries||0)<3);if(pending)setTimeout(()=>processUploadQueue(),3000)}catch{}}
-  })();
-  try{return await uploadWorkerPromise}finally{uploadWorkerPromise=null;flushReadyClosureNotifications().catch(()=>{})}
-}
-async function retryUploads(){const jobs=await getUploadJobs();for(const j of jobs){j.retries=0;j.lastError='';j.lastStage='queued';await putUploadJob(j);await markInterventionPhotoUpload(j.interventionId,'pending',null)}return processUploadQueue()}
-
-function localInterventionPhotoCount(interventionId){
-  return attachments.filter(a=>a.intervention_id===interventionId&&a.tipo==='foto_generica').length;
-}
-function employeePhotoMismatchRows(){
-  if(!profile||admin())return [];
-  return interventions.filter(i=>i.closed_by===profile.id&&i.stato==='in_attesa'&&!i.multi_day_open&&Math.max(0,Number(i.foto_attese)||0)>localInterventionPhotoCount(i.id));
-}
-async function localRecoverablePhotoCount(){
-  try{
-    const [jobs,backups]=await Promise.all([getUploadJobs(),getPhotoRecoveryRows()]);
-    const ids=new Set(employeePhotoMismatchRows().map(i=>i.id));
-    return [...jobs,...backups].filter(x=>ids.has(x.interventionId)&&x.file).length;
-  }catch{return 0}
-}
-async function repairEmployeePhotoSync(button=null){
-  if(!profile||admin())return;
-  const old=button?.textContent;if(button){button.disabled=true;button.textContent='Controllo…'}
-  try{
-    await cleanupPhotoRecoveryRows();
-    const mismatches=employeePhotoMismatchRows();
-    if(!mismatches.length){toast('✓ Nessuna foto da recuperare');await updateSyncUi();return}
-    const [jobs,backups]=await Promise.all([getUploadJobs(),getPhotoRecoveryRows()]);
-    let restored=0,missingLocal=0;
-    for(const i of mismatches){
-      let actual=localInterventionPhotoCount(i.id),expected=Math.max(0,Number(i.foto_attese)||0);
-      if(actual>=expected)continue;
-      const candidates=[];
-      for(const j of jobs)if(j.interventionId===i.id&&j.file)candidates.push({source:'queue',row:j});
-      for(const b of backups)if(b.interventionId===i.id&&b.file&&!candidates.some(x=>x.row.id===b.id))candidates.push({source:'backup',row:b});
-      if(!candidates.length){missingLocal++;continue}
-      for(const c of candidates){
-        if(actual>=expected)break;
-        const row=c.row;
-        try{
-          let file=row.file;if(!file)continue;
-          file=await compressImage(file);
-          const safe=(file.name||row.fileName||'foto-recuperata.jpg').replace(/[^a-zA-Z0-9._-]/g,'-');
-          const path=`interventi/${i.id}/${row.id||crypto.randomUUID()}-${safe}`;
-          const up=await sb.storage.from('documenti').upload(path,file,{upsert:true,cacheControl:'3600',contentType:file.type||row.mimeType||'image/jpeg'});
-          if(up.error)throw up.error;
-          const existing=await sb.from('attachments').select('id').eq('intervention_id',i.id).eq('storage_path',path).maybeSingle();
-          if(existing.error)throw existing.error;
-          if(!existing.data){
-            const added=await addAttachment({tipo:'foto_generica',intervention_id:i.id,storage_path:path,nome_file:file.name||row.fileName||safe,mime_type:file.type||row.mimeType||'image/jpeg',dimensione_bytes:file.size,caricato_da:row.actorProfileId||profile.id});
-            if(added&&!attachments.some(a=>a.id===added.id))attachments.push(added);
-          }
-          actual++;
-          restored++;
-          await deleteUploadJob(row.id).catch(()=>{});
-          row.uploadedAt=Date.now();row.storagePath=path;await putPhotoRecoveryRow(row).catch(()=>{});
-        }catch(err){console.warn('V180 recupero locale foto fallito',i.id,err)}
-      }
-      const state=await interventionPhotoSyncState(i.id);
-      if(state.ready){await markInterventionPhotoUpload(i.id,'synced',null);await flushReadyClosureNotifications(i.id)}
-    }
-    await loadAll();
-    const remaining=employeePhotoMismatchRows();
-    if(!remaining.length)alert(`Riparazione completata.\n\n${restored} foto recuperate e verificate su Supabase.`);
-    else if(restored)alert(`Recuperate ${restored} foto.\n\nRestano ${remaining.length} interventi con foto mancanti: su questo telefono non è stata trovata una copia locale sufficiente.`);
-    else alert(`Non ho trovato copie locali recuperabili per ${remaining.length} interventi.\n\nSe la foto non è più nella coda né nella copia di recupero del telefono, non può essere ricreata automaticamente.`);
-  }catch(err){alert('Riparazione sincronizzazione non riuscita: '+(err?.message||String(err)))}
-  finally{if(button){button.disabled=false;button.textContent=old||'Ripara sincronizzazione foto'};await updateSyncUi()}
-}
-
-async function updateSyncUi(){
-  let jobs=[];try{jobs=await getUploadJobs()}catch{}
-  const failed=jobs.filter(j=>(j.retries||0)>=3).length;
-  const first=jobs[0]||null;
-  const stageLabel=first?.lastStage==='storage_upload'?'upload Storage':first?.lastStage==='attachment_insert'?'registrazione foto':first?.lastStage==='queued'?'preparazione':'sincronizzazione';
-  const mismatchCount=employeePhotoMismatchRows().length;
-  const text=uploadWorkerRunning?`⬆️ ${jobs.length} foto · ${stageLabel}…`:failed?`⚠️ ${failed} foto NON sincronizzate · premi per riprovare`:jobs.length?`☁️ ${jobs.length} foto in coda · nuovo tentativo automatico`:mismatchCount?`⚠️ ${mismatchCount} intervent${mismatchCount===1?'o':'i'} con foto da recuperare`:'🟢 Tutto sincronizzato';
-  const background=$('backgroundSyncStatus');if(background)background.textContent=text;const repairStatus=$('photoRepairStatus');if(repairStatus)repairStatus.textContent=text;
-  const badge=$('syncFloatingBadge');if(badge){badge.textContent=text;badge.classList.toggle('hidden',!jobs.length&&!uploadWorkerRunning&&!mismatchCount);badge.classList.toggle('sync-error',!!failed||!!mismatchCount);badge.onclick=failed?()=>retryUploads().catch(e=>alert(e.message)):mismatchCount?()=>repairEmployeePhotoSync(badge):null}
-}
-window.addEventListener('online',()=>processUploadQueue());
-// V112-37: navigator.onLine non blocca più gli upload; ogni tentativo verifica davvero Supabase.
+// V206: coda e recupero foto in photo-sync.js / photo-sync-ui.js.
 function ensureCloudSettingsUi(){
   const host=$('settingsView')||$('settingsScreen');if(!host)return;
   const wrap=host.querySelector('.settings-content')||host;
@@ -510,7 +333,7 @@ let currentView=localStorage.getItem(CURRENT_VIEW_KEY)||'dashboard';
 function setView(name){
   if(!$(name+'View')||(name==='operations'&&!admin()))name='dashboard';
   currentView=name;localStorage.setItem(CURRENT_VIEW_KEY,name);
-  document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');document.querySelectorAll('[data-bottom-view]').forEach(b=>b.classList.toggle('active',b.dataset.bottomView===name));$('pageTitle').textContent={dashboard:'Dashboard',operations:'Da gestire',stores:'Sedi e clienti',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'}[name];if(name==='operations'&&typeof renderOperations==='function')renderOperations();if(name==='dashboard')renderDashboard();if(name==='stores')renderStores();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='reports')renderDailyReport();if(name==='stats')renderStats();if(name==='signatures')openSignatureSheetsView();if(name==='archive')openCompanyArchive();if(name==='contacts')renderWorkContacts();if(name==='audit'&&admin())openAuditView();if(name!=='audit')auditViewOpen(name);if(name==='settings'){ensureCloudSettingsUi();ensurePushSettingsUi();refreshPushSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin()){loadSupabaseUsage();renderHealthCenter();}}}
+  document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');document.querySelectorAll('[data-bottom-view]').forEach(b=>b.classList.toggle('active',b.dataset.bottomView===name));$('pageTitle').textContent={dashboard:'Dashboard',operations:'Da gestire',stores:'Sedi e clienti',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'}[name];if(name==='operations'&&typeof renderOperations==='function')renderOperations();if(name==='dashboard')renderDashboard();if(name==='stores')renderStores();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='reports')renderDailyReport();if(name==='stats')renderStats();if(name==='signatures')openSignatureSheetsView();if(name==='archive')openCompanyArchive();if(name==='contacts')renderWorkContacts();if(name==='audit'&&admin())openAuditView();if(name!=='audit')auditViewOpen(name);if(name==='settings'){ensureCloudSettingsUi();refreshPhotoDeliveryStatus().catch(()=>{});ensurePushSettingsUi();refreshPushSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin()){loadSupabaseUsage();renderHealthCenter();}}}
 
 
 function syncImpersonationUi(){
@@ -993,7 +816,7 @@ async function uploadSignatureSheet(file,year,month,round){
 }
 
 async function signIn(email,password){const {error}=await sb.auth.signInWithPassword({email,password});if(error)throw error;}
-async function signOut(){await writeClientAudit('LOGOUT','auth','Uscita dall’app');sessionStorage.removeItem(IMPERSONATE_PROFILE_KEY);await sb.auth.signOut();location.reload()}
+async function signOut(){photoDelivery?.stop();await writeClientAudit('LOGOUT','auth','Uscita dall’app');sessionStorage.removeItem(IMPERSONATE_PROFILE_KEY);await sb.auth.signOut();location.reload()}
 // V197: non assumere che una risposta contenga tutte le righe o che il limite API sia 1000.
 async function readAllRows(table,configure=q=>q,keys=['id']){
   const rows=[],seen=new Set();let offset=0;
@@ -2660,6 +2483,7 @@ $('storeNoInterval')?.addEventListener('change',syncStoreIntervalUi);
 $('storeSiteType')?.addEventListener('change',syncStoreTypeUi);
 async function openDone(s,scheduleItemId=''){
   if(ordinarySaveBusy)return;
+  try{const pending=(await photoQueue().snapshot()).submissions.find(r=>!r.result&&r.args.p_store_id===s.id&&(r.args.p_item_id||'')===(scheduleItemId||''));if(pending){setView('settings');await renderPhotoDeliveryDetails();return alert('Una chiusura per questa sede è già conservata su questo telefono. Controlla Sincronizzazione foto: riprenderà lo stesso invio senza duplicare il lavoro.')}}catch(e){return alert('Prima di registrare il lavoro devo poter leggere la coda locale: '+e.message)}
   ordinarySaveAttempt=null;
   if(scheduleItemId){
     const localItem=scheduleItems.find(x=>x.id===scheduleItemId),localState=effectiveScheduleState(localItem);
@@ -2926,7 +2750,7 @@ async function renderPending(){
   for(const i of p){
     const s=stores.find(x=>x.id===i.store_id),names=await workerNames(i.id),pics=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica'),expected=Math.max(0,Number(i.foto_attese)||0),syncPending=expected>pics.length;
     const c=document.createElement('article');c.className='card pending pending-review';
-    c.innerHTML=`<div class="pending-review-head"><div><h3>${esc(s?.nome||'Intervento')}</h3><p class="muted">${fmt(i.data_intervento)} · 🕒 ${esc(closureText(i))}</p></div><span class="badge-state">In attesa</span></div><div class="pending-review-section"><strong>Chi ha eseguito</strong><p>${names.length?names.map(esc).join(' · '):'Operatore non indicato'}</p></div><div class="pending-review-section"><strong>Note del dipendente</strong><div class="history-note ${i.note?'':'muted'}">${esc(i.note||'Nessuna nota inserita')}</div>${i.next_visit_note?`<div class="pending-next-visit"><strong>⚠️ Da riportare al prossimo passaggio</strong>${esc(i.next_visit_note)}</div>`:''}</div><div class="pending-review-section"><div class="pending-photo-head"><strong>Foto allegate</strong><span>${expected?`${pics.length}/${expected}`:pics.length}</span></div>${syncPending?`<div class="pending-next-visit"><strong>☁️ Foto ancora in sincronizzazione</strong>Ricevute ${pics.length} di ${expected}. Puoi cercare le foto nello Storage oppure forzare la convalida indicando il motivo.</div>`:''}<div class="pending-review-photos" data-pending-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div><div class="actions">${syncPending?'<button type="button" class="secondary" data-recover-storage>🔎 Cerca foto nello Storage</button>':''}${syncPending&&admin()?'<button type="button" class="secondary" data-force-approve>Forza convalida · foto mancanti</button>':''}<button data-ok ${syncPending?'disabled':''}>${syncPending?'Attendo foto…':'Convalida'}</button><button class="danger-btn" data-no>Rifiuta</button></div>`;
+    c.innerHTML=`<div class="pending-review-head"><div><h3>${esc(s?.nome||'Intervento')}</h3><p class="muted">${fmt(i.data_intervento)} · 🕒 ${esc(closureText(i))}</p></div><span class="badge-state">In attesa</span></div><div class="pending-review-section"><strong>Chi ha eseguito</strong><p>${names.length?names.map(esc).join(' · '):'Operatore non indicato'}</p></div><div class="pending-review-section"><strong>Note del dipendente</strong><div class="history-note ${i.note?'':'muted'}">${esc(i.note||'Nessuna nota inserita')}</div>${i.next_visit_note?`<div class="pending-next-visit"><strong>⚠️ Da riportare al prossimo passaggio</strong>${esc(i.next_visit_note)}</div>`:''}</div><div class="pending-review-section"><div class="pending-photo-head"><strong>Foto allegate</strong><span>${expected?`${pics.length}/${expected}`:pics.length}</span></div>${syncPending?`<div class="pending-next-visit"><strong>☁️ Foto mancanti</strong>Ricevute ${pics.length} di ${expected}.${i.photo_upload_error?' '+esc(i.photo_upload_error):Date.now()-new Date(i.closed_at||i.created_at).getTime()>600000?' L’invio è fermo da oltre 10 minuti: verifica la sincronizzazione sul telefono del dipendente.':' In attesa della conferma di ricezione.'} Puoi cercare le foto nello Storage oppure forzare la convalida indicando il motivo.</div>`:''}<div class="pending-review-photos" data-pending-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div><div class="actions">${syncPending?'<button type="button" class="secondary" data-recover-storage>🔎 Cerca foto nello Storage</button>':''}${syncPending&&admin()?'<button type="button" class="secondary" data-force-approve>Forza convalida · foto mancanti</button>':''}<button data-ok ${syncPending?'disabled':''}>${syncPending?'Attendo foto…':'Convalida'}</button><button class="danger-btn" data-no>Rifiuta</button></div>`;
     c.querySelector('[data-force-approve]')?.addEventListener('click',()=>forceApproveIntervention(i));
     c.querySelector('[data-recover-storage]')?.addEventListener('click',e=>recoverInterventionPhotosFromStorage(i,e.currentTarget));c.querySelector('[data-ok]').onclick=()=>approveIntervention(i);c.querySelector('[data-no]').onclick=()=>rejectIntervention(i);$('pendingList').appendChild(c);
     if(pics.length){
@@ -4712,28 +4536,24 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
       const files=[...donePhotoFiles];
       ordinarySaveAttempt={args:{p_request_id:crypto.randomUUID(),p_store_id:storeId,p_item_id:itemId,p_day:$('doneDate').value,
         p_note:$('doneNotes').value.trim(),p_next_note:nextNote,p_continue:continueAnotherDay,p_workers:workers,p_photo_count:files.length,p_actor_id:profile.id},
-        files,photoIds:files.map(()=>crypto.randomUUID()),linkedExtrasToClose:linked.filter(e=>!isOrdinaryIncludedExtra(e)),result:null};
+        files,photoIds:files.map(()=>crypto.randomUUID()),siteName:stores.find(s=>s.id===storeId)?.nome||'',linkedExtrasToClose:linked.filter(e=>!isOrdinaryIncludedExtra(e)),result:null};
     }
-    // La risposta persa o un errore nella coda foto non ripete il salvataggio della giornata.
     const attempt=ordinarySaveAttempt;
-    if(!attempt.result){
-      const r=await sb.rpc('overgreen_save_ordinary_v197',attempt.args);
-      if(r.error){
-        // Un errore SQL è un rollback certo; rete/risposta persa conservano lo stesso ID.
-        if(/^[0-9A-Z]{5}$/.test(r.error.code||'')&&!String(r.error.code).startsWith('08'))ordinarySaveAttempt=null;
-        throw r.error;
-      }
-      if(!r.data?.intervention?.id)throw new Error('Risposta del salvataggio non valida. Ripremi Salva per verificare la stessa richiesta.');
-      attempt.result=r.data;
+    btn.textContent='Conservo le foto sul telefono…';
+    try{await photoQueue().prepare(attempt)}catch(e){try{if(!await photoQueue().getSubmission(attempt.args.p_request_id))ordinarySaveAttempt=null}catch{}throw e}
+    btn.textContent='Invio e verifico la ricezione…';
+    await waitForPhotoQueue();
+    const stored=await photoQueue().getSubmission(attempt.args.p_request_id);
+    if(!stored?.result){
+      ordinarySaveAttempt=null;donePhotoFiles=[];renderDonePhotoSelection();$('doneDialog').close();
+      toast('Chiusura conservata sul telefono · invio da completare');
+      alert(stored?.blocked?('La chiusura è conservata, ma serve una verifica: '+stored.lastError):'Chiusura e foto conservate su questo telefono. L’invio riprenderà automaticamente quando la connessione sarà disponibile. Puoi seguirlo in Impostazioni → Sincronizzazione foto.');
+      await updateSyncUi();return;
     }
-    const data=attempt.result.intervention,files=attempt.files;
-    const idx=interventions.findIndex(i=>i.id===data.id);if(idx<0)interventions.unshift(data);else interventions[idx]=data;
-    let photoSync=null;
-    if(files.length){
-      btn.textContent='Conservo e sincronizzo le foto…';
-      try{photoSync=await enqueueInterventionPhotos(data.id,files,attempt.photoIds)}
-      catch(err){throw new Error('Giornata già salvata, ma non tutte le foto sono state conservate nella coda. Lascia aperta questa finestra e ripremi Salva: riprenderò lo stesso invio. Dettaglio: '+(err.message||String(err)))}
-    }
+    attempt.result=stored.result;
+    const data=interventions.find(i=>i.id===stored.result.intervention.id)||stored.result.intervention,files=attempt.files;
+    const idx=interventions.findIndex(i=>i.id===data.id);if(idx<0)interventions.unshift(data);
+    const photoSync={actual:localInterventionPhotoCount(data.id),expected:Number(data.foto_attese)||0};photoSync.ready=photoSync.actual>=photoSync.expected;
     if(!attempt.args.p_continue){
       try{
         if(!files.length){const ok=await notifyAdminClosure('intervention',data.id,attempt.result.prior_photo_count);if(ok)await syncPhotoMetadata(data.id,null,null,true)}
@@ -4744,8 +4564,8 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
     ordinarySaveAttempt=null;donePhotoFiles=[];renderDonePhotoSelection();$('doneDialog').close();
     if(files.length&&!photoSync?.ready){
       toast('Intervento salvato · foto in attesa di sincronizzazione');
-      alert('Intervento salvato. Le foto restano nella coda del telefono e verranno ritentate. Non rifare l’intervento; controlla Impostazioni → Sincronizzazione.');
-    }else toast(continued?'Giornata salvata · continuazione programmata':data.stato==='convalidato'?'Intervento convalidato':'Inviato a Lorenzo');
+      alert('Intervento salvato. Le foto sono conservate su questo telefono, ma la ricezione sul server non è ancora completa. L’invio verrà ritentato: controlla Impostazioni → Sincronizzazione foto.');
+    }else toast((continued?'Giornata salvata · continuazione programmata':data.stato==='convalidato'?'Intervento convalidato':'Inviato a Lorenzo')+(files.length?' · Foto ricevute '+photoSync.actual+'/'+photoSync.expected:''));
     await refreshAfterSave();
     if(!continued&&linkedExtrasToClose.length){combinedExtraClosureQueue=linkedExtrasToClose.map(x=>({id:x.id}));setTimeout(()=>openNextCombinedExtraClosure(),250)}
   }catch(err){alert(err.message||String(err))}
@@ -5612,4 +5432,3 @@ $('eurospinExcelGenerate')?.addEventListener('click',generateEurospinExcel);
 $('eurospinPackageGenerate')?.addEventListener('click',generateEurospinMonthlyPackages);
 $('eurospinPackageMonth')?.addEventListener('change',()=>{$('eurospinPackageGenerate').disabled=true;$('eurospinPackageDownloads').innerHTML='';eurospinExcelState={month:'',category:'both',rows:[],analyzed:false};$('eurospinExcelGenerate').disabled=true;$('eurospinExcelStatus').textContent='Filtri cambiati: ripeti la verifica e la lettura dei numeri chiusura.'});
 $('eurospinPackageCategory')?.addEventListener('change',()=>{$('eurospinPackageGenerate').disabled=true;$('eurospinPackageDownloads').innerHTML='';eurospinExcelState={month:'',category:'both',rows:[],analyzed:false};$('eurospinExcelGenerate').disabled=true;$('eurospinExcelStatus').textContent='Filtri cambiati: ripeti la verifica e la lettura dei numeri chiusura.'});
-

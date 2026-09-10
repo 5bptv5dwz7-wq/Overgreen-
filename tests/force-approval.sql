@@ -1,0 +1,34 @@
+begin;
+select set_config('request.jwt.claim.sub',(select id::text from public.profiles where ruolo='admin' and attivo limit 1),true);
+set local role authenticated;
+do $$
+declare st uuid; sid uuid; item uuid; iid uuid; eid uuid; other uuid; worker uuid; actor uuid:=auth.uid(); blocked boolean; saved jsonb; r public.interventions;
+begin
+ insert into public.stores(nome) values('V205 QA ROLLBACK') returning id into st;
+ sid:=(public.overgreen_admin_v198(gen_random_uuid(),'schedule_create',jsonb_build_object('day','2099-01-01','members',jsonb_build_array(actor),'stores',jsonb_build_array(st),'extras','[]'::jsonb))->>'id')::uuid;
+ select id into item from public.schedule_items where schedule_id=sid and store_id=st limit 1;
+ insert into public.interventions(store_id,schedule_item_id,inserito_da,closed_by,stato,foto_attese,photo_upload_status) values(st,item,actor,actor,'in_attesa',2,'pending') returning id into iid;
+ insert into public.extras(store_id,titolo,schedule_item_id,closure_profile,stato) values(st,'V205 INCLUDED QA',item,'eurospin_ordinario','in_attesa') returning id into eid;
+ blocked:=false;begin perform public.overgreen_transition_intervention_v196(iid,'approve');exception when others then blocked:=sqlerrm like 'Foto incomplete%';end;assert blocked,'normal approval still blocked';
+ blocked:=false;begin perform public.overgreen_transition_intervention_v196(iid,'force_approve','');exception when others then blocked:=sqlerrm like 'Indicare un motivo%';end;assert blocked,'reason required';
+ perform public.overgreen_transition_intervention_v196(iid,'force_approve','Sincronizzazione bloccata');
+ select * into r from public.interventions where id=iid;saved:=r.photo_approval_override;
+ assert r.stato='convalidato' and r.foto_attese=2 and r.foto_sincronizzate=0 and r.photo_upload_status='pending','approve without falsifying photo state';
+ assert saved->>'by'=actor::text and saved->>'received'='0' and saved->>'expected'='2','server snapshot and actor';
+ assert (select stato='completato' from public.schedule_items where id=item),'schedule updated';
+ assert (select stato='completato' from public.extras where id=eid),'included target updated';
+ perform public.overgreen_transition_intervention_v196(iid,'force_approve','Retry con motivo diverso');
+ assert (select photo_approval_override=saved from public.interventions where id=iid),'retry preserves original audit';
+ insert into public.attachments(intervention_id,tipo,storage_path,nome_file) values(iid,'foto_generica','qa-v205/photo1.jpg','photo1.jpg'),(iid,'foto_generica','qa-v205/photo2.jpg','photo2.jpg');
+ perform public.overgreen_photo_status_v197(iid);
+ assert (select stato='convalidato' and foto_sincronizzate=2 and photo_upload_status='synced' and photo_approval_override=saved from public.interventions where id=iid),'late photo synchronization preserves approval and audit';
+ insert into public.interventions(store_id,inserito_da,closed_by,stato,multi_day_open) values(st,actor,actor,'in_attesa',true) returning id into other;
+ blocked:=false;begin perform public.overgreen_transition_intervention_v196(other,'force_approve','Test multigiorno');exception when others then blocked:=sqlerrm like 'Intervento multigiorno%';end;assert blocked,'open multiday protected';
+ select id into worker from public.profiles where ruolo='dipendente' and attivo limit 1;assert worker is not null,'worker available';
+ perform set_config('request.jwt.claim.sub',worker::text,true);
+ blocked:=false;begin perform public.overgreen_transition_intervention_v196(iid,'force_approve','Test non autorizzato');exception when others then blocked:=sqlerrm like 'Operazione riservata%';end;assert blocked,'worker RPC denied';
+ blocked:=false;begin insert into public.interventions(store_id,inserito_da,closed_by,photo_approval_override) values(st,worker,worker,'{"reason":"fake"}');exception when insufficient_privilege then blocked:=true;end;assert blocked,'worker cannot forge override';
+ assert not has_function_privilege('anon','public.overgreen_transition_intervention_v196(uuid,text,text,uuid)','execute'),'anonymous RPC denied';
+end $$;
+rollback;
+select 'PASS: normal and forced approval, reason, audit, retry, schedule and included target, late photos, multiday, worker/anon permissions; all test data rolled back' result;

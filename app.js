@@ -1,4 +1,4 @@
-const APP_VERSION='V204';
+const APP_VERSION='V205';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -2724,7 +2724,7 @@ async function showHistory(s,refreshOnly=false){
     const names=await workerNames(i.id),pics=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica');
     const d=document.createElement('article');d.className=`history-card history-${i.stato}`;
     const statusText=historyStatusLabel(i.stato);
-    d.innerHTML=`<div class="history-dot"></div><div class="history-card-top"><div class="history-date"><span>${interventionDateLabel(i)}</span><small>${i.data_fine&&i.data_fine!==i.data_intervento?'Intervento ordinario · più giorni':'Intervento ordinario'}</small></div><span class="history-status">${esc(statusText)}</span></div><label class="history-report-select"><input type="checkbox" data-history-select value="${i.id}"><span>Includi nel report multiplo</span></label>${i.note?`<div class="history-note">${esc(i.note)}</div>`:'<div class="history-note muted">Nessuna nota inserita</div>'}${i.next_visit_note?`<div class="history-next-visit"><strong>Promemoria lasciato per il passaggio successivo:</strong> ${esc(i.next_visit_note)}</div>`:''}<div class="history-meta"><div class="history-workers">${names.length?names.map(n=>`<span>👤 ${esc(n)}</span>`).join(''):'<span>👤 Operatori non indicati</span>'}</div>${pics.length?`<span class="history-photo-count">📷 ${pics.length}</span>`:''}</div><div class="closure-stamp">🕒 Chiuso: ${esc(closureText(i))}</div><div class="history-photos" data-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':''}</div><div class="history-report-actions"><button type="button" data-single-report>📄 Report singolo</button>${admin()?`<button type="button" class="secondary" data-add-retro-ticket>${clientType(s)==='intesa'?'🎫 Aggiungi ticket già compreso':'🎯 Aggiungi target già compreso'}</button>`:''}</div>${admin()?'<div class="history-admin-actions"><button class="history-edit-btn" data-edit-history>Modifica</button><button class="history-delete-btn" data-delete-history>Elimina</button></div>':''}`;
+    d.innerHTML=`<div class="history-dot"></div><div class="history-card-top"><div class="history-date"><span>${interventionDateLabel(i)}</span><small>${i.data_fine&&i.data_fine!==i.data_intervento?'Intervento ordinario · più giorni':'Intervento ordinario'}</small></div><span class="history-status">${esc(statusText)}</span></div><label class="history-report-select"><input type="checkbox" data-history-select value="${i.id}"><span>Includi nel report multiplo</span></label>${forcedPhotoApprovalLabel(i)}${i.note?`<div class="history-note">${esc(i.note)}</div>`:'<div class="history-note muted">Nessuna nota inserita</div>'}${i.next_visit_note?`<div class="history-next-visit"><strong>Promemoria lasciato per il passaggio successivo:</strong> ${esc(i.next_visit_note)}</div>`:''}<div class="history-meta"><div class="history-workers">${names.length?names.map(n=>`<span>👤 ${esc(n)}</span>`).join(''):'<span>👤 Operatori non indicati</span>'}</div>${pics.length?`<span class="history-photo-count">📷 ${pics.length}</span>`:''}</div><div class="closure-stamp">🕒 Chiuso: ${esc(closureText(i))}</div><div class="history-photos" data-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':''}</div><div class="history-report-actions"><button type="button" data-single-report>📄 Report singolo</button>${admin()?`<button type="button" class="secondary" data-add-retro-ticket>${clientType(s)==='intesa'?'🎫 Aggiungi ticket già compreso':'🎯 Aggiungi target già compreso'}</button>`:''}</div>${admin()?'<div class="history-admin-actions"><button class="history-edit-btn" data-edit-history>Modifica</button><button class="history-delete-btn" data-delete-history>Elimina</button></div>':''}`;
     const checkbox=d.querySelector('[data-history-select]');
     checkbox?.addEventListener('change',()=>{checkbox.checked?selected.add(i.id):selected.delete(i.id);updateSelectionUi()});
     d.querySelector('[data-single-report]')?.addEventListener('click',()=>downloadStoreInterventionsReport(s,[i]));
@@ -2926,7 +2926,8 @@ async function renderPending(){
   for(const i of p){
     const s=stores.find(x=>x.id===i.store_id),names=await workerNames(i.id),pics=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica'),expected=Math.max(0,Number(i.foto_attese)||0),syncPending=expected>pics.length;
     const c=document.createElement('article');c.className='card pending pending-review';
-    c.innerHTML=`<div class="pending-review-head"><div><h3>${esc(s?.nome||'Intervento')}</h3><p class="muted">${fmt(i.data_intervento)} · 🕒 ${esc(closureText(i))}</p></div><span class="badge-state">In attesa</span></div><div class="pending-review-section"><strong>Chi ha eseguito</strong><p>${names.length?names.map(esc).join(' · '):'Operatore non indicato'}</p></div><div class="pending-review-section"><strong>Note del dipendente</strong><div class="history-note ${i.note?'':'muted'}">${esc(i.note||'Nessuna nota inserita')}</div>${i.next_visit_note?`<div class="pending-next-visit"><strong>⚠️ Da riportare al prossimo passaggio</strong>${esc(i.next_visit_note)}</div>`:''}</div><div class="pending-review-section"><div class="pending-photo-head"><strong>Foto allegate</strong><span>${expected?`${pics.length}/${expected}`:pics.length}</span></div>${syncPending?`<div class="pending-next-visit"><strong>☁️ Foto ancora in sincronizzazione</strong>Ricevute ${pics.length} di ${expected}. La convalida resta bloccata finché non arrivano tutte.</div>`:''}<div class="pending-review-photos" data-pending-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div><div class="actions">${syncPending?'<button type="button" class="secondary" data-recover-storage>🔎 Cerca foto nello Storage</button>':''}<button data-ok ${syncPending?'disabled':''}>${syncPending?'Attendo foto…':'Convalida'}</button><button class="danger-btn" data-no>Rifiuta</button></div>`;
+    c.innerHTML=`<div class="pending-review-head"><div><h3>${esc(s?.nome||'Intervento')}</h3><p class="muted">${fmt(i.data_intervento)} · 🕒 ${esc(closureText(i))}</p></div><span class="badge-state">In attesa</span></div><div class="pending-review-section"><strong>Chi ha eseguito</strong><p>${names.length?names.map(esc).join(' · '):'Operatore non indicato'}</p></div><div class="pending-review-section"><strong>Note del dipendente</strong><div class="history-note ${i.note?'':'muted'}">${esc(i.note||'Nessuna nota inserita')}</div>${i.next_visit_note?`<div class="pending-next-visit"><strong>⚠️ Da riportare al prossimo passaggio</strong>${esc(i.next_visit_note)}</div>`:''}</div><div class="pending-review-section"><div class="pending-photo-head"><strong>Foto allegate</strong><span>${expected?`${pics.length}/${expected}`:pics.length}</span></div>${syncPending?`<div class="pending-next-visit"><strong>☁️ Foto ancora in sincronizzazione</strong>Ricevute ${pics.length} di ${expected}. Puoi cercare le foto nello Storage oppure forzare la convalida indicando il motivo.</div>`:''}<div class="pending-review-photos" data-pending-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div><div class="actions">${syncPending?'<button type="button" class="secondary" data-recover-storage>🔎 Cerca foto nello Storage</button>':''}${syncPending&&admin()?'<button type="button" class="secondary" data-force-approve>Forza convalida · foto mancanti</button>':''}<button data-ok ${syncPending?'disabled':''}>${syncPending?'Attendo foto…':'Convalida'}</button><button class="danger-btn" data-no>Rifiuta</button></div>`;
+    c.querySelector('[data-force-approve]')?.addEventListener('click',()=>forceApproveIntervention(i));
     c.querySelector('[data-recover-storage]')?.addEventListener('click',e=>recoverInterventionPhotosFromStorage(i,e.currentTarget));c.querySelector('[data-ok]').onclick=()=>approveIntervention(i);c.querySelector('[data-no]').onclick=()=>rejectIntervention(i);$('pendingList').appendChild(c);
     if(pics.length){
       const box=c.querySelector('[data-pending-photos]');box.innerHTML='';
@@ -2964,6 +2965,24 @@ async function approveIntervention(i){
   interventionTransitions.add(i.id);
   try{await transitionIntervention(i,'approve');toast('Intervento convalidato');await refreshAfterSave()}
   catch(err){alert(err.message)}finally{interventionTransitions.delete(i.id)}
+}
+async function forceApproveIntervention(i){
+  if(!admin()||interventionTransitions.has(i.id))return;
+  const count=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica').length;
+  const site=stores.find(s=>s.id===i.store_id)?.nome||'questo intervento';
+  const reason=prompt(`Forza convalida di ${site}: ricevute ${count} foto su ${Number(i.foto_attese)||0}.
+Il lavoro sarà convalidato anche senza le foto mancanti. La forzatura resterà registrata.
+Motivo:`, 'Sincronizzazione foto bloccata');
+  if(reason===null)return;
+  if(reason.trim().length<5||reason.trim().length>500)return alert('Indica un motivo da 5 a 500 caratteri.');
+  interventionTransitions.add(i.id);
+  try{await transitionIntervention(i,'force_approve',reason.trim());toast('Intervento convalidato');await refreshAfterSave()}
+  catch(err){alert(err.message)}finally{interventionTransitions.delete(i.id)}
+}
+function forcedPhotoApprovalLabel(i){
+  const forced=i.photo_approval_override;if(!forced)return '';
+  const actual=new Set(attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica').map(a=>a.storage_path)).size;
+  return `<div class="pending-next-visit"><strong>Convalida forzata · foto incomplete al momento della convalida</strong><p>${esc(forced.reason||'')} · ${esc(fmtClosedAt(forced.at))}</p><small>Alla convalida: ${Number(forced.received)||0}/${Number(forced.expected)||0} foto. Ora: ${actual}/${Number(i.foto_attese)||0}.</small></div>`;
 }
 async function rejectIntervention(i){
   if(!admin()||interventionTransitions.has(i.id))return;
@@ -5573,7 +5592,7 @@ sb.auth.onAuthStateChange(async(event,s)=>{
   }
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=204').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=205').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

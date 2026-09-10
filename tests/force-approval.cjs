@@ -1,0 +1,15 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),{parseHTML}=require('linkedom');
+const src=fs.readFileSync(__dirname+'/../app.js','utf8');
+function setup(){
+ const {document}=parseHTML('<div id="pendingBadge"></div><div id="pendingList"></div>');
+ const item={id:'i',store_id:'s',stato:'in_attesa',foto_attese:2},calls=[],errors=[];
+ const c={document,$:id=>document.getElementById(id),console,admin:()=>true,interventions:[item],extras:[],stores:[{id:'s',nome:'Mantova prova'}],attachments:[],workerNames:async()=>['Operatore prova'],fmt:()=>'',closureText:()=>'',esc:s=>String(s??'').replaceAll('<','&lt;').replaceAll('>','&gt;'),prompt:()=> 'Foto bloccate da ore',alert:s=>errors.push(s),toast(){},refreshAfterSave:async()=>{},loadAll:async()=>{},transitionIntervention:async(...args)=>calls.push(args),recoverInterventionPhotosFromStorage(){},fmtClosedAt:s=>s};vm.createContext(c);
+ vm.runInContext(src.slice(src.indexOf('async function renderPending'),src.indexOf('async function refreshStoreLastVisit')),c);
+ vm.runInContext(src.slice(src.indexOf('const interventionTransitions='),src.indexOf('async function reopenOrdinaryIntervention')),c);
+ return {c,item,calls,errors,document};
+}
+test('admin gets explicit force action while normal approval remains disabled',async()=>{const h=setup();await h.c.renderPending();assert(h.document.querySelector('[data-ok]').disabled);assert(h.document.querySelector('[data-force-approve]'));h.c.admin=()=>false;await h.c.renderPending();assert.equal(h.document.querySelector('[data-force-approve]'),null);});
+test('forcing passes reason and exact intervention to server',async()=>{const h=setup();await h.c.forceApproveIntervention(h.item);assert.equal(h.calls.length,1);assert.equal(h.calls[0][0],h.item);assert.equal(h.calls[0][1],'force_approve');assert.equal(h.calls[0][2],'Foto bloccate da ore');});
+test('cancel, blank reason and worker cannot force',async()=>{const h=setup();h.c.prompt=()=>null;await h.c.forceApproveIntervention(h.item);h.c.prompt=()=>'';await h.c.forceApproveIntervention(h.item);h.c.admin=()=>false;await h.c.forceApproveIntervention(h.item);assert.equal(h.calls.length,0);assert.equal(h.errors.length,1);});
+test('duplicate click blocked and failed request can be retried',async()=>{const h=setup();let fail;h.c.transitionIntervention=()=>new Promise((_,reject)=>fail=reject);const pending=h.c.forceApproveIntervention(h.item);await h.c.forceApproveIntervention(h.item);fail(new Error('Errore rete'));await pending;h.c.transitionIntervention=async(...a)=>h.calls.push(a);await h.c.forceApproveIntervention(h.item);assert.equal(h.calls.length,1);assert.equal(h.errors[0],'Errore rete');});
+test('history preserves override and distinguishes past from current photo count',()=>{const h=setup();h.item.photo_approval_override={received:0,expected:2,reason:'<test>',at:'10/09/2026'};h.c.attachments=[{intervention_id:'i',tipo:'foto_generica',storage_path:'photo1'}];const text=h.c.forcedPhotoApprovalLabel(h.item);assert.match(text,/Alla convalida: 0\/2/);assert.match(text,/Ora: 1\/2/);assert.match(text,/&lt;test&gt;/);});

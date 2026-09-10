@@ -1,4 +1,4 @@
-const APP_VERSION='V206';
+const APP_VERSION='V207';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -1179,7 +1179,7 @@ function renderDashboard(){renderDashboardSmart();
           const ordinaryNotes=[row.schedule?.nota_generale,st?.note].filter(v=>String(v||'').trim());
           c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span>${clientBadge(st)}<strong>${esc(st?.nome||'Punto vendita')}</strong>${(st?.indirizzo||st?.citta)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${done?'Completato':pending?'In attesa di convalida':'Da eseguire'}</small>${ordinaryNotes.length?`<div class="dashboard-job-notes"><strong>Note</strong>${ordinaryNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>{const pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');return `<div class="embedded-extra ${extraCategoryClass(e)} ${extraIsDone(e)?'is-done':'is-open'}" data-open-linked-extra="${e.id}" role="button" tabindex="0"><span>${extraIsDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span>${e.numero_target?`<small class="target-number">Target: ${esc(e.numero_target)}</small>`:''}<small>${extraIsDone(e)?'Completato':'Da fare insieme al passaggio'} · Tocca per aprire</small>${e.descrizione?`<p class="embedded-extra-description">${esc(e.descrizione)}</p>`:''}${pdf?`<button type="button" class="secondary compact-btn" data-open-linked-pdf="${e.id}">📄 Apri PDF</button>`:''}</div></div>`}).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${admin()?'<button class="secondary" data-share>Condividi</button>':''}${done?(admin()?'<button class="reopen-intervention-btn" data-reopen>↩ Riapri intervento</button>':'<button class="secondary" disabled>✓ Completato</button>'):pending?'<button class="secondary" disabled>⏳ In attesa</button>':'<button data-done>✓ Eseguito</button>'}</div>`;
           c.dataset.routeAddress=routeAddressForStore(st);
-          c.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);
+          c.querySelector('[data-map]').onclick=()=>openStoreMaps(st);
           const shareBtn=c.querySelector('[data-share]');
           if(shareBtn){
             prepareOrdinaryShareButton(shareBtn,linked);
@@ -1220,9 +1220,9 @@ function renderDashboard(){renderDashboardSmart();
           c.querySelector('[data-open-extra]').onclick=()=>openExtraById(e.id);list.appendChild(c)
         }else{
           const a=job.activity,st=stores.find(x=>x.id===a.store_id),ct=workContacts.find(x=>x.id===a.contact_id),done=a.stato==='completato',meta=activityTypeMeta(a.tipo),c=document.createElement('article');
-          c.className=`dashboard-line-job schedule-activity ${done?'is-done':'is-open'}`;c.dataset.routeAddress=a.indirizzo||routeAddressForStore(st)||'';
+          c.className=`dashboard-line-job schedule-activity ${done?'is-done':'is-open'}`;c.dataset.routeAddress=activityRouteAddress(a,st);
           c.innerHTML=`<div class="job-main"><span class="job-kind">${meta.icon} ATTIVITÀ</span><strong>${esc(a.titolo||meta.label)}</strong><small>${esc([a.ora?String(a.ora).slice(0,5):null,st?.nome||a.indirizzo].filter(Boolean).join(' · '))}</small>${ct?`<div class="dashboard-job-notes"><strong>Contatto</strong><p>${esc([ct.nome,ct.azienda,ct.ruolo,ct.telefono].filter(Boolean).join(' · '))}</p></div>`:''}${a.note?`<div class="dashboard-job-notes"><strong>Note</strong><p>${esc(a.note)}</p></div>`:''}</div><div class="actions">${c.dataset.routeAddress?'<button class="secondary" data-map-activity>Maps</button>':''}${done?'<button class="secondary" disabled>✓ Fatto</button>':'<button data-done-activity>✓ Fatto</button>'}</div>`;
-          c.querySelector('[data-map-activity]')?.addEventListener('click',()=>openGoogleMaps(a.indirizzo||st?.indirizzo,a.titolo||meta.label,st?.citta));c.querySelector('[data-done-activity]')?.addEventListener('click',()=>completeScheduleActivity(a));list.appendChild(c)
+          c.querySelector('[data-map-activity]')?.addEventListener('click',()=>openActivityMaps(a,st));c.querySelector('[data-done-activity]')?.addEventListener('click',()=>completeScheduleActivity(a));list.appendChild(c)
         }
       }
       box.appendChild(section);
@@ -1393,7 +1393,7 @@ async function showStoreDetail(s){
     </section>`;
 
   const body=$('storeDetailBody');
-  body.querySelector('[data-detail-map]').onclick=()=>openGoogleMaps(s.indirizzo,clientLabel(s)+' '+s.nome,s.citta);
+  body.querySelector('[data-detail-map]').onclick=()=>openStoreMaps(s);
   body.querySelector('[data-detail-edit]')?.addEventListener('click',()=>openStore(s));
   body.querySelector('[data-open-full-history]')?.addEventListener('click',()=>showHistory(s));
   body.querySelectorAll('[data-sheet-tab]').forEach(btn=>btn.onclick=()=>{body.querySelectorAll('[data-sheet-tab]').forEach(x=>x.classList.toggle('active',x===btn));body.querySelectorAll('[data-sheet-panel]').forEach(x=>x.classList.toggle('hidden',x.dataset.sheetPanel!==btn.dataset.sheetTab))});
@@ -1411,31 +1411,23 @@ async function showStoreDetail(s){
 function openDuplicateSchedule(s){openReuseScheduleDialog({type:'schedule',id:s.id,onlyOpen:true})}
 
 function openGoogleMaps(address,name='',city=''){
-  const parts=[address,city].map(v=>String(v||'').trim()).filter(Boolean);
-  const destination=parts.length?parts.join(', '):String(name||'').trim();
-  const query=encodeURIComponent(destination);
-  // Il link universale apre Google Maps se installato, altrimenti la versione web.
-  window.location.href=`https://www.google.com/maps/search/?api=1&query=${query}`;
+  const destination=OvergreenLocations.join([name,address,city]);
+  if(destination)window.location.href=OvergreenLocations.mapsUrl(destination);
 }
-
+function openStoreMaps(st){if(st)window.location.href=storeMapsShareUrl(st)}
 function extraMapsDestination(e,st=null){
-  if(st){
-    return [st.indirizzo,st.citta].map(v=>String(v||'').trim()).filter(Boolean).join(', ')||[clientLabel(st),st.nome].filter(Boolean).join(' ');
-  }
-  // Per una sede non in anagrafica usiamo anche il nome del luogo: un indirizzo
-  // senza città (es. solo via/corso) da solo può portare Maps nel comune sbagliato.
-  return [e?.nome_esterno,e?.indirizzo_esterno].map(v=>String(v||'').trim()).filter(Boolean).join(', ')||String(e?.titolo||'').trim();
+  if(st)return OvergreenLocations.storeDestination(st);
+  return OvergreenLocations.join([e?.nome_esterno,e?.indirizzo_esterno])||String(e?.titolo||'').trim();
 }
 function openExtraMaps(e,st=null){
   const destination=extraMapsDestination(e,st);
   if(!destination)return alert('Per aprire Maps inserisci un indirizzo o il nome del luogo nell’extra.');
-  window.location.href=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destination)}`;
+  window.location.href=OvergreenLocations.mapsUrl(destination);
 }
-
-function storeMapsShareUrl(s){
-  const destination=[s?.indirizzo,s?.citta].map(v=>String(v||'').trim()).filter(Boolean).join(', ')||`${clientLabel(s)} ${s?.nome||''}`.trim();
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destination)}`;
-}
+function storeMapsShareUrl(s){return OvergreenLocations.mapsUrl(OvergreenLocations.storeDestination(s))}
+function activityUsesStore(a,st){return !!st&&(!a.indirizzo||OvergreenLocations.norm(a.indirizzo)===OvergreenLocations.norm(st.indirizzo))}
+function activityRouteAddress(a,st){return activityUsesStore(a,st)?routeAddressForStore(st):OvergreenLocations.join([a.indirizzo,st?.citta])}
+function openActivityMaps(a,st){if(activityUsesStore(a,st))openStoreMaps(st);else openGoogleMaps(a.indirizzo,'',st?.citta)}
 function storeSiteTypeLabel(s){
   const type=String(s?.site_type||'punto_vendita');
   return type==='filiale'?'Filiale':type==='punto_vendita'?'Punto vendita':type==='atm'?'ATM':type.replaceAll('_',' ');
@@ -1647,7 +1639,7 @@ function renderShareStorePicker(){
   for(const s of list){
     const row=document.createElement('article');row.className='card';
     row.innerHTML=`<div class="card-top"><div>${clientBadge(s)}<h3>${esc(s.nome||'Sede')}</h3><p class="muted">${esc([s.indirizzo,s.citta].filter(Boolean).join(', '))}</p></div></div><div class="actions"><button class="secondary" data-map>Maps</button><button data-share>📤 Condividi</button></div>`;
-    row.querySelector('[data-map]').onclick=()=>openGoogleMaps(s.indirizzo,clientLabel(s)+' '+(s.nome||''),s.citta);
+    row.querySelector('[data-map]').onclick=()=>openStoreMaps(s);
     row.querySelector('[data-share]').onclick=()=>shareStoreExternally(s);
     box.appendChild(row);
   }
@@ -1661,175 +1653,42 @@ function openShareStorePicker(){
 // Alias mantenuto per compatibilità con eventuali richiami meno recenti.
 const openAppleMaps=openGoogleMaps;
 
-const travelCacheKey='overgreen-travel-cache-v2';
+const travelCacheKey='overgreen-travel-cache-v207';
 let travelRenderToken=0;
 let scheduleTravelRenderToken=0;
 function readTravelCache(){try{return JSON.parse(localStorage.getItem(travelCacheKey)||'{}')}catch{return {}}}
 function writeTravelCache(cache){try{localStorage.setItem(travelCacheKey,JSON.stringify(cache))}catch{}}
-function normalizedRouteAddress(address){return String(address||'').replace(/\s+/g,' ').trim()}
-function routeStoreForAddress(address){
-  const key=normalizedRouteAddress(address).toLowerCase();
-  return stores.find(st=>normalizedRouteAddress(routeAddressForStore(st)).toLowerCase()===key)||null;
-}
-function storedRoutePoint(address){
-  const st=routeStoreForAddress(address);if(normalizedRouteAddress(st?.route_geocode_label).toLowerCase()==='italia')return null;
-  const rawLat=st?.route_latitude,rawLon=st?.route_longitude,lat=Number(rawLat),lon=Number(rawLon);
-  return st&&rawLat!==null&&rawLat!==undefined&&rawLon!==null&&rawLon!==undefined&&Number.isFinite(lat)&&Number.isFinite(lon)?{lat,lon,source:'saved-store',resolvedAddress:st.route_geocode_label||routeAddressForStore(st),approximate:false}:null;
-}
-async function persistRoutePoint(address,value){
-  const st=routeStoreForAddress(address);if(!st||!Number.isFinite(value?.lat)||!Number.isFinite(value?.lon))return;
-  st.route_latitude=value.lat;st.route_longitude=value.lon;st.route_geocoded_at=new Date().toISOString();st.route_geocode_label=value.resolvedAddress||normalizedRouteAddress(address);
-  try{
-    const {error}=await sb.from('stores').update({route_latitude:value.lat,route_longitude:value.lon,route_geocoded_at:st.route_geocoded_at,route_geocode_label:st.route_geocode_label}).eq('id',st.id);
-    if(error)console.warn('Coordinate sede non salvate (migrazione v112-16 mancante o permessi insufficienti):',error.message);
-  }catch(e){console.warn('Coordinate sede non salvate:',e)}
-}
-function routeAddressParts(address){
-  const parts=normalizedRouteAddress(address).split(',').map(x=>x.trim()).filter(Boolean);
-  return {street:parts[0]||'',city:parts[1]||'',country:parts.slice(2).join(', ')||'Italia'};
-}
-function routeStreetWithoutNumber(street){return String(street||'').replace(/\s+\d+[a-zA-Z]?(?:[\/-]\d+[a-zA-Z]?)?\s*$/,'').trim()}
-function nominatimLabel(row){return row?.display_name||[row?.name,row?.type].filter(Boolean).join(' ')||''}
-async function nominatimGeocode(query){
-  const url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=3&addressdetails=1&countrycodes=it&q='+encodeURIComponent(query);
-  let r;try{r=await fetch(url,{headers:{'Accept':'application/json'}})}catch(e){throw new Error('Errore di connessione durante la ricerca indirizzo')}
-  if(!r.ok)throw new Error(`Servizio indirizzi non disponibile (HTTP ${r.status})`);
-  const rows=await r.json();if(!rows?.length)return null;
-  const row=rows[0],lat=Number(row.lat),lon=Number(row.lon);if(!Number.isFinite(lat)||!Number.isFinite(lon))return null;
-  return {lat,lon,source:'Nominatim',resolvedAddress:nominatimLabel(row)};
-}
-async function photonGeocode(query){
-  const url='https://photon.komoot.io/api/?limit=5&lang=it&q='+encodeURIComponent(query);
-  let r;try{r=await fetch(url,{headers:{'Accept':'application/json'}})}catch(e){return null}
-  if(!r.ok)return null;
-  const data=await r.json(),features=(data?.features||[]).filter(f=>String(f?.properties?.countrycode||'').toLowerCase()==='it'||String(f?.properties?.country||'').toLowerCase()==='italia');
-  const f=features[0]||data?.features?.[0];if(!f?.geometry?.coordinates)return null;
-  const [lon,lat]=f.geometry.coordinates.map(Number);if(!Number.isFinite(lat)||!Number.isFinite(lon))return null;
-  const p=f.properties||{},label=[p.name,p.street,p.housenumber,p.city||p.locality,p.state,'Italia'].filter((v,i,a)=>v&&a.indexOf(v)===i).join(', ');
-  return {lat,lon,source:'Photon',resolvedAddress:label||query,properties:p};
-}
-async function correctedRouteCity(city){
-  if(!city)return '';
-  const hit=await photonGeocode(city+', Italia');if(!hit)return '';
-  const p=hit.properties||{};return p.city||p.locality||p.name||'';
-}
-function storeLookupAddressFromNominatim(row){
-  const a=row?.address||{};
-  const road=a.road||a.pedestrian||a.footway||a.residential||a.neighbourhood||'';
-  const number=a.house_number||'';
-  const city=a.city||a.town||a.village||a.municipality||a.hamlet||'';
-  const street=[road,number].filter(Boolean).join(' ').trim();
-  return {street,city,label:nominatimLabel(row)};
-}
-async function nominatimStoreLookup(query){
-  const url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&addressdetails=1&countrycodes=it&q='+encodeURIComponent(query);
-  let r;try{r=await fetch(url,{headers:{'Accept':'application/json'}})}catch(e){throw new Error('Connessione non disponibile')}
-  if(!r.ok)throw new Error(`Servizio indirizzi non disponibile (HTTP ${r.status})`);
-  const rows=await r.json();
-  for(const row of rows||[]){
-    const lat=Number(row.lat),lon=Number(row.lon),parts=storeLookupAddressFromNominatim(row);
-    if(Number.isFinite(lat)&&Number.isFinite(lon)&&(parts.street||parts.city))return {lat,lon,...parts,source:'Nominatim'};
-  }
-  return null;
-}
-function storeLookupAddressFromPhoton(hit){
-  const p=hit?.properties||{};
-  const street=[p.street||'',p.housenumber||''].filter(Boolean).join(' ').trim();
-  const city=p.city||p.locality||p.district||p.county||'';
-  const label=[p.name,p.street,p.housenumber,city,p.state,'Italia'].filter((v,i,a)=>v&&a.indexOf(v)===i).join(', ');
-  return {street,city,label};
-}
-async function photonStoreLookup(query){
-  const url='https://photon.komoot.io/api/?limit=8&lang=it&q='+encodeURIComponent(query);
-  let r;try{r=await fetch(url,{headers:{'Accept':'application/json'}})}catch(e){return null}
-  if(!r.ok)return null;
-  const data=await r.json();
-  for(const f of data?.features||[]){
-    const [lon,lat]=(f?.geometry?.coordinates||[]).map(Number);if(!Number.isFinite(lat)||!Number.isFinite(lon))continue;
-    const parts=storeLookupAddressFromPhoton(f);if(parts.street||parts.city)return {lat,lon,...parts,source:'Photon'};
-  }
-  return null;
-}
-async function lookupStoreAddressOnline(){
-  const btn=$('storeAddressLookupBtn'),status=$('storeAddressLookupStatus');
-  const name=$('storeName').value.trim(),address=$('storeAddress').value.trim(),city=$('storeCity').value.trim();
-  const client=({eurospin:'Eurospin',intesa:'Intesa Sanpaolo',privato:''})[$('storeClient').value]||'';
-  if(!name&&!address&&!city)return alert('Inserisci almeno il nome della sede, la città o una parte dell’indirizzo.');
-  const old=btn.textContent;btn.disabled=true;btn.textContent='Ricerca…';
-  if(status){status.textContent='Sto cercando la sede online…';status.classList.remove('hidden')}
-  try{
-    const queries=[];
-    const add=q=>{q=String(q||'').replace(/\s+/g,' ').trim();if(q&&!queries.includes(q))queries.push(q)};
-    add([client,name,address,city,'Italia'].filter(Boolean).join(', '));
-    add([client,name,city,'Italia'].filter(Boolean).join(', '));
-    add([name,address,'Italia'].filter(Boolean).join(', '));
-    add([address,city,'Italia'].filter(Boolean).join(', '));
-    add([name,city,'Italia'].filter(Boolean).join(', '));
-    let hit=null,used='';
-    for(const q of queries){
-      used=q;
-      try{hit=await nominatimStoreLookup(q)}catch(e){if(String(e?.message||'').includes('Servizio indirizzi'))throw e}
-      if(!hit)hit=await photonStoreLookup(q);
-      if(hit)break;
+const locationService=OvergreenLocations.createService({
+  fetch:(...args)=>fetch(...args),getStore:id=>stores.find(s=>s.id===id),readCache:readTravelCache,writeCache:writeTravelCache
+});
+let storeLocationEditor=null;
+function locationEditor(){
+  if(!storeLocationEditor)storeLocationEditor=OvergreenLocationUI.create({
+    getStore:()=>({id:$('storeId').value,nome:$('storeName').value.trim(),indirizzo:$('storeAddress').value.trim(),citta:$('storeCity').value.trim(),client_type:$('storeClient').value}),
+    search:st=>locationService.candidates(st),
+    resolveLink:async value=>{
+      const {data,error}=await sb.functions.invoke('resolve-maps-link',{body:{url:value}});
+      if(error||!data?.point)throw new Error(data?.error||'Link non leggibile. Scegli il punto sulla mappa o incolla le coordinate.');
+      return data.point;
     }
-    if(!hit)throw new Error('Nessun indirizzo affidabile trovato online. Prova a scrivere almeno il nome della sede e la provincia/città.');
-    if(hit.street)$('storeAddress').value=hit.street;
-    if(hit.city)$('storeCity').value=hit.city;
-    $('storeAddress').dataset.lookupLat=String(hit.lat);$('storeAddress').dataset.lookupLon=String(hit.lon);$('storeAddress').dataset.lookupLabel=hit.label||[hit.street,hit.city,'Italia'].filter(Boolean).join(', ');
-    if(status){status.textContent=`✓ Trovato con ${hit.source}: ${hit.label||[hit.street,hit.city].filter(Boolean).join(', ')}`;status.classList.remove('hidden')}
-    toast('Indirizzo trovato e compilato');
-  }catch(err){
-    if(status){status.textContent='⚠️ '+(err?.message||String(err));status.classList.remove('hidden')}
-    alert(err?.message||String(err));
-  }finally{btn.disabled=false;btn.textContent=old}
+  });
+  return storeLocationEditor;
 }
-async function geocodeRouteAddress(address){
-  if(!normalizedRouteAddress(address)||normalizedRouteAddress(address).toLowerCase()==='italia')throw new Error('Indirizzo non trovato: specificare almeno la sede o la città');
-  const normalized=normalizedRouteAddress(address),key='geo2:'+normalized.toLowerCase(),cache=readTravelCache();
-  const saved=storedRoutePoint(normalized);if(saved)return saved;
-  if(cache[key]&&Date.now()-cache[key].savedAt<1000*60*60*24*180)return cache[key].value;
-  const {street,city}=routeAddressParts(normalized),attempts=[];
-  const push=async(label,fn,approximate=false)=>{try{const hit=await fn();attempts.push(label+(hit?' ✓':' ✗'));if(hit)return {...hit,approximate}}catch(e){attempts.push(label+' → '+(e?.message||String(e)));if(String(e?.message||'').includes('Servizio indirizzi')||String(e?.message||'').includes('connessione'))throw e}return null};
-  let value=await push('Nominatim indirizzo completo',()=>nominatimGeocode(normalized));
-  if(!value)value=await push('Photon indirizzo completo',()=>photonGeocode(normalized));
-  if(!value&&street&&city){
-    const corrected=await correctedRouteCity(city);
-    if(corrected&&corrected.toLowerCase()!==city.toLowerCase()){
-      const correctedQuery=[street,corrected,'Italia'].join(', ');
-      value=await push(`Località corretta automaticamente: ${city} → ${corrected}`,()=>nominatimGeocode(correctedQuery));
-      if(!value)value=await push(`Photon con località corretta: ${corrected}`,()=>photonGeocode(correctedQuery));
-    }
-  }
-  if(!value&&street&&city){
-    const streetOnly=routeStreetWithoutNumber(street);
-    if(streetOnly&&streetOnly!==street){
-      const q=[streetOnly,city,'Italia'].join(', ');
-      value=await push('Via senza numero civico',()=>nominatimGeocode(q),true);
-      if(!value)value=await push('Photon via senza numero civico',()=>photonGeocode(q),true);
-    }
-  }
-  if(!value)throw new Error(`Indirizzo non trovato: ${normalized}\nTentativi: ${attempts.join(' | ')}`);
-  if(!routeStoreForAddress(normalized)?.indirizzo)value.approximate=true;
-  value.originalAddress=normalized;
-  cache[key]={savedAt:Date.now(),value};writeTravelCache(cache);persistRoutePoint(normalized,value);
-  return value;
+async function lookupStoreAddressOnline(){return locationEditor().lookup()}
+async function geocodeRouteAddress(address){return locationService.geocode(address)}
+async function routeBetweenAddresses(from,to){return locationService.route(from,to)}
+function routeAddressForStore(st){
+  if(st?.id)return 'store:'+st.id;
+  const place=[st?.indirizzo,st?.citta].filter(Boolean);if(!place.length&&st?.nome)place.push(st.nome);
+  return place.length?[...place,'Italia'].join(', '):'';
 }
-async function routeBetweenAddresses(from,to){
-  const a=normalizedRouteAddress(from),b=normalizedRouteAddress(to),key='route2:'+a.toLowerCase()+'>'+b.toLowerCase(),cache=readTravelCache();
-  if(cache[key]&&Date.now()-cache[key].savedAt<1000*60*60*24*30)return cache[key].value;
-  const [p1,p2]=await Promise.all([geocodeRouteAddress(a),geocodeRouteAddress(b)]);
-  const url=`https://router.project-osrm.org/route/v1/driving/${p1.lon},${p1.lat};${p2.lon},${p2.lat}?overview=false&steps=false`;
-  let r;try{r=await fetch(url)}catch(e){throw new Error('Errore di connessione durante il calcolo percorso')}
-  if(!r.ok)throw new Error(`Servizio percorsi non disponibile (HTTP ${r.status})`);const data=await r.json();
-  const route=data.routes?.[0];if(!route)throw new Error('Percorso stradale non trovato');
-  const value={km:route.distance/1000,minutes:Math.max(1,Math.round(route.duration/60)),approximate:!!(p1.approximate||p2.approximate),fromResolved:p1.resolvedAddress||a,toResolved:p2.resolvedAddress||b};cache[key]={savedAt:Date.now(),value};writeTravelCache(cache);return value;
-}
-function routeAddressForStore(st){const place=[st?.indirizzo,st?.citta].filter(Boolean);if(!place.length&&st?.nome)place.push(st.nome);return place.length?[...place,'Italia'].join(', '):''}
-function routeAddressForExtra(e,st){if(st)return routeAddressForStore(st);const place=e?.indirizzo_esterno||e?.nome_esterno;return place?[place,'Italia'].join(', '):''}
+function routeAddressForExtra(e,st){if(st)return routeAddressForStore(st);const place=[e?.nome_esterno,e?.indirizzo_esterno].filter(Boolean);return place.length?[...place,'Italia'].join(', '):''}
+function routeDisplayAddress(ref){try{return locationService.describe(ref).label}catch{return ref}}
 function formatTravelMinutes(minutes){const h=Math.floor(minutes/60),m=minutes%60;return h?`${h} h${m?' '+m+' min':''}`:`${m} min`}
 
 function travelErrorLabel(err){
   const m=String(err?.message||err||'Errore sconosciuto');
+  if(m.includes('Posizione da verificare'))return '📍 Posizione da verificare';
   if(m.includes('Indirizzo non trovato'))return '⚠️ Indirizzo non trovato';
   if(m.includes('Servizio indirizzi'))return '⚠️ Servizio indirizzi non disponibile';
   if(m.includes('Percorso stradale'))return '⚠️ Percorso stradale non trovato';
@@ -1840,14 +1699,14 @@ function travelErrorLabel(err){
 function renderTravelError(separator,err,from,to){
   const technical=String(err?.message||err||'Errore sconosciuto');
   separator.innerHTML=`<span>↓</span><div><small>${esc(travelErrorLabel(err))}</small><button type="button" class="travel-error-details">Dettagli</button></div>`;
-  separator.querySelector('.travel-error-details')?.addEventListener('click',()=>alert(`Dettagli calcolo viaggio\n\nDa:\n${from||'Indirizzo mancante'}\n\nA:\n${to||'Indirizzo mancante'}\n\nErrore:\n${technical}`));
+  separator.querySelector('.travel-error-details')?.addEventListener('click',()=>alert(`Dettagli calcolo viaggio\n\nDa:\n${routeDisplayAddress(from)||'Indirizzo mancante'}\n\nA:\n${routeDisplayAddress(to)||'Indirizzo mancante'}\n\nErrore:\n${technical}`));
 }
 
 async function hydrateScheduleTravel(section,token){
   const cards=[...section.querySelectorAll('.schedule-item[data-route-address]')];if(cards.length<2)return;
   const summary=document.createElement('div');summary.className='worker-travel-summary schedule-travel-summary';summary.innerHTML='<strong>🚗 Percorso</strong><span>Calcolo in corso…</span>';
   section.querySelector('.schedule-card-head')?.after(summary);
-  let totalKm=0,totalMinutes=0,okCount=0;
+  let totalKm=0,totalMinutes=0,okCount=0,hasApproximate=false;
   for(let i=0;i<cards.length-1;i++){
     if(token!==scheduleTravelRenderToken)return;
     const separator=document.createElement('div');separator.className='dashboard-travel-leg schedule-travel-leg';separator.innerHTML='<span>↓</span><strong>Calcolo viaggio…</strong>';
@@ -1855,18 +1714,18 @@ async function hydrateScheduleTravel(section,token){
     try{
       const route=await routeBetweenAddresses(cards[i].dataset.routeAddress,cards[i+1].dataset.routeAddress);
       if(token!==scheduleTravelRenderToken)return;
-      totalKm+=route.km;totalMinutes+=route.minutes;okCount++;
+      totalKm+=route.km;totalMinutes+=route.minutes;okCount++;hasApproximate||=route.approximate;
       separator.innerHTML=`<span>↓</span><strong>${route.approximate?'≈ ':''}🚗 ${formatTravelMinutes(route.minutes)} · ${route.km.toFixed(route.km<10?1:0)} km${route.approximate?' · posizione approssimativa':''}</strong>`;
     }catch(err){renderTravelError(separator,err,cards[i].dataset.routeAddress,cards[i+1].dataset.routeAddress)}
   }
   if(token!==scheduleTravelRenderToken)return;
-  summary.querySelector('span').textContent=okCount?`${totalKm.toFixed(totalKm<10?1:0)} km · ${formatTravelMinutes(totalMinutes)} di guida`:'Dati di viaggio non disponibili';
+  summary.querySelector('span').textContent=okCount?`${hasApproximate?'≈ ':''}${totalKm.toFixed(totalKm<10?1:0)} km · ${formatTravelMinutes(totalMinutes)} di guida${okCount<cards.length-1?' · parziale':''}${hasApproximate?' · posizioni indicative':''}`:'Dati di viaggio non disponibili';
 }
 async function hydrateWorkerTravel(section,token){
   const cards=[...section.querySelectorAll('.dashboard-line-job[data-route-address].is-open')];if(cards.length<2)return;
   const summary=document.createElement('div');summary.className='worker-travel-summary';summary.innerHTML='<strong>🚗 Percorso</strong><span>Calcolo in corso…</span>';
   section.querySelector('h3')?.after(summary);
-  let totalKm=0,totalMinutes=0,okCount=0;
+  let totalKm=0,totalMinutes=0,okCount=0,hasApproximate=false;
   for(let i=0;i<cards.length-1;i++){
     if(token!==travelRenderToken)return;
     const separator=document.createElement('div');separator.className='dashboard-travel-leg';separator.innerHTML='<span>↓</span><strong>Calcolo viaggio…</strong>';
@@ -1874,12 +1733,12 @@ async function hydrateWorkerTravel(section,token){
     try{
       const route=await routeBetweenAddresses(cards[i].dataset.routeAddress,cards[i+1].dataset.routeAddress);
       if(token!==travelRenderToken)return;
-      totalKm+=route.km;totalMinutes+=route.minutes;okCount++;
+      totalKm+=route.km;totalMinutes+=route.minutes;okCount++;hasApproximate||=route.approximate;
       separator.innerHTML=`<span>↓</span><strong>${route.approximate?'≈ ':''}🚗 ${formatTravelMinutes(route.minutes)} · ${route.km.toFixed(route.km<10?1:0)} km${route.approximate?' · posizione approssimativa':''}</strong>`;
     }catch(err){renderTravelError(separator,err,cards[i].dataset.routeAddress,cards[i+1].dataset.routeAddress)}
   }
   if(token!==travelRenderToken)return;
-  summary.querySelector('span').textContent=okCount?`${totalKm.toFixed(totalKm<10?1:0)} km · ${formatTravelMinutes(totalMinutes)} di guida`:'Dati di viaggio non disponibili';
+  summary.querySelector('span').textContent=okCount?`${hasApproximate?'≈ ':''}${totalKm.toFixed(totalKm<10?1:0)} km · ${formatTravelMinutes(totalMinutes)} di guida${okCount<cards.length-1?' · parziale':''}${hasApproximate?' · posizioni indicative':''}`:'Dati di viaggio non disponibili';
 }
 
 function historyStatusLabel(stato){
@@ -2469,7 +2328,7 @@ function renderStores(){
  if(storeFilter!=='all')list=list.filter(s=>storeFilter==='today'?s.ultimo_passaggio===today():storeFilter==='urgent'?isUrgentStore(s):status(s)===storeFilter);
  list.sort((a,b)=>sort==='alpha'?a.nome.localeCompare(b.nome,'it'):(days(b.ultimo_passaggio)??9999)-(days(a.ultimo_passaggio)??9999));
  $('storesList').innerHTML='';for(const s of list){const n=days(s.ultimo_passaggio),pending=interventions.some(i=>i.store_id===s.id&&i.stato==='in_attesa'),storeState=status(s),programmed=storeState==='scheduled';const c=document.createElement('article');c.className=`card store-card ${storeState}`;c.innerHTML=`<div class="status-bar"></div><div><div class="card-top"><div><h3 data-detail>${esc(s.nome)}</h3><p class="muted">${esc(s.citta||s.indirizzo||'')}</p></div><div class="days">${!storeHasInterval(s)?'Su richiesta':n===null?'—':n+' gg'}</div></div>${programmed?'<p class="programmed-label">📅 In programma</p>':''}${!storeHasInterval(s)?'<p class="muted"><strong>↪ Nessun intervallo · solo su richiesta</strong></p>':''}${pending?'<p class="pending">⏳ In attesa di convalida</p>':''}${s.site_type==='atm'&&s.importo_fisso!==null&&s.importo_fisso!==undefined?`<p class="muted"><strong>Importo fisso:</strong> ${esc(euro(s.importo_fisso))}</p>`:''}<p class="muted">Ultimo passaggio: ${fmt(s.ultimo_passaggio)}</p><div class="actions"><button class="secondary" data-map>Maps</button><button data-history>Storico</button>${!pending?'<button data-done>Eseguito</button>':''}${admin()?'<button class="secondary" data-share>Condividi</button><button class="secondary" data-edit>Modifica</button>':''}</div></div>`;
- c.querySelector('[data-detail]').onclick=()=>showStoreDetail(s);c.querySelector('[data-map]').onclick=()=>openGoogleMaps(s.indirizzo,clientLabel(s)+' '+s.nome,s.citta);c.querySelector('[data-history]').onclick=()=>showHistory(s);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(s));c.querySelector('[data-share]')?.addEventListener('click',()=>shareStoreExternally(s));c.querySelector('[data-edit]')?.addEventListener('click',()=>openStore(s));$('storesList').appendChild(c)}
+ c.querySelector('[data-detail]').onclick=()=>showStoreDetail(s);c.querySelector('[data-map]').onclick=()=>openStoreMaps(s);c.querySelector('[data-history]').onclick=()=>showHistory(s);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(s));c.querySelector('[data-share]')?.addEventListener('click',()=>shareStoreExternally(s));c.querySelector('[data-edit]')?.addEventListener('click',()=>openStore(s));$('storesList').appendChild(c)}
  $('totalCount').textContent=clientStores.length;
  $('dueCount').textContent=clientStores.filter(s=>status(s)==='due').length;
  $('warningCount').textContent=clientStores.filter(s=>status(s)==='warning').length;
@@ -2478,7 +2337,7 @@ function renderStores(){
 function renderWorkers(){for(const id of ['doneWorkers','scheduleWorkers','extraWorkers']){const w=$(id);if(!w)continue;w.innerHTML='';profiles.filter(p=>p.attivo).forEach(p=>{const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${p.id}"> ${esc(p.nome)}`;w.appendChild(l)})}}
 function syncStoreIntervalUi(){const off=$('storeNoInterval')?.checked===true;if($('storeInterval')){$('storeInterval').disabled=off;$('storeInterval').required=!off}}
 function syncStoreTypeUi(){const atm=$('storeSiteType')?.value==='atm';$('storeFixedAmountWrap')?.classList.toggle('hidden',!atm);if(!atm&&$('storeFixedAmount'))$('storeFixedAmount').value=''}
-function openStore(s=null){$('storeForm').reset();$('storeId').value=s?.id||'';$('storeClient').value=clientType(s);$('storeSiteType').value=s?.site_type||'punto_vendita';$('storeFixedAmount').value=s?.importo_fisso??'';$('storeName').value=s?.nome||'';$('storeAddress').value=s?.indirizzo||'';$('storeCity').value=s?.citta||'';$('storeAddress').dataset.originalValue=s?.indirizzo||'';$('storeCity').dataset.originalValue=s?.citta||'';$('storeAddress').dataset.lookupLat='';$('storeAddress').dataset.lookupLon='';$('storeAddress').dataset.lookupLabel='';if($('storeAddressLookupStatus')){$('storeAddressLookupStatus').textContent='';$('storeAddressLookupStatus').classList.add('hidden')}$('storeLast').value=s?.ultimo_passaggio||'';const noInterval=!!s&&!storeHasInterval(s);$('storeNoInterval').checked=noInterval;$('storeInterval').value=storeHasInterval(s)?Number(s.intervallo_giorni):15;$('storeNotes').value=s?.note||'';syncStoreTypeUi();syncStoreIntervalUi();openDialog('storeDialog')}
+function openStore(s=null){$('storeForm').reset();$('storeId').value=s?.id||'';$('storeClient').value=clientType(s);$('storeSiteType').value=s?.site_type||'punto_vendita';$('storeFixedAmount').value=s?.importo_fisso??'';$('storeName').value=s?.nome||'';$('storeAddress').value=s?.indirizzo||'';$('storeCity').value=s?.citta||'';$('storeAddress').dataset.originalValue=s?.indirizzo||'';$('storeCity').dataset.originalValue=s?.citta||'';$('storeAddress').dataset.lookupLat='';$('storeAddress').dataset.lookupLon='';$('storeAddress').dataset.lookupLabel='';if($('storeAddressLookupStatus')){$('storeAddressLookupStatus').textContent='';$('storeAddressLookupStatus').classList.add('hidden')}$('storeLast').value=s?.ultimo_passaggio||'';const noInterval=!!s&&!storeHasInterval(s);$('storeNoInterval').checked=noInterval;$('storeInterval').value=storeHasInterval(s)?Number(s.intervallo_giorni):15;$('storeNotes').value=s?.note||'';syncStoreTypeUi();syncStoreIntervalUi();locationEditor().open(s);openDialog('storeDialog')}
 $('storeNoInterval')?.addEventListener('change',syncStoreIntervalUi);
 $('storeSiteType')?.addEventListener('change',syncStoreTypeUi);
 async function openDone(s,scheduleItemId=''){
@@ -3283,7 +3142,7 @@ function renderSchedules(){
       r.dataset.scheduleItemId=item.id;
       const stato=effectiveState==='in_attesa'?'In attesa di convalida':'Da eseguire',linked=linkedExtrasForScheduleItem(item.id);
       r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${displayIndex+1}</div><div class="schedule-item-copy">${scheduleClientBadge(st)}<strong data-store-detail>${esc(st?.nome||'Sede')}</strong><small>${esc(st?.citta||st?.indirizzo||'')} · ${stato}</small></div>${admin()&&scheduleClientFilter==='all'?'<button type="button" class="drag-handle" data-drag-handle title="Tieni premuto e trascina" aria-label="Trascina per cambiare ordine">☰</button>':''}</div>${effectiveState==='da_fare'&&String(st?.next_visit_note||'').trim()?`<div class="schedule-next-visit"><strong>⚠️ Da fare in questo passaggio</strong><p>${esc(st.next_visit_note)}</p></div>`:''}${linked.length?`<div class="linked-extra-reminder compact-linked"><strong>Extra collegati (${linked.length})</strong>${linked.map(e=>`<span class="linked-extra-category ${extraCategoryClass(e)}"><b>${esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}</span>`).join('')}</div>`:''}<div class="actions schedule-item-actions"><button class="secondary" data-map>Maps</button>${effectiveState==='da_fare'?`<button data-done>${openMultiDayIntervention(st?.id)?'Continua intervento':'Eseguito'}</button>`:''}${admin()&&effectiveState==='da_fare'?'<button class="danger-btn" data-delete-scheduled>Elimina</button>':''}</div>`;
-      r.querySelector('[data-store-detail]').onclick=()=>showStoreDetail(st);r.querySelector('[data-map]').onclick=()=>openGoogleMaps(st?.indirizzo,clientLabel(st)+' '+(st?.nome||''),st?.citta);
+      r.querySelector('[data-store-detail]').onclick=()=>showStoreDetail(st);r.querySelector('[data-map]').onclick=()=>openStoreMaps(st);
       r.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,item.id));r.querySelector('[data-delete-scheduled]')?.addEventListener('click',()=>deleteScheduleItem(item,st));c.appendChild(r)
       }else if(job.kind==='extra'){
         const e=job.extra,r=extraCard(e);r.classList.add('schedule-extra-card','schedule-item');r.dataset.scheduleExtraId=e.id;
@@ -3299,10 +3158,10 @@ function renderSchedules(){
       }else{
         const a=job.activity,st=stores.find(x=>x.id===a.store_id),ct=workContacts.find(x=>x.id===a.contact_id),r=document.createElement('div');
         r.className='schedule-item schedule-item-compact schedule-activity-card';r.dataset.scheduleActivityId=a.id;
-        r.dataset.routeAddress=a.indirizzo||routeAddressForStore(st)||'';
+        r.dataset.routeAddress=activityRouteAddress(a,st);
         const type=activityTypeMeta(a.tipo);
         r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${displayIndex+1}</div><div class="schedule-item-copy"><span class="activity-pill">${type.icon} ${esc(type.label)}</span><strong>${esc(a.titolo||type.label)}</strong><small>${a.ora?esc(String(a.ora).slice(0,5))+' · ':''}${esc(st?.nome||a.indirizzo||'Luogo non indicato')}</small></div>${admin()&&scheduleClientFilter==='all'?'<button type="button" class="drag-handle" data-drag-handle title="Tieni premuto e trascina" aria-label="Trascina per cambiare ordine">☰</button>':''}</div>${ct?`<div class="schedule-next-visit"><strong>👤 ${esc(ct.nome)}</strong><p>${esc([ct.azienda,ct.ruolo,ct.telefono].filter(Boolean).join(' · '))}</p></div>`:''}${a.note?`<div class="schedule-next-visit"><p>${esc(a.note)}</p></div>`:''}<div class="actions schedule-item-actions">${r.dataset.routeAddress?'<button class="secondary" data-activity-map>Maps</button>':''}<button data-activity-done>✓ Eseguito</button>${admin()?'<button class="secondary" data-edit-activity>Modifica</button><button class="danger-btn" data-delete-activity>Elimina</button>':''}</div>`;
-        r.querySelector('[data-activity-map]')?.addEventListener('click',()=>openGoogleMaps(a.indirizzo||st?.indirizzo,a.titolo||type.label,st?.citta));
+        r.querySelector('[data-activity-map]')?.addEventListener('click',()=>openActivityMaps(a,st));
         r.querySelector('[data-activity-done]')?.addEventListener('click',()=>completeScheduleActivity(a));
         r.querySelector('[data-edit-activity]')?.addEventListener('click',()=>openScheduleActivityDialog(s,a));
         r.querySelector('[data-delete-activity]')?.addEventListener('click',()=>deleteScheduleActivity(a));
@@ -4516,7 +4375,21 @@ $('bulkIntervalForm').onsubmit=async e=>{e.preventDefault();
   const {error}=await q;if(error)return alert('Impossibile aggiornare gli intervalli: '+error.message);
   $('bulkIntervalDialog').close();toast(`Intervallo aggiornato per ${matches.length} sedi`);await loadAll();
 };
-$('storeForm').onsubmit=async e=>{e.preventDefault();const id=$('storeId').value,address=$('storeAddress').value.trim(),city=$('storeCity').value.trim(),addressChanged=address!==($('storeAddress').dataset.originalValue||'')||city!==($('storeCity').dataset.originalValue||''),lookupLat=Number($('storeAddress').dataset.lookupLat),lookupLon=Number($('storeAddress').dataset.lookupLon),hasLookup=Number.isFinite(lookupLat)&&Number.isFinite(lookupLon)&&$('storeAddress').dataset.lookupLat!==''&&$('storeAddress').dataset.lookupLon!=='';const payload={client_type:$('storeClient').value,site_type:$('storeSiteType').value,importo_fisso:$('storeSiteType').value==='atm'&&$('storeFixedAmount').value!==''?Number($('storeFixedAmount').value):null,nome:$('storeName').value.trim(),indirizzo:address||null,citta:city||null,ultimo_passaggio:$('storeLast').value||null,intervallo_giorni:$('storeNoInterval')?.checked?null:(Number($('storeInterval').value)||15),note:$('storeNotes').value.trim()||null};if(hasLookup){payload.route_latitude=lookupLat;payload.route_longitude=lookupLon;payload.route_geocoded_at=new Date().toISOString();payload.route_geocode_label=$('storeAddress').dataset.lookupLabel||[address,city,'Italia'].filter(Boolean).join(', ')}else if(addressChanged){payload.route_latitude=null;payload.route_longitude=null;payload.route_geocoded_at=null;payload.route_geocode_label=null}const r=id?await sb.from('stores').update(payload).eq('id',id):await sb.from('stores').insert(payload);if(r.error)return alert(r.error.message);$('storeDialog').close();toast('Sede salvata');await loadAll()};
+$('storeForm').onsubmit=async e=>{
+  e.preventDefault();await withFormBusy('storeForm',async()=>{
+    const id=$('storeId').value,address=$('storeAddress').value.trim(),city=$('storeCity').value.trim();
+    const payload={client_type:$('storeClient').value,site_type:$('storeSiteType').value,
+      importo_fisso:$('storeSiteType').value==='atm'&&$('storeFixedAmount').value!==''?Number($('storeFixedAmount').value):null,
+      nome:$('storeName').value.trim(),indirizzo:address||null,citta:city||null,ultimo_passaggio:$('storeLast').value||null,
+      intervallo_giorni:$('storeNoInterval')?.checked?null:(Number($('storeInterval').value)||15),note:$('storeNotes').value.trim()||null,
+      ...locationEditor().payload()};
+    if(!payload.nome)throw new Error('Inserisci il nome della sede.');
+    const query=id?sb.from('stores').update(payload).eq('id',id):sb.from('stores').insert(payload);
+    const {data,error}=await query.select('id').single();if(error)throw error;if(!data?.id)throw new Error('Sede non salvata. Verifica i permessi e riprova.');
+    travelRenderToken++;scheduleTravelRenderToken++;
+    $('storeDialog').close();toast('Sede e posizione salvate');await loadAll();
+  });
+};
 $('doneHasNextVisitNote').onchange=e=>{$('doneNextVisitWrap').classList.toggle('hidden',!e.target.checked);if(!e.target.checked)$('doneNextVisitNote').value=''};
 async function saveOrdinaryIntervention(continueAnotherDay,btn){
   if(ordinarySaveBusy)return;

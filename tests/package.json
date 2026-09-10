@@ -2,7 +2,7 @@
   "name": "overgreen-tests",
   "private": true,
   "scripts": {
-    "test": "node flows.cjs && node --test operations.cjs operations-ui.cjs extra-hours.cjs extra-economics.cjs extra-documents.cjs extra-pdf.cjs force-approval.cjs photo-sync.cjs photo-sync-ui.cjs"
+    "test": "node flows.cjs && node --test operations.cjs operations-ui.cjs extra-hours.cjs extra-economics.cjs extra-documents.cjs extra-pdf.cjs force-approval.cjs photo-sync.cjs photo-sync-ui.cjs locations.cjs locations-ui.cjs maps-link-function.cjs"
   },
   "devDependencies": {
     "fake-indexeddb": "6.2.4",

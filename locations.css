@@ -1,0 +1,17 @@
+.store-location{border:1px solid #cbd9d0;border-radius:12px;padding:12px;margin:10px 0;background:#f6faf7}
+.store-location summary{cursor:pointer;font-weight:700;font-size:1rem;padding:4px 0}
+.store-location p{font-size:.875rem;margin:8px 0;line-height:1.45}
+.store-location-actions{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.store-location-actions>button,.store-location-actions>a{flex:1 1 130px;min-height:42px;font-size:.875rem}
+.store-location-map{height:280px;border-radius:10px;background:#e8efe9;isolation:isolate;margin:10px 0}
+.store-location-map:empty{display:none}
+.store-location-map button,.store-location-map a{width:auto;padding:0}
+.store-location-map .leaflet-control-attribution{font-size:11px}
+.store-location-status{overflow-wrap:anywhere}
+.store-location-pin{width:22px!important;height:22px!important;background:#075b31;border:3px solid white;border-radius:50%;box-shadow:0 1px 7px #333}
+.store-location input{font-size:1rem}
+.store-location .location-error{color:#9c3216}
+.store-location [hidden]{display:none!important}
+.store-location-results{display:grid;gap:8px}
+.store-location-results button{text-align:left;white-space:normal;font-size:.875rem;overflow-wrap:anywhere}
+.store-location-actions>a{display:flex;align-items:center;justify-content:center;text-decoration:none;color:#075b31;border:1px solid #cbd9d0;border-radius:8px;padding:8px}

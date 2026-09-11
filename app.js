@@ -1,4 +1,4 @@
-const APP_VERSION='V207';
+const APP_VERSION='V208';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -1653,7 +1653,7 @@ function openShareStorePicker(){
 // Alias mantenuto per compatibilità con eventuali richiami meno recenti.
 const openAppleMaps=openGoogleMaps;
 
-const travelCacheKey='overgreen-travel-cache-v207';
+const travelCacheKey='overgreen-travel-cache-v208';
 let travelRenderToken=0;
 let scheduleTravelRenderToken=0;
 function readTravelCache(){try{return JSON.parse(localStorage.getItem(travelCacheKey)||'{}')}catch{return {}}}
@@ -5305,3 +5305,4 @@ $('eurospinExcelGenerate')?.addEventListener('click',generateEurospinExcel);
 $('eurospinPackageGenerate')?.addEventListener('click',generateEurospinMonthlyPackages);
 $('eurospinPackageMonth')?.addEventListener('change',()=>{$('eurospinPackageGenerate').disabled=true;$('eurospinPackageDownloads').innerHTML='';eurospinExcelState={month:'',category:'both',rows:[],analyzed:false};$('eurospinExcelGenerate').disabled=true;$('eurospinExcelStatus').textContent='Filtri cambiati: ripeti la verifica e la lettura dei numeri chiusura.'});
 $('eurospinPackageCategory')?.addEventListener('change',()=>{$('eurospinPackageGenerate').disabled=true;$('eurospinPackageDownloads').innerHTML='';eurospinExcelState={month:'',category:'both',rows:[],analyzed:false};$('eurospinExcelGenerate').disabled=true;$('eurospinExcelStatus').textContent='Filtri cambiati: ripeti la verifica e la lettura dei numeri chiusura.'});
+

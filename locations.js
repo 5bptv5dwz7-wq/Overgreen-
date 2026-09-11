@@ -21,7 +21,9 @@
     const name=clean(st?.nome);
     return brand&&!norm(name).includes(norm(brand))?[brand,name].filter(Boolean).join(' '):name;
   }
-  const storeQuery=st=>join([storeName(st),st?.indirizzo,st?.citta,st?.provincia,'Italia']);
+  // Intesa includes closed branches and standalone ATMs: an entered address is authoritative.
+  const addressOnly=st=>st?.client_type==='intesa'&&!!clean(st?.indirizzo);
+  const storeQuery=st=>addressOnly(st)?join([st.indirizzo,st.citta||st.nome,st.provincia,'Italia']):join([storeName(st),st?.indirizzo,st?.citta,st?.provincia,'Italia']);
   function storeDestination(st){const p=confirmedPoint(st);return p?pair(p):storeQuery(st)}
   const mapsUrl=destination=>'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(destination);
   function fingerprint(st){return JSON.stringify([st?.id||'',norm(st?.client_type),norm(st?.nome),norm(st?.indirizzo),norm(st?.citta),norm(st?.provincia),confirmedPoint(st)])}
@@ -133,6 +135,7 @@
     }
     async function candidates(st){
       if(!clean(st?.nome)&&!clean(st?.indirizzo)&&!clean(st?.citta))return [];
+      if(addressOnly(st))return (await search(storeQuery(st))).filter(h=>norm(h.country)==='it'&&(!clean(st.citta)||matchesLocality(h,st))).slice(0,5);
       const qs=[storeQuery(st),join([storeName(st),st?.citta,st?.provincia,'Italia'])];
       let places=[];
       for(const q of [...new Set(qs)]){places=(await search(q)).filter(h=>isStorePlace(h,st));if(places.length)break}
@@ -151,7 +154,7 @@
     }
     async function geocode(ref){
       const d=describe(ref);if(d.point)return {...d.point,approximate:false,resolvedAddress:d.label,source:'confirmed'};
-      const key='geo207:'+d.key,old=cached(key,7*86400000);if(old)return old;
+      const key='geo208:'+d.key,old=cached(key,7*86400000);if(old)return old;
       if(pending.has(key))return pending.get(key);
       const task=(async()=>{
         const hits=d.st?await candidates(d.st):await search(d.label);
@@ -168,7 +171,7 @@
       const d1=describe(from),d2=describe(to);
       const [a,b]=await Promise.all([geocode(from),geocode(to)]);
       // Resolve current points FIRST: a changed pin cannot hit an old route cache.
-      const key='route207:'+JSON.stringify([d1.key,d2.key,a.lat,a.lon,b.lat,b.lon,a.approximate,b.approximate]);
+      const key='route208:'+JSON.stringify([d1.key,d2.key,a.lat,a.lon,b.lat,b.lon,a.approximate,b.approximate]);
       const old=cached(key,30*86400000);if(old)return old;
       if(pending.has(key))return pending.get(key);
       const task=(async()=>{
@@ -181,3 +184,4 @@
   }
   return {clean,norm,point,pair,join,confirmedPoint,storeName,storeQuery,storeDestination,mapsUrl,fingerprint,coordinateText,allowedMapsUrl,parseMapsPoint,resolveMapsLink,candidateNominatim,candidatePhoton,matchesLocality,isStorePlace,createService};
 });
+

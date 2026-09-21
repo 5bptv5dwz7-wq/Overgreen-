@@ -1,4 +1,4 @@
-const APP_VERSION='V209';
+const APP_VERSION='V210';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -1071,7 +1071,7 @@ function dashboardJobCompare(a,b){
   if(ta!==tb)return ta? -1:1;
   return dashboardJobRoutePosition(a)-dashboardJobRoutePosition(b)||String((a.row?.item||a.extra||a.activity)?.id||'').localeCompare(String((b.row?.item||b.extra||b.activity)?.id||''));
 }
-function globalSearchMatches(q){q=String(q||'').trim().toLowerCase();if(q.length<2)return [];const out=[],add=(k,t,s,a)=>{if((t+" "+s).toLowerCase().includes(q))out.push({k,t,s,a})};stores.forEach(x=>add("Sede",x.nome||"Sede",[x.indirizzo,x.citta].filter(Boolean).join(" · "),()=>{setView("stores");$("searchInput").value=x.nome||"";renderStores()}));extras.forEach(x=>{const st=stores.find(s=>s.id===x.store_id);add("Extra",x.titolo||"Extra",[x.numero_target?"Target "+x.numero_target:"",st?.nome||x.nome_esterno||""].filter(Boolean).join(" · "),()=>{setView("extras");$("extraSearchInput").value=x.numero_target||x.titolo||"";renderExtras()})});profiles.forEach(x=>add("Operatore",x.nome||x.email||"Operatore",x.email||"",()=>setView("schedule")));return out.slice(0,40)}
+function globalSearchMatches(q){q=String(q||'').trim().toLowerCase();if(q.length<2)return [];const out=[],add=(k,t,s,a)=>{if((t+" "+s).toLowerCase().includes(q))out.push({k,t,s,a})};stores.forEach(x=>add("Sede",x.nome||"Sede",[x.indirizzo,x.citta].filter(Boolean).join(" · "),()=>{setView("stores");$("searchInput").value=x.nome||"";renderStores()}));extras.forEach(x=>{const st=stores.find(s=>s.id===x.store_id);add("Extra",x.titolo||"Extra",[x.numero_target?"Target "+x.numero_target:"",st?.nome||x.nome_esterno||""].filter(Boolean).join(" · "),()=>openExtraById(x.id))});profiles.forEach(x=>add("Operatore",x.nome||x.email||"Operatore",x.email||"",()=>setView("schedule")));return out.slice(0,40)}
 function renderGlobalSearchEverywhere(){const i=$("globalSearchEverywhere"),r=$("globalResultsEverywhere");if(!i||!r)return;r.innerHTML="";const rows=globalSearchMatches(i.value);if(i.value.trim().length<2)return;if(!rows.length){r.innerHTML='<p class="muted">Nessun risultato.</p>';return}rows.forEach(x=>{const b=document.createElement("button");b.className="card";b.innerHTML=`<strong>${esc(x.k)} · ${esc(x.t)}</strong><small>${esc(x.s)}</small>`;b.onclick=()=>{x.a();$("globalSearchDialog").close()};r.appendChild(b)})}
 function anomalyCounts(){const orphan=attachments.filter(a=>(a.intervention_id&&!interventions.some(i=>i.id===a.intervention_id))||(a.extra_id&&!extras.some(e=>e.id===a.extra_id))).length,noWorker=interventions.filter(i=>["in_attesa","convalidato"].includes(i.stato)&&!interventionWorkers.some(w=>w.intervention_id===i.id)).length,noTarget=extras.filter(e=>clientType(e)==="eurospin"&&e.stato!=="completato"&&!String(e.numero_target||"").trim()).length;return{orphan,noWorker,noTarget,total:orphan+noWorker+noTarget}}
 function renderHealthCenter(){if(!$("healthSummary")||!admin())return;const h=anomalyCounts();$("healthSummary").innerHTML=`<div class="health-kpi"><strong>${h.total}</strong><span>Anomalie</span></div><div class="health-kpi"><strong>${attachments.length}</strong><span>Allegati</span></div><div class="health-kpi"><strong>${interventions.length+extras.length}</strong><span>Lavori</span></div>`;$("healthDetails").innerHTML=[["Allegati orfani",h.orphan],["Chiusure senza operatore",h.noWorker],["Extra Eurospin senza target",h.noTarget]].map(x=>`<div class="health-issue"><strong>${x[1]?"⚠️":"✓"} ${x[0]} · ${x[1]}</strong></div>`).join("")}
@@ -4010,6 +4010,7 @@ async function replaceExtraAttachment(extraId,tipo,file){
 }
 
 let extraGroupOpenState={todo:true,scheduled:true,completed:false};
+let extraCompletedMonthFilter='';
 let pendingExtraFocusId=null;
 
 function focusExtraCard(extraId,attempt=0){
@@ -4025,6 +4026,7 @@ function focusExtraCard(extraId,attempt=0){
 
 function openExtraById(extraId){
   const e=extras.find(x=>x.id===extraId);if(!e)return;
+  extraCompletedMonthFilter='';
   extraClientFilter='all';
   document.querySelectorAll('[data-extra-client]').forEach(b=>b.classList.toggle('active',b.dataset.extraClient==='all'));
   if($('extraSearchInput'))$('extraSearchInput').value='';
@@ -4084,6 +4086,32 @@ async function ensureStandaloneExtraInProgramming(extra,workerIds=null){
   extra.schedule_id=schedule.id;extra.posizione_giro=wantedPosition;
   return schedule.id;
 }
+// Use the actual closure timestamp in Italy, not the requested or scheduled day.
+function extraClosureMonth(extra){
+  if(!extra?.closed_at)return '';
+  const date=new Date(extra.closed_at);if(Number.isNaN(date.getTime()))return '';
+  const parts=new Intl.DateTimeFormat('it-IT',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit'}).formatToParts(date);
+  return parts.find(p=>p.type==='year').value+'-'+parts.find(p=>p.type==='month').value;
+}
+function extraClosureMonthLabel(month){
+  if(month==='undated')return 'Senza data di chiusura';
+  const [year,m]=month.split('-').map(Number);
+  return new Intl.DateTimeFormat('it-IT',{month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(Date.UTC(year,m-1,1)));
+}
+function extraMatchesClosureMonth(extra,month){return !month||(month==='undated'?!extraClosureMonth(extra):extraClosureMonth(extra)===month)}
+function appendExtraClosureMonthFilter(body,rows){
+  const bar=document.createElement('div');bar.className='toolbar extra-closure-month-filter';
+  const label=document.createElement('label');label.htmlFor='extraCompletedMonth';label.textContent='Mese di chiusura target';
+  const select=document.createElement('select');select.id='extraCompletedMonth';
+  const months=[...new Set(rows.map(extraClosureMonth).filter(Boolean))];
+  if(extraCompletedMonthFilter&&extraCompletedMonthFilter!=='undated'&&!months.includes(extraCompletedMonthFilter))months.push(extraCompletedMonthFilter);
+  const option=(value,text)=>{const node=document.createElement('option');node.value=value;node.textContent=text;select.appendChild(node)};
+  option('','Tutti i mesi');months.sort().reverse().forEach(m=>option(m,extraClosureMonthLabel(m)));
+  if(rows.some(e=>!extraClosureMonth(e))||extraCompletedMonthFilter==='undated')option('undated','Senza data di chiusura');
+  select.value=extraCompletedMonthFilter;
+  select.onchange=()=>{extraCompletedMonthFilter=select.value;extraGroupOpenState.completed=true;renderExtras();$('extraCompletedMonth')?.focus()};
+  label.appendChild(select);bar.appendChild(label);body.appendChild(bar);
+}
 function renderExtras(){
   const root=$('extrasList');if(!root)return;root.innerHTML='';
   if(admin()&&typeof openExtraEconomicsBook==='function'){const bar=document.createElement('div');bar.className='actions';const b=document.createElement('button');b.type='button';b.textContent='Economia Eurospin · riepilogo e Excel';b.className='secondary';b.onclick=openExtraEconomicsBook;bar.appendChild(b);root.appendChild(bar)}
@@ -4095,12 +4123,14 @@ function renderExtras(){
   const putFocusedFirst=list=>pendingExtraFocusId?[...list].sort((a,b)=>(a.id===pendingExtraFocusId?-1:b.id===pendingExtraFocusId?1:0)):list;
   const todo=putFocusedFirst(visible.filter(e=>e.stato!=='completato'&&e.stato!=='in_attesa'&&!extraIsScheduled(e)).sort(byRequest));
   const scheduled=putFocusedFirst(visible.filter(extraIsScheduled).sort((a,b)=>String(a.giorno_intervento||'').localeCompare(String(b.giorno_intervento||''))||byRequest(a,b)));
-  const completed=putFocusedFirst(visible.filter(e=>['in_attesa','completato'].includes(e.stato)).sort((a,b)=>String(b.giorno_intervento||extraRequestDate(b)||'').localeCompare(String(a.giorno_intervento||extraRequestDate(a)||''))));
+  const allCompleted=putFocusedFirst(visible.filter(e=>['in_attesa','completato'].includes(e.stato)).sort((a,b)=>String(b.giorno_intervento||extraRequestDate(b)||'').localeCompare(String(a.giorno_intervento||extraRequestDate(a)||''))));
+  const completed=allCompleted.filter(e=>extraMatchesClosureMonth(e,extraCompletedMonthFilter));
   const addGroup=(key,title,list,empty)=>{
-    const details=document.createElement('details');details.className=`extra-group extra-group-${key}`;details.open=search?list.length>0:extraGroupOpenState[key];
-    const summary=document.createElement('summary');summary.innerHTML=`<span>${esc(title)}</span><strong>${list.length}</strong>`;details.appendChild(summary);
+    const details=document.createElement('details');details.className=`extra-group extra-group-${key}`;details.open=key==='completed'&&extraCompletedMonthFilter?true:search?list.length>0:extraGroupOpenState[key];
+    const summary=document.createElement('summary');summary.innerHTML=`<span>${esc(title)}</span><strong>${list.length}${key==='completed'&&extraCompletedMonthFilter?' / '+allCompleted.length:''}</strong>`;details.appendChild(summary);
     const body=document.createElement('div');body.className='extra-group-body';
-    if(!list.length){const p=document.createElement('p');p.className='muted extra-empty';p.textContent=search?'Nessun risultato in questa sezione.':empty;body.appendChild(p)}else list.forEach(e=>body.appendChild(extraCard(e)));
+    if(key==='completed')appendExtraClosureMonthFilter(body,allCompleted);
+    if(!list.length){const p=document.createElement('p');p.className='muted extra-empty';p.textContent=key==='completed'&&extraCompletedMonthFilter?'Nessun extra chiuso nel periodo selezionato.':search?'Nessun risultato in questa sezione.':empty;body.appendChild(p)}else list.forEach(e=>body.appendChild(extraCard(e)));
     details.appendChild(body);details.addEventListener('toggle',()=>{if(!search)extraGroupOpenState[key]=details.open});root.appendChild(details);
   };
   addGroup('todo','Da fare',todo,'Nessun extra da programmare o assegnare.');
@@ -5305,5 +5335,6 @@ $('eurospinExcelGenerate')?.addEventListener('click',generateEurospinExcel);
 $('eurospinPackageGenerate')?.addEventListener('click',generateEurospinMonthlyPackages);
 $('eurospinPackageMonth')?.addEventListener('change',()=>{$('eurospinPackageGenerate').disabled=true;$('eurospinPackageDownloads').innerHTML='';eurospinExcelState={month:'',category:'both',rows:[],analyzed:false};$('eurospinExcelGenerate').disabled=true;$('eurospinExcelStatus').textContent='Filtri cambiati: ripeti la verifica e la lettura dei numeri chiusura.'});
 $('eurospinPackageCategory')?.addEventListener('change',()=>{$('eurospinPackageGenerate').disabled=true;$('eurospinPackageDownloads').innerHTML='';eurospinExcelState={month:'',category:'both',rows:[],analyzed:false};$('eurospinExcelGenerate').disabled=true;$('eurospinExcelStatus').textContent='Filtri cambiati: ripeti la verifica e la lettura dei numeri chiusura.'});
+
 
 

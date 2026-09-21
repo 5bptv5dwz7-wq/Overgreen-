@@ -1,4 +1,4 @@
-<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#075b31"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="manifest" href="manifest.json?v=202"><link rel="apple-touch-icon" href="icon-192.png"><link rel="stylesheet" href="style.css?v=202"><link rel="stylesheet" href="operations.css?v=202"><link rel="stylesheet" href="extra-hours.css?v=202.1"><link rel="stylesheet" href="locations.css?v=207"><title>Overgreen</title>
+<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#075b31"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="manifest" href="manifest.json?v=202"><link rel="apple-touch-icon" href="icon-192.png"><link rel="stylesheet" href="style.css?v=202"><link rel="stylesheet" href="operations.css?v=202"><link rel="stylesheet" href="extra-hours.css?v=209"><link rel="stylesheet" href="locations.css?v=207"><title>Overgreen</title>
 <style>
 .signature-card{display:grid;gap:10px}
 .signature-card-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
@@ -771,13 +771,11 @@ header .nav-actions,
       <div class="eh-pair"><label for="extraEconomicsMode">Modalità<select id="extraEconomicsMode"><option value="">Da scegliere</option><option value="tariffa">A tariffa</option><option value="preventivo">A preventivo</option><option value="consuntivo">A consuntivo</option></select></label>
       <label for="extraEconomicsCategory">Categoria del target<select id="extraEconomicsCategory"><option value="">Da indicare</option><option value="verde">Verde</option><option value="pulizie">Pulizie</option></select></label></div>
       <p id="extraEconomicsCategoryHint" class="eh-hint"></p>
-      <div class="eh-pair"><label for="extraEconomicsOperators">Numero operatori<input id="extraEconomicsOperators" type="text" inputmode="numeric" maxlength="2" placeholder="Es. 2"></label>
-      <label for="extraEconomicsTrip">Uscita apposita?<select id="extraEconomicsTrip"><option value="">Da indicare</option><option value="yes">Sì, per questo extra</option><option value="no">No, già sul posto</option></select></label></div>
+      <label for="extraEconomicsOperators">Numero addetti<input id="extraEconomicsOperators" type="text" inputmode="numeric" maxlength="2" placeholder="Es. 2"></label>
       <label id="extraEconomicsEquipmentWrap" class="eh-check" hidden><input id="extraEconomicsEquipment" type="checkbox">Attrezzature usate nelle pulizie (+5 €/ora)</label>
       <p id="extraEconomicsRates" class="eh-hint"></p>
       <section id="extraEconomicsQuote" hidden>
         <label for="extraEconomicsQuoteAmount">Importo preventivo, IVA esclusa<input id="extraEconomicsQuoteAmount" type="text" inputmode="decimal" maxlength="10" placeholder="Es. 1500,00"></label>
-        <label id="extraEconomicsIncludedWrap" class="eh-check"><input id="extraEconomicsIncluded" type="checkbox">Uscita già compresa nell’importo del preventivo</label>
         <div class="eh-pair"><label for="extraEconomicsQuoteStatus">Stato preventivo<select id="extraEconomicsQuoteStatus"><option value="bozza">Bozza</option><option value="inviato">Inviato</option><option value="accettato">Accettato</option><option value="rifiutato">Rifiutato</option></select></label>
         <label for="extraEconomicsQuoteRef">Riferimento preventivo<input id="extraEconomicsQuoteRef" type="text" maxlength="200" placeholder="Numero o riferimento"></label></div>
         <p class="eh-hint">Le ore restano consultabili. Il totale usa l’importo del preventivo, senza aggiungere la manodopera a ore. Aggiungi sotto soltanto le spese extra rispetto al preventivo.</p>
@@ -789,6 +787,12 @@ header .nav-actions,
       <p id="extraHoursChanged" class="eh-notice" hidden>Il rapportino è cambiato rispetto alle ore salvate. Controlla il documento e salva di nuovo per confermarle.</p>
       <section class="eh-expenses"><div class="eh-section-head"><strong id="extraEconomicsExpensesLabel">Spese aggiuntive</strong><button id="extraEconomicsAddExpense" type="button" class="secondary">+ Spesa</button></div><div id="extraEconomicsExpenses"></div></section>
       <label for="extraEconomicsNotes">Note economiche<input id="extraEconomicsNotes" type="text" maxlength="2000" placeholder="Accordi o precisazioni"></label>
+      <section class="eh-exit" aria-labelledby="extraEconomicsTripLabel">
+        <label id="extraEconomicsTripLabel" for="extraEconomicsTrip">Addebitare l’uscita?<select id="extraEconomicsTrip" aria-describedby="extraEconomicsTripHint"><option value="">Da scegliere</option><option value="yes">Sì, addebita l’uscita</option><option value="no">No, non addebitare l’uscita</option></select></label>
+        <p id="extraEconomicsTripHint" class="eh-hint"></p>
+        <p class="eh-hint">Scegli Sì solo per un’uscita apposita. Se eri già sul posto o decidi di non farla pagare, scegli No.</p>
+        <label id="extraEconomicsIncludedWrap" class="eh-check"><input id="extraEconomicsIncluded" type="checkbox">Uscita già compresa nell’importo del preventivo</label>
+      </section>
       <div id="extraEconomicsSummary" class="eh-summary" aria-live="polite"></div>
       <p id="extraHoursMeta" class="eh-meta"></p>
       <button id="extraHoursSave" type="submit">Salva dati economici</button>
@@ -796,7 +800,7 @@ header .nav-actions,
     </form>
   </div>
 </dialog>
-<script src="operations.js?v=202"></script><script src="operations-ui.js?v=202"></script><script src="extra-economics.js?v=202"></script><script src="extra-economics-ui.js?v=202"></script><script src="extra-hours.js?v=202"></script><script src="extra-documents.js?v=203"></script><script src="photo-sync.js?v=206"></script><script src="photo-sync-ui.js?v=206"></script><script src="locations.js?v=208"></script><script src="locations-ui.js?v=207"></script><script src="app.js?v=208"></script>
+<script src="operations.js?v=202"></script><script src="operations-ui.js?v=202"></script><script src="extra-economics.js?v=209"></script><script src="extra-economics-ui.js?v=209"></script><script src="extra-hours.js?v=209"></script><script src="extra-documents.js?v=203"></script><script src="photo-sync.js?v=206"></script><script src="photo-sync-ui.js?v=206"></script><script src="locations.js?v=208"></script><script src="locations-ui.js?v=207"></script><script src="app.js?v=209"></script>
 <script>
 document.addEventListener('click', function(e){
   const btn=e.target.closest('[data-view]');
@@ -874,5 +878,6 @@ document.addEventListener('DOMContentLoaded', function(){
 .storage-optimize-actions button{flex:1}
 </style>
 </body></html>
+
 
 

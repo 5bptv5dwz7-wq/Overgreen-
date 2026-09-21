@@ -10,10 +10,17 @@
   const cents=value=>decimal(value);
   const money=value=>value==null?'Da completare':new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(value/100);
   function rates(category,equipment=false){return category==='verde'?{hourly_rate:20,exit_rate:100}:category==='pulizie'?{hourly_rate:equipment?23:18,exit_rate:50}:{hourly_rate:null,exit_rate:null}}
+  function isBillableExtra(extra){
+    if(!extra)return false;
+    const client=extra?.client_type||'eurospin';
+    const profiles=['eurospin','eurospin_ordinario','intesa','intesa_ordinario','privato'];
+    const profile=profiles.includes(extra?.closure_profile)?extra.closure_profile:client;
+    return client==='eurospin'&&profile==='eurospin';
+  }
   function calculate(row={}){
     const missing=[];if(!modes[row.pricing_mode])missing.push('modalità');
     if(!['verde','pulizie'].includes(row.pricing_category))missing.push('categoria');
-    if(typeof row.dedicated_trip!=='boolean')missing.push('tipo di uscita');
+    if(typeof row.dedicated_trip!=='boolean')missing.push('scelta addebito uscita');
     if(!Number.isInteger(Number(row.operator_count))||Number(row.operator_count)<1||Number(row.operator_count)>99)missing.push('numero operatori');
     const quoted=row.pricing_mode==='preventivo';
     const hourly=cents(row.hourly_rate),exitRate=cents(row.exit_rate);
@@ -40,10 +47,10 @@
   function filterRows(extras,records,attachments,filter={}){
     const byId=new Map(records.map(r=>[r.extra_id,r]));
     const reports=new Map();for(const a of [...attachments].sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))||String(b.id).localeCompare(String(a.id))))if(a.tipo==='rapportino_eurospin'&&!reports.has(a.extra_id))reports.set(a.extra_id,a);
-    return extras.filter(e=>e.client_type==='eurospin'&&!['annullato','rifiutato'].includes(e.stato))
+    return extras.filter(e=>isBillableExtra(e)&&!['annullato','rifiutato'].includes(e.stato))
       .map(e=>{const row=byId.get(e.id)||{};return {extra:e,row,calc:review(row,e,reports.get(e.id))}})
       .filter(x=>(!filter.month||String(x.extra.giorno_intervento||x.extra.data_richiesta||x.extra.created_at||'').slice(0,7)===filter.month)&&(!filter.category||x.extra.categoria_target===filter.category)&&(!filter.mode||x.row.pricing_mode===filter.mode)&&(!filter.state||x.extra.stato===filter.state))
       .sort((a,b)=>String(a.extra.giorno_intervento||a.extra.data_richiesta||'').localeCompare(String(b.extra.giorno_intervento||b.extra.data_richiesta||''))||String(a.extra.numero_target||'').localeCompare(String(b.extra.numero_target||'')));
   }
-  return {modes,quoteStates,decimal,cents,money,rates,calculate,review,filterRows};
+  return {isBillableExtra,modes,quoteStates,decimal,cents,money,rates,calculate,review,filterRows};
 });

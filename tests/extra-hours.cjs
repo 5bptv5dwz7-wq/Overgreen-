@@ -19,7 +19,7 @@ function setup(options={}){
     openAttachment:a=>calls.push(['original',a.id]),
     sb:{from(table){const query={select(){return query},eq(){return query},order(){return query},limit(){return query},async maybeSingle(){
       if(options.load)await options.load();
-      return options.loadError?{error:Error('offline')}:{data:table==='extra_labor_hours'?db.row:table==='extras'?{id:'e1',client_type:'eurospin',categoria_target:options.category||null}:db.report};
+      return options.loadError?{error:Error('offline')}:{data:table==='extra_labor_hours'?db.row:table==='extras'?{id:'e1',client_type:'eurospin',categoria_target:options.category||null,closure_profile:options.profile}:db.report};
     }};return query},async rpc(name,args){calls.push([name,args]);if(options.rpc)return options.rpc(name,args);
       db.row={...args.p_values,...model.rates(args.p_values.pricing_category,args.p_values.equipment),extra_id:args.p_extra_id,source_attachment_id:args.p_source_attachment_id,revision:(db.row?.revision||0)+1,updated_at:'2026-09-08T10:00:00Z'};return {data:{record:db.row,calculation:model.calculate(db.row)}};
     }}
@@ -97,4 +97,24 @@ test('expense edits count as unsaved changes and a partial expense cannot be sub
  const before=h.calls.length;await h.save();assert.equal(h.calls.length,before);assert.match(h.$('extraHoursFeedback').textContent,/descrizione e importo/);
  h.document.querySelector('[data-expense-amount]').value='12,50';h.c.confirmClose=false;h.$('extraHoursClose').click();assert(h.$('extraHoursDialog').hasAttribute('open'));
  await h.save();assert.equal(h.db.row.expenses[0].amount,12.5);assert.equal(h.db.row.expenses[0].description,'Noleggio');
+});
+for(const [category,rate] of [['pulizie',50],['verde',100]])test(`V209 ${category}: exit choice is saved, reopened and removed from total`,async()=>{
+ const h=setup({category});await h.open();
+ h.$('extraEconomicsMode').value='consuntivo';h.$('extraEconomicsOperators').value='3';h.$('extraHoursInput').value='6';h.$('extraEconomicsTrip').value='yes';
+ await h.save();assert.equal(model.calculate(h.db.row).exit,3*rate*100);
+ assert.match(h.$('extraEconomicsTripHint').textContent,new RegExp(String(3*rate)+',00'));
+ h.$('extraHoursClose').click();await h.open();assert.equal(h.$('extraEconomicsTrip').value,'yes');
+ const previous=model.calculate(h.db.row).total;h.$('extraEconomicsTrip').value='no';await h.save();
+ assert.equal(model.calculate(h.db.row).exit,0);assert.equal(model.calculate(h.db.row).total,previous-3*rate*100);
+ assert.match(h.$('extraEconomicsSummary').textContent,/Uscita non addebitata/);
+ h.$('extraHoursClose').click();await h.open();assert.equal(h.$('extraEconomicsTrip').value,'no');
+});
+test('V209 included targets are inaccessible even if the list has a stale profile',async()=>{
+ const h=setup();h.extra.closure_profile='eurospin_ordinario';await h.open();assert(!h.$('extraHoursDialog').hasAttribute('open'));
+ const stale=setup({profile:'eurospin_ordinario'});await stale.open();await stale.save();assert(!stale.$('extraHoursDialog').hasAttribute('open'));assert.equal(stale.calls.length,0);
+});
+test('V209 exit choice follows hours and expenses, immediately before totals',()=>{
+ const h=setup(),markup=h.$('extraHoursForm').innerHTML;
+ assert(markup.indexOf('extraEconomicsTripLabel')>markup.indexOf('extraEconomicsExpenses'));
+ assert(markup.indexOf('extraEconomicsTripLabel')<markup.indexOf('extraEconomicsSummary'));
 });

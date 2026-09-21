@@ -39,3 +39,9 @@ test('Excel columns retain nullable amounts and exclude a draft quote from the s
   c.addEconomicsWorksheet(workbook,[row]);const values=sheets[0].rows[1].values;
   assert.equal(values[18],1200);assert.equal(values[19],'No');assert.equal(sheets[1].rows[2].values[1],0);
 });
+
+test('V209 included targets and other closure profiles never enter the economic book',()=>{
+ const extras=[{id:'paid',client_type:'eurospin',closure_profile:'eurospin'},{id:'included',client_type:'eurospin',closure_profile:'eurospin_ordinario'},{id:'legacy',client_type:'eurospin'},{id:'other',client_type:'eurospin',closure_profile:'privato'}];
+ assert.equal(model.isBillableExtra(null),false);
+ assert.deepEqual(model.filterRows(extras,[],[]).map(r=>r.extra.id),['paid','legacy']);
+});

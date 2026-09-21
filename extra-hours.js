@@ -51,16 +51,18 @@ const ExtraHoursUi=(()=>{
   function syncEconomics(){
     if(!state)return;const m=model(),quote=el('extraEconomicsMode').value==='preventivo',category=el('extraEconomicsCategory').value;
     el('extraEconomicsQuote').hidden=!quote;el('extraEconomicsEquipmentWrap').hidden=category!=='pulizie';
-    el('extraEconomicsIncludedWrap').hidden=el('extraEconomicsTrip').value!=='yes';
+    el('extraEconomicsIncludedWrap').hidden=!quote||el('extraEconomicsTrip').value!=='yes';
     if(category!=='pulizie')el('extraEconomicsEquipment').checked=false;
     el('extraEconomicsExpensesLabel').textContent=quote?'Spese extra rispetto al preventivo':'Spese aggiuntive';
     const rate=m.rates(category,el('extraEconomicsEquipment').checked);
-    el('extraEconomicsRates').textContent=rate.hourly_rate==null?'Seleziona la categoria per applicare le tariffe.':`${m.money(rate.hourly_rate*100)} / ora · ${m.money(rate.exit_rate*100)} di uscita per operatore, solo se apposita.`;
+    el('extraEconomicsRates').textContent=rate.hourly_rate==null?'Seleziona la categoria per applicare le tariffe.':`${m.money(rate.hourly_rate*100)} / ora. Scegli l’addebito dell’uscita in fondo.`;
+    const count=Number(el('extraEconomicsOperators').value);
+    el('extraEconomicsTripHint').textContent=rate.exit_rate==null?'Scegli la categoria del target.':`${m.money(rate.exit_rate*100)} per addetto`+(Number.isInteger(count)&&count>0&&count<=99?` × ${count} = ${m.money(rate.exit_rate*100*count)} di uscita.`:'. Indica il numero di addetti.');
     const box=el('extraEconomicsSummary');box.replaceChildren();
     try{
       const values=economicValues(),c=m.calculate({...values,...rate});
       const line=(label,amount)=>{const p=document.createElement('p'),strong=document.createElement('strong');p.append(document.createTextNode(label));strong.textContent=m.money(amount);p.append(strong);box.append(p)};
-      line(quote?'Preventivo':'Manodopera a ore',c.base);line(c.exitIncluded?'Uscita già inclusa':'Uscita da aggiungere',c.exit);line('Spese aggiuntive',c.expenses);line('Totale calcolato · IVA esclusa',c.total);
+      line(quote?'Preventivo':'Manodopera a ore',c.base);line(c.exitIncluded?'Uscita già inclusa nel preventivo':values.dedicated_trip===false?'Uscita non addebitata':'Uscita da aggiungere',c.exit);line('Spese aggiuntive',c.expenses);line('Totale calcolato · IVA esclusa',c.total);
       const note=document.createElement('small');note.textContent=!c.complete?'Bozza: mancano '+c.missing.join(', '):c.quotePending?'Preventivo '+m.quoteStates[values.quote_status].toLowerCase()+': escluso dal totale dei preventivi accettati.':'Dati completi. Premi Salva per registrare gli importi.';box.append(note);
     }catch(error){box.textContent=error.message}
   }
@@ -150,7 +152,7 @@ const ExtraHoursUi=(()=>{
     }catch(error){if(current(s))el('extraHoursPreviewStatus').textContent='Anteprima non disponibile. Puoi usare Apri originale e inserire le ore manualmente.'}
   }
   async function open(extra){
-    if(!admin()||clientType(extra)!=='eurospin')return;
+    if(!admin()||!model().isBillableExtra(extra))return;
     bind();if(state){close();if(state)return}
     const s={extraId:extra.id,row:null,report:null,page:1,zoom:1,loaded:false,saving:false,savedText:'',savedForm:'',extraCategory:extra.categoria_target||null,suggestedOperators:typeof extraWorkers==='undefined'?0:new Set(extraWorkers.filter(w=>w.extra_id===extra.id).map(w=>w.profile_id)).size,pdf:null,image:null};state=s;
     const store=stores.find(x=>x.id===extra.store_id);
@@ -162,11 +164,11 @@ const ExtraHoursUi=(()=>{
       const [hours,report,freshExtra]=await Promise.all([
         sb.from('extra_labor_hours').select('*').eq('extra_id',extra.id).maybeSingle(),
         sb.from('attachments').select('id,extra_id,tipo,storage_path,nome_file,mime_type,created_at').eq('extra_id',extra.id).eq('tipo','rapportino_eurospin').order('created_at',{ascending:false}).order('id',{ascending:false}).limit(1).maybeSingle(),
-        sb.from('extras').select('id,categoria_target,client_type').eq('id',extra.id).maybeSingle()
+        sb.from('extras').select('id,categoria_target,client_type,closure_profile').eq('id',extra.id).maybeSingle()
       ]);
       if(!current(s))return;
       if(hours.error)throw hours.error;if(report.error)throw report.error;if(freshExtra.error)throw freshExtra.error;
-      if(!freshExtra.data||freshExtra.data.client_type!=='eurospin')throw new Error('Extra non disponibile');
+      if(!model().isBillableExtra(freshExtra.data)){close(true);return}
       s.extraCategory=freshExtra.data.categoria_target||null;
       s.row=hours.data;s.report=report.data;s.loaded=true;s.savedText=valueText(s.row?.total_hours);
       el('extraHoursInput').value=s.savedText;fillEconomics(s);s.savedForm=formKey();metadata(s);controls(s);await preview(s);
@@ -207,3 +209,4 @@ const ExtraHoursUi=(()=>{
 })();
 function openExtraHours(extra){return ExtraHoursUi.open(extra)}
 function closeExtraHoursForRole(){if(!admin())ExtraHoursUi.close(true)}
+

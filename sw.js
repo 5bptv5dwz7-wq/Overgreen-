@@ -1,4 +1,4 @@
-const CACHE='overgreen-v210';
+const CACHE='overgreen-v211';
 self.addEventListener('install',e=>e.waitUntil(self.skipWaiting()));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{
@@ -60,6 +60,7 @@ self.addEventListener('notificationclick',event=>{
     if(clients.openWindow)return clients.openWindow(target);
   })());
 });
+
 
 
 

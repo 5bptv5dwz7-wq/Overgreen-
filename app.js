@@ -1,4 +1,4 @@
-const APP_VERSION='V210';
+const APP_VERSION='V211';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -4011,6 +4011,7 @@ async function replaceExtraAttachment(extraId,tipo,file){
 
 let extraGroupOpenState={todo:true,scheduled:true,completed:false};
 let extraCompletedMonthFilter='';
+let extraHideIncludedCompleted=false;
 let pendingExtraFocusId=null;
 
 function focusExtraCard(extraId,attempt=0){
@@ -4027,6 +4028,7 @@ function focusExtraCard(extraId,attempt=0){
 function openExtraById(extraId){
   const e=extras.find(x=>x.id===extraId);if(!e)return;
   extraCompletedMonthFilter='';
+  extraHideIncludedCompleted=false;
   extraClientFilter='all';
   document.querySelectorAll('[data-extra-client]').forEach(b=>b.classList.toggle('active',b.dataset.extraClient==='all'));
   if($('extraSearchInput'))$('extraSearchInput').value='';
@@ -4111,6 +4113,11 @@ function appendExtraClosureMonthFilter(body,rows){
   select.value=extraCompletedMonthFilter;
   select.onchange=()=>{extraCompletedMonthFilter=select.value;extraGroupOpenState.completed=true;renderExtras();$('extraCompletedMonth')?.focus()};
   label.appendChild(select);bar.appendChild(label);body.appendChild(bar);
+  const hideLabel=document.createElement('label');hideLabel.className='check-option';
+  const hide=document.createElement('input');hide.type='checkbox';hide.id='extraHideIncludedCompleted';hide.checked=extraHideIncludedCompleted;
+  const text=document.createElement('span');text.textContent='Nascondi quelli compresi nell’ordinario';
+  hide.onchange=()=>{extraHideIncludedCompleted=hide.checked;extraGroupOpenState.completed=true;renderExtras();$('extraHideIncludedCompleted')?.focus()};
+  hideLabel.append(hide,text);body.appendChild(hideLabel);
 }
 function renderExtras(){
   const root=$('extrasList');if(!root)return;root.innerHTML='';
@@ -4124,13 +4131,13 @@ function renderExtras(){
   const todo=putFocusedFirst(visible.filter(e=>e.stato!=='completato'&&e.stato!=='in_attesa'&&!extraIsScheduled(e)).sort(byRequest));
   const scheduled=putFocusedFirst(visible.filter(extraIsScheduled).sort((a,b)=>String(a.giorno_intervento||'').localeCompare(String(b.giorno_intervento||''))||byRequest(a,b)));
   const allCompleted=putFocusedFirst(visible.filter(e=>['in_attesa','completato'].includes(e.stato)).sort((a,b)=>String(b.giorno_intervento||extraRequestDate(b)||'').localeCompare(String(a.giorno_intervento||extraRequestDate(a)||''))));
-  const completed=allCompleted.filter(e=>extraMatchesClosureMonth(e,extraCompletedMonthFilter));
+  const completed=allCompleted.filter(e=>extraMatchesClosureMonth(e,extraCompletedMonthFilter)&&(!extraHideIncludedCompleted||!isOrdinaryIncludedExtra(e)));
   const addGroup=(key,title,list,empty)=>{
-    const details=document.createElement('details');details.className=`extra-group extra-group-${key}`;details.open=key==='completed'&&extraCompletedMonthFilter?true:search?list.length>0:extraGroupOpenState[key];
-    const summary=document.createElement('summary');summary.innerHTML=`<span>${esc(title)}</span><strong>${list.length}${key==='completed'&&extraCompletedMonthFilter?' / '+allCompleted.length:''}</strong>`;details.appendChild(summary);
+    const details=document.createElement('details');details.className=`extra-group extra-group-${key}`;details.open=key==='completed'&&(extraCompletedMonthFilter||extraHideIncludedCompleted)?true:search?list.length>0:extraGroupOpenState[key];
+    const summary=document.createElement('summary');summary.innerHTML=`<span>${esc(title)}</span><strong>${list.length}${key==='completed'&&(extraCompletedMonthFilter||extraHideIncludedCompleted)?' / '+allCompleted.length:''}</strong>`;details.appendChild(summary);
     const body=document.createElement('div');body.className='extra-group-body';
     if(key==='completed')appendExtraClosureMonthFilter(body,allCompleted);
-    if(!list.length){const p=document.createElement('p');p.className='muted extra-empty';p.textContent=key==='completed'&&extraCompletedMonthFilter?'Nessun extra chiuso nel periodo selezionato.':search?'Nessun risultato in questa sezione.':empty;body.appendChild(p)}else list.forEach(e=>body.appendChild(extraCard(e)));
+    if(!list.length){const p=document.createElement('p');p.className='muted extra-empty';p.textContent=key==='completed'&&(extraCompletedMonthFilter||extraHideIncludedCompleted)?'Nessun extra completato corrisponde ai filtri selezionati.':search?'Nessun risultato in questa sezione.':empty;body.appendChild(p)}else list.forEach(e=>body.appendChild(extraCard(e)));
     details.appendChild(body);details.addEventListener('toggle',()=>{if(!search)extraGroupOpenState[key]=details.open});root.appendChild(details);
   };
   addGroup('todo','Da fare',todo,'Nessun extra da programmare o assegnare.');
@@ -5335,6 +5342,7 @@ $('eurospinExcelGenerate')?.addEventListener('click',generateEurospinExcel);
 $('eurospinPackageGenerate')?.addEventListener('click',generateEurospinMonthlyPackages);
 $('eurospinPackageMonth')?.addEventListener('change',()=>{$('eurospinPackageGenerate').disabled=true;$('eurospinPackageDownloads').innerHTML='';eurospinExcelState={month:'',category:'both',rows:[],analyzed:false};$('eurospinExcelGenerate').disabled=true;$('eurospinExcelStatus').textContent='Filtri cambiati: ripeti la verifica e la lettura dei numeri chiusura.'});
 $('eurospinPackageCategory')?.addEventListener('change',()=>{$('eurospinPackageGenerate').disabled=true;$('eurospinPackageDownloads').innerHTML='';eurospinExcelState={month:'',category:'both',rows:[],analyzed:false};$('eurospinExcelGenerate').disabled=true;$('eurospinExcelStatus').textContent='Filtri cambiati: ripeti la verifica e la lettura dei numeri chiusura.'});
+
 
 
 

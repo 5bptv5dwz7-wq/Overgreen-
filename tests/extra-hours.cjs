@@ -118,3 +118,13 @@ test('V209 exit choice follows hours and expenses, immediately before totals',()
  assert(markup.indexOf('extraEconomicsTripLabel')>markup.indexOf('extraEconomicsExpenses'));
  assert(markup.indexOf('extraEconomicsTripLabel')<markup.indexOf('extraEconomicsSummary'));
 });
+
+test('V212 consuntivo: discount changes final price, persists after reopen and can be removed',async()=>{
+ const h=setup({category:'verde'});await h.open();
+ h.$('extraEconomicsMode').value='consuntivo';h.$('extraEconomicsTrip').value='yes';h.$('extraEconomicsOperators').value='2';h.$('extraHoursInput').value='6';
+ h.$('extraEconomicsAddExpense').click();h.document.querySelector('[data-expense-description]').value='Materiali e trasferta';h.document.querySelector('[data-expense-amount]').value='260';
+ h.$('extraEconomicsDiscount').value='80';await h.save();assert.equal(h.db.row.discount_amount,80);assert.equal(model.calculate(h.db.row).subtotal,58000);assert.equal(model.calculate(h.db.row).total,50000);
+ h.$('extraHoursClose').click();await h.open();assert.equal(h.$('extraEconomicsDiscount').value,'80');
+ h.$('extraEconomicsDiscount').value='580,01';const before=h.calls.length;await h.save();assert.equal(h.calls.length,before);assert.match(h.$('extraHoursFeedback').textContent,/non può superare/);
+ h.$('extraEconomicsDiscount').value='';await h.save();assert.equal(h.db.row.discount_amount,0);assert.equal(model.calculate(h.db.row).total,58000);
+});

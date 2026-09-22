@@ -22,7 +22,7 @@ const ExtraHoursUi=(()=>{
     row.querySelector('button').onclick=()=>{if(state?.saving)return;row.remove();syncEconomics()};box.appendChild(row);
   }
   function fillEconomics(s){
-    const r=s.row||{};el('extraEconomicsMode').value=r.pricing_mode||'';
+    const r=s.row||{};el('extraEconomicsDiscount').value=valueText(r.discount_amount||null);el('extraEconomicsMode').value=r.pricing_mode||'';
     el('extraEconomicsCategory').value=s.extraCategory||r.pricing_category||'';
     el('extraEconomicsOperators').value=r.operator_count??(s.suggestedOperators||'');
     el('extraEconomicsTrip').value=r.dedicated_trip===true?'yes':r.dedicated_trip===false?'no':'';
@@ -42,7 +42,7 @@ const ExtraHoursUi=(()=>{
       if(!description&&!text)continue;const amount=asAmount(text);if(!description||amount==null)throw new Error('Ogni spesa richiede descrizione e importo.');expenses.push({description,amount});
     }
     const category=el('extraEconomicsCategory').value||null;
-    return {total_hours:parseExtraHours(el('extraHoursInput').value),pricing_mode:el('extraEconomicsMode').value||null,pricing_category:category,
+    return {discount_amount:asAmount(el('extraEconomicsDiscount').value)??0,total_hours:parseExtraHours(el('extraHoursInput').value),pricing_mode:el('extraEconomicsMode').value||null,pricing_category:category,
       dedicated_trip:el('extraEconomicsTrip').value==='yes'?true:el('extraEconomicsTrip').value==='no'?false:null,
       operator_count:count?Number(count):null,equipment:category==='pulizie'&&el('extraEconomicsEquipment').checked,
       quote_amount:asAmount(el('extraEconomicsQuoteAmount').value),quote_status:el('extraEconomicsQuoteStatus').value||'bozza',
@@ -62,7 +62,7 @@ const ExtraHoursUi=(()=>{
     try{
       const values=economicValues(),c=m.calculate({...values,...rate});
       const line=(label,amount)=>{const p=document.createElement('p'),strong=document.createElement('strong');p.append(document.createTextNode(label));strong.textContent=m.money(amount);p.append(strong);box.append(p)};
-      line(quote?'Preventivo':'Manodopera a ore',c.base);line(c.exitIncluded?'Uscita già inclusa nel preventivo':values.dedicated_trip===false?'Uscita non addebitata':'Uscita da aggiungere',c.exit);line('Spese aggiuntive',c.expenses);line('Totale calcolato · IVA esclusa',c.total);
+      line(quote?'Preventivo':'Manodopera a ore',c.base);line(c.exitIncluded?'Uscita già inclusa nel preventivo':values.dedicated_trip===false?'Uscita non addebitata':'Uscita da aggiungere',c.exit);line('Spese aggiuntive',c.expenses);line('Subtotale',c.subtotal);line('Sconto',c.discount?-c.discount:0);line('Prezzo finale · IVA esclusa',c.total);
       const note=document.createElement('small');note.textContent=!c.complete?'Bozza: mancano '+c.missing.join(', '):c.quotePending?'Preventivo '+m.quoteStates[values.quote_status].toLowerCase()+': escluso dal totale dei preventivi accettati.':'Dati completi. Premi Salva per registrare gli importi.';box.append(note);
     }catch(error){box.textContent=error.message}
   }
@@ -176,7 +176,7 @@ const ExtraHoursUi=(()=>{
   }
   async function save(){
     const s=state;if(!s||!current(s)||!s.loaded||s.saving)return;
-    let values;try{values=economicValues()}catch(error){tell(error.message,true);el('extraHoursInput').focus();return}
+    let values;try{values=economicValues();const c=model().calculate({...values,...model().rates(values.pricing_category,values.equipment)});if(c.subtotal!=null&&c.discount>c.subtotal)throw new Error('Lo sconto non può superare il subtotale.');}catch(error){tell(error.message,true);el('extraHoursInput').focus();return}
     s.saving=true;controls(s);tell('Salvataggio…');
     try{
       const {data,error}=await sb.rpc('save_extra_economics_v202',{p_extra_id:s.extraId,p_values:values,p_expected_revision:s.row?.revision||0,p_source_attachment_id:s.report?.id||null,p_expected_extra_category:s.extraCategory});
@@ -209,4 +209,5 @@ const ExtraHoursUi=(()=>{
 })();
 function openExtraHours(extra){return ExtraHoursUi.open(extra)}
 function closeExtraHoursForRole(){if(!admin())ExtraHoursUi.close(true)}
+
 

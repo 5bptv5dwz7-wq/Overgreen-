@@ -1,4 +1,4 @@
-const APP_VERSION='V211';
+const APP_VERSION='V212';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -5342,6 +5342,7 @@ $('eurospinExcelGenerate')?.addEventListener('click',generateEurospinExcel);
 $('eurospinPackageGenerate')?.addEventListener('click',generateEurospinMonthlyPackages);
 $('eurospinPackageMonth')?.addEventListener('change',()=>{$('eurospinPackageGenerate').disabled=true;$('eurospinPackageDownloads').innerHTML='';eurospinExcelState={month:'',category:'both',rows:[],analyzed:false};$('eurospinExcelGenerate').disabled=true;$('eurospinExcelStatus').textContent='Filtri cambiati: ripeti la verifica e la lettura dei numeri chiusura.'});
 $('eurospinPackageCategory')?.addEventListener('change',()=>{$('eurospinPackageGenerate').disabled=true;$('eurospinPackageDownloads').innerHTML='';eurospinExcelState={month:'',category:'both',rows:[],analyzed:false};$('eurospinExcelGenerate').disabled=true;$('eurospinExcelStatus').textContent='Filtri cambiati: ripeti la verifica e la lettura dei numeri chiusura.'});
+
 
 
 

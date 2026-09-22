@@ -34,9 +34,12 @@
     let expenses=0;
     for(const item of row.expenses||[]){const amount=cents(item.amount);if(!String(item.description||'').trim()||amount==null)missing.push('spese');else expenses+=amount}
     const base=quoted?quote:labor;
+    const discount=cents(row.discount_amount)??0;
+    const subtotal=base!=null&&exit!=null?base+exit+expenses:null;
+    if(subtotal!=null&&discount>subtotal)missing.push('sconto superiore al subtotale');
     const complete=missing.length===0;
-    const total=complete?base+exit+expenses:null;
-    return {complete,missing:[...new Set(missing)],labor,base,exit,exitIncluded,expenses,total,quotePending:quoted&&row.quote_status!=='accettato'};
+    const total=complete?subtotal-discount:null;
+    return {complete,missing:[...new Set(missing)],labor,base,exit,exitIncluded,expenses,subtotal,discount,total,quotePending:quoted&&row.quote_status!=='accettato'};
   }
   function review(row,extra,report){
     const result=calculate(row||{}),issues=[];
@@ -54,3 +57,4 @@
   }
   return {isBillableExtra,modes,quoteStates,decimal,cents,money,rates,calculate,review,filterRows};
 });
+

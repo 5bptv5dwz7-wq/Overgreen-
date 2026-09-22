@@ -45,3 +45,18 @@ test('V209 included targets and other closure profiles never enter the economic 
  assert.equal(model.isBillableExtra(null),false);
  assert.deepEqual(model.filterRows(extras,[],[]).map(r=>r.extra.id),['paid','legacy']);
 });
+
+test('V212 discount is exact in cents and works with every pricing mode',()=>{
+ for(const mode of ['tariffa','consuntivo','preventivo']){
+  const r={...cases[0].input,...model.rates('verde'),pricing_mode:mode,quote_amount:120,quote_status:'accettato',discount_amount:19.99};
+  const c=model.calculate(r);assert.equal(c.subtotal,32000);assert.equal(c.discount,1999);assert.equal(c.total,30001);
+  assert.equal(model.calculate({...r,discount_amount:320}).total,0);
+  assert.equal(model.calculate({...r,discount_amount:320.01}).complete,false);
+  for(const bad of [-1,0.001,'abc'])assert.throws(()=>model.calculate({...r,discount_amount:bad}));
+ }
+});
+test('V212 Excel contains original subtotal, discount and final net price',()=>{
+ const c=uiSetup(),sheets=[],book={addWorksheet(){const rows=[];const s={rows,getRow(n){return rows[n-1]||(rows[n-1]={getCell(){return {}}})},addRow(values){const r={values,getCell(){return {}}};rows.push(r);return r},eachRow(fn){rows.forEach(fn)}};sheets.push(s);return s}};
+ const r={...cases[0].input,...model.rates('verde'),discount_amount:20};c.addEconomicsWorksheet(book,[{extra:c.extras[0],row:r,calc:model.review(r,c.extras[0])}]);
+ const v=sheets[0].rows[1].values;assert.equal(v[18],300);assert.equal(v[24],320);assert.equal(v[25],20);assert.equal(sheets[1].rows[2].values[1],300);
+});

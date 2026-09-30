@@ -12,12 +12,26 @@
       let expired=false;const req=indexedDB.open(name,1),timer=setTimeout(()=>{expired=true;reject(new Error('Archivio foto occupato. Chiudi le altre finestre di Overgreen e riprova.'))},12000);
       req.onupgradeneeded=()=>{for(const s of STORES)if(!req.result.objectStoreNames.contains(s))req.result.createObjectStore(s,{keyPath:'id'})};
       req.onerror=()=>{clearTimeout(timer);reject(req.error)};
-      req.onsuccess=()=>{clearTimeout(timer);if(expired){req.result.close();return}req.result.onversionchange=()=>req.result.close();resolve(req.result)};
+      req.onblocked=()=>{clearTimeout(timer);reject(Object.assign(new Error('Archivio foto bloccato. Chiudi e riapri Overgreen, poi riprova.'),{code:'IDB_BLOCKED'}))};
+      req.onsuccess=()=>{
+        clearTimeout(timer);if(expired){req.result.close();return}
+        const db=req.result;
+        // WebKit/iOS can invalidate an IndexedDB connection while a PWA is suspended.
+        // Always surface the invalidation as a recoverable local-storage error.
+        db.onversionchange=()=>db.close();
+        db.onclose=()=>{};
+        resolve(db)
+      };
     })}
     async function tx(names,mode,run){const db=await open();return new Promise((resolve,reject)=>{
       let transaction,out,timer,done=false;
       const finish=(err)=>{if(done)return;done=true;clearTimeout(timer);db.close();err?reject(err):resolve(typeof out==='function'?out():out)};
-      try{transaction=db.transaction(names,mode);transaction.oncomplete=()=>finish();transaction.onerror=()=>finish(transaction.error||new Error('Salvataggio foto non riuscito'));transaction.onabort=()=>finish(transaction.error||new Error('Salvataggio foto interrotto'));timer=setTimeout(()=>{try{transaction.abort()}catch{}finish(new Error('Archivio foto non risponde. Riprova senza chiudere questa finestra.'))},15000);out=run(transaction)}catch(err){try{transaction?.abort()}catch{}finish(err)}
+      try{transaction=db.transaction(names,mode);transaction.oncomplete=()=>finish();transaction.onerror=()=>finish(transaction.error||new Error('Salvataggio foto non riuscito'));transaction.onabort=()=>finish(transaction.error||new Error('Salvataggio foto interrotto'));timer=setTimeout(()=>{try{transaction.abort()}catch{}finish(new Error('Archivio foto non risponde. Riprova senza chiudere questa finestra.'))},15000);out=run(transaction)}catch(err){
+        try{transaction?.abort()}catch{}
+        const msg=errorText(err);
+        const lost=/database.*(server )?lost|connection.*lost|connection.*closing|invalidstateerror/i.test(msg);
+        finish(lost?Object.assign(new Error('Archivio locale disconnesso da iOS. Chiudi completamente Overgreen e riaprila, poi riprova: il server non ha ricevuto questo salvataggio.'),{code:'IDB_CONNECTION_LOST'}):err)
+      }
     })}
     const all=name=>tx([name],'readonly',t=>{const r=t.objectStore(name).getAll();return ()=>r.result||[]});
     const get=(name,id)=>tx([name],'readonly',t=>{const r=t.objectStore(name).get(id);return ()=>r.result});

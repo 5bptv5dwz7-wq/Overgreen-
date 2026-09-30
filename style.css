@@ -230,3 +230,10 @@ body.schedule-drag-active{overscroll-behavior:none}
 /* V91.4 - riapertura interventi ordinari dalla Dashboard */
 .reopen-intervention-btn{background:#b66a18!important;color:#fff!important;border-color:#b66a18!important}
 .reopen-intervention-btn:active{transform:scale(.98)}
+
+/* V215: show the full visit breakdown on phones as well. */
+.dashboard-day-progress-label{flex-wrap:wrap;line-height:1.45}
+.client-counter-values button b{font-size:1.1rem;line-height:1.3;overflow-wrap:anywhere}
+#dashDoneDetails{padding:0 8px;font-size:.85rem}
+#counterDetailDialog .cards{display:grid;gap:10px}
+#counterDetailDialog .cards button{text-align:left;white-space:normal}

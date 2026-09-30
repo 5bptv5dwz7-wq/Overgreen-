@@ -1,4 +1,4 @@
-/* V206: durable photo outbox. No network operation precedes the local commit. */
+/* V214: recover iOS IndexedDB connections; preserve the V206 durable outbox. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.OvergreenPhotoSync=api})(typeof window==='object'?window:globalThis,function(){
   'use strict';
   const DB='overgreen-photo-outbox-v206',STORES=['submissions','jobs','photos','receipts'];
@@ -7,32 +7,55 @@
   function temporary(e){const status=Number(e?.status||e?.statusCode);return !(['LOCAL_FILE_MISSING','INVALID_PHOTO'].includes(e?.code)||[400,403,404,413,415,422].includes(status)||['42501','23514','P0001','22P02'].includes(e?.code))}
   function backoff(n){return Math.min(300000,3000*2**Math.min(7,Math.max(0,n-1)))}
   function timeout(promise,ms,label){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Object.assign(new Error(label||'Operazione interrotta: riproverò.'),{code:'TIMEOUT'})),ms)})]).finally(()=>clearTimeout(timer))}
-  function storage(indexedDB,name=DB){
-    async function open(){return new Promise((resolve,reject)=>{
-      let expired=false;const req=indexedDB.open(name,1),timer=setTimeout(()=>{expired=true;reject(new Error('Archivio foto occupato. Chiudi le altre finestre di Overgreen e riprova.'))},12000);
-      req.onupgradeneeded=()=>{for(const s of STORES)if(!req.result.objectStoreNames.contains(s))req.result.createObjectStore(s,{keyPath:'id'})};
-      req.onerror=()=>{clearTimeout(timer);reject(req.error)};
-      req.onblocked=()=>{clearTimeout(timer);reject(Object.assign(new Error('Archivio foto bloccato. Chiudi e riapri Overgreen, poi riprova.'),{code:'IDB_BLOCKED'}))};
-      req.onsuccess=()=>{
-        clearTimeout(timer);if(expired){req.result.close();return}
-        const db=req.result;
-        // WebKit/iOS can invalidate an IndexedDB connection while a PWA is suspended.
-        // Always surface the invalidation as a recoverable local-storage error.
-        db.onversionchange=()=>db.close();
-        db.onclose=()=>{};
-        resolve(db)
-      };
-    })}
-    async function tx(names,mode,run){const db=await open();return new Promise((resolve,reject)=>{
-      let transaction,out,timer,done=false;
-      const finish=(err)=>{if(done)return;done=true;clearTimeout(timer);db.close();err?reject(err):resolve(typeof out==='function'?out():out)};
-      try{transaction=db.transaction(names,mode);transaction.oncomplete=()=>finish();transaction.onerror=()=>finish(transaction.error||new Error('Salvataggio foto non riuscito'));transaction.onabort=()=>finish(transaction.error||new Error('Salvataggio foto interrotto'));timer=setTimeout(()=>{try{transaction.abort()}catch{}finish(new Error('Archivio foto non risponde. Riprova senza chiudere questa finestra.'))},15000);out=run(transaction)}catch(err){
-        try{transaction?.abort()}catch{}
-        const msg=errorText(err);
-        const lost=/database.*(server )?lost|connection.*lost|connection.*closing|invalidstateerror/i.test(msg);
-        finish(lost?Object.assign(new Error('Archivio locale disconnesso da iOS. Chiudi completamente Overgreen e riaprila, poi riprova: il server non ha ricevuto questo salvataggio.'),{code:'IDB_CONNECTION_LOST'}):err)
+  function connectionLost(e){return e?.code==='IDB_CONNECTION_LOST'||e?.name==='InvalidStateError'||e?.name==='UnknownError'||/connection.*(lost|clos)|database.*(server.*lost|connection.*clos)|database server.*(lost|internal error)/i.test(errorText(e))}
+  function localError(e){return Object.assign(new Error('L’archivio foto del telefono non risponde. Ricarica Overgreen; se il problema continua, riavvia l’iPhone. Non eliminare l’app o i dati di Safari: potrebbero esserci foto ancora da inviare.'),{code:'IDB_CONNECTION_LOST',cause:e})}
+  async function retryLocal(operation){
+    for(let attempt=0;;attempt++){
+      try{return await operation()}catch(e){
+        if(!connectionLost(e))throw e;
+        if(attempt>=2)throw localError(e);
+        await new Promise(resolve=>setTimeout(resolve,attempt?750:250));
       }
+    }
+  }
+  function storage(indexedDB,name=DB){
+    let connection=null,opening=null;
+    function invalidate(db){if(connection===db)connection=null;try{db?.close()}catch{}}
+    async function open(){
+      if(connection)return connection;if(opening)return opening;
+      const task=new Promise((resolve,reject)=>{
+        let req,timer,settled=false;
+        const fail=err=>{if(settled)return;settled=true;clearTimeout(timer);reject(err)};
+        timer=setTimeout(()=>fail(Object.assign(new Error('Apertura archivio foto interrotta'),{code:'IDB_CONNECTION_LOST'})),12000);
+        try{req=indexedDB.open(name,1)}catch(e){fail(e);return}
+        req.onupgradeneeded=()=>{if(settled){try{req.transaction.abort()}catch{}return}for(const s of STORES)if(!req.result.objectStoreNames.contains(s))req.result.createObjectStore(s,{keyPath:'id'})};
+        req.onerror=()=>fail(req.error);
+        req.onblocked=()=>fail(Object.assign(new Error('Archivio foto occupato da un’altra finestra. Chiudi le altre finestre di Overgreen e riprova.'),{code:'IDB_BLOCKED'}));
+        req.onsuccess=()=>{
+          const db=req.result;if(settled){invalidate(db);return}
+          settled=true;clearTimeout(timer);connection=db;
+          db.onversionchange=()=>invalidate(db);db.onclose=()=>invalidate(db);resolve(db);
+        };
+      });
+      opening=task;
+      try{return await task}finally{if(opening===task)opening=null}
+    }
+    async function once(names,mode,run){const db=await open();return new Promise((resolve,reject)=>{
+      let transaction,out,timer,done=false,failure=null;
+      const finish=err=>{if(done)return;done=true;clearTimeout(timer);db.removeEventListener('close',closed);if(err){if(connectionLost(err))invalidate(db);reject(err)}else{try{resolve(typeof out==='function'?out():out)}catch(e){reject(e)}}};
+      const closed=()=>finish(Object.assign(new Error('Connessione archivio foto interrotta'),{code:'IDB_CONNECTION_LOST'}));
+      db.addEventListener('close',closed);
+      try{
+        transaction=db.transaction(names,mode);
+        transaction.oncomplete=()=>finish();
+        // Wait for rollback before retrying writes. Request errors bubble before abort.
+        transaction.onerror=e=>{failure=failure||e.target?.error||transaction.error};
+        transaction.onabort=()=>{const err=transaction.error||failure||new Error('Salvataggio foto interrotto');finish(transaction.error?.name==='AbortError'?localError(err):err)};
+        timer=setTimeout(()=>{failure=Object.assign(new Error('Archivio foto non risponde'),{code:'IDB_CONNECTION_LOST'});try{transaction.abort()}catch{}finish(failure)},15000);
+        out=run(transaction);
+      }catch(err){failure=err;if(transaction){try{transaction.abort();return}catch{}}finish(err)}
     })}
+    const tx=(names,mode,run)=>retryLocal(()=>once(names,mode,run));
     const all=name=>tx([name],'readonly',t=>{const r=t.objectStore(name).getAll();return ()=>r.result||[]});
     const get=(name,id)=>tx([name],'readonly',t=>{const r=t.objectStore(name).get(id);return ()=>r.result});
     const put=(name,row)=>tx([name],'readwrite',t=>{t.objectStore(name).put(row)});
@@ -57,7 +80,14 @@
       const rows=[];for(let n=0;n<attempt.files.length;n++){const data=await materialize(attempt.files[n]);rows.push({...data,prepared:true,id:attempt.photoIds[n],kind:'intervention-photo',requestId:id,interventionId:null,actorProfileId:who.profileId,callerId:who.callerId,createdAt:now()+n,savedAt:now(),retries:0,nextAttemptAt:0,lastStage:'queued',lastError:'',uploadedAt:null})}
       guard(who);
       const submission={id,args:attempt.args,photoIds:attempt.photoIds,actorProfileId:who.profileId,callerId:who.callerId,createdAt:now(),siteName:attempt.siteName||'',result:null,retries:0,nextAttemptAt:0,lastError:'',blocked:false};
-      await db.tx(['submissions','jobs','photos'],'readwrite',t=>{t.objectStore('submissions').add(submission);for(const row of rows){t.objectStore('jobs').add(row);t.objectStore('photos').add(row)}});
+      await db.tx(['submissions','jobs','photos'],'readwrite',t=>{
+        const submissions=t.objectStore('submissions'),existing=submissions.get(id);
+        existing.onsuccess=()=>{
+          // A repeated local transaction must never reset a received submission.
+          if(existing.result){if(!belongs(existing.result,who))t.abort();return}
+          submissions.add(submission);for(const row of rows){t.objectStore('jobs').add(row);t.objectStore('photos').add(row)}
+        };
+      });
       // Read back the actual stored bytes before allowing a server-side closure.
       for(const row of rows){const saved=await db.get('photos',row.id);if(!saved?.file||saved.file.size!==row.file.size||(await saved.file.arrayBuffer()).byteLength!==row.file.size)throw new Error('Verifica copia foto non riuscita. Riprova il salvataggio.')}
       changed();return submission;
@@ -120,7 +150,7 @@
       const work=()=>pass();
       // One worker across app tabs; idempotent server operations are also required.
       const task=options.locks?options.locks.request(DB,{ifAvailable:true},lock=>lock?work():undefined):work();
-      running=Promise.resolve(task).catch(e=>{lastError=errorText(e);throw e}).finally(async()=>{running=null;changed();try{await schedule()}catch(e){lastError=errorText(e)}});changed();return running;
+      running=Promise.resolve(task).catch(e=>{lastError=errorText(e);throw e}).finally(async()=>{running=null;changed();try{await schedule()}catch(e){lastError=errorText(e);if(connectionLost(e)&&!stopped&&actor()){clearTimeout(timer);timer=setTimeout(()=>{timer=null;run().catch(()=>{})},30000)}}});changed();return running;
     }
     async function retry(){const who=actor();if(!who)return;for(const name of ['submissions','jobs'])for(const r of await db.all(name))if(belongs(r,who)&&!(name==='submissions'&&r.result)){r.nextAttemptAt=0;r.blocked=false;await db.put(name,r)}return run()}
     async function resume(){const who=actor();if(!who)return;for(const name of ['submissions','jobs'])for(const r of await db.all(name))if(belongs(r,who)&&!r.blocked&&!(name==='submissions'&&r.result)){r.nextAttemptAt=0;await db.put(name,r)}return run()}
@@ -150,5 +180,5 @@
     function stop(){stopped=true;clearTimeout(timer);timer=null}
     return {prepare,run,retry,resume,restore,attach,snapshot,cleanup,stop,db,getSubmission:id=>db.get('submissions',id)};
   }
-  return {create,storage,temporary,backoff,timeout,DB};
+  return {create,storage,temporary,backoff,timeout,connectionLost,retryLocal,DB};
 });

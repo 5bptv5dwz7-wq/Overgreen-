@@ -32,15 +32,22 @@ function photoQueue(){
     }
   });return photoDelivery;
 }
-async function legacyPhotoDb(name,store,fn,write=false){return new Promise((resolve,reject)=>{
+async function legacyPhotoDb(name,store,fn,write=false){return OvergreenPhotoSync.retryLocal(()=>new Promise((resolve,reject)=>{
   const request=indexedDB.open(name,1);let expired=false;
   const timer=setTimeout(()=>{expired=true;reject(new Error('La vecchia coda foto non risponde. Riprova il recupero.'))},12000);
   request.onerror=()=>{clearTimeout(timer);reject(request.error)};
+  request.onblocked=()=>{expired=true;clearTimeout(timer);reject(Object.assign(new Error('La vecchia coda foto è occupata. Chiudi le altre finestre di Overgreen e riprova.'),{code:'IDB_BLOCKED'}))};
   request.onsuccess=()=>{const db=request.result;if(expired){db.close();return}if(!db.objectStoreNames.contains(store)){clearTimeout(timer);db.close();resolve([]);return}
-    const tx=db.transaction(store,write?'readwrite':'readonly');let result;try{result=fn(tx.objectStore(store))}catch(e){clearTimeout(timer);db.close();reject(e);return}
+    let tx,result;try{tx=db.transaction(store,write?'readwrite':'readonly');result=fn(tx.objectStore(store))}catch(e){try{tx?.abort()}catch{}clearTimeout(timer);db.close();reject(e);return}
     tx.oncomplete=()=>{clearTimeout(timer);db.close();resolve(result?.result||[])};tx.onerror=tx.onabort=()=>{clearTimeout(timer);db.close();reject(tx.error||new Error('Lettura vecchia coda interrotta'))};
   };
-})}
+}))}
+function recoverPhotoStorage(error){
+  const message=error?.message||'L’archivio foto del telefono non risponde.';
+  // Never reload a form with camera files that have not been durably saved.
+  if(ordinarySaveBusy||$('doneDialog')?.open||donePhotoFiles.length||ordinarySaveAttempt){alert(message+'\n\nIl modulo e le foto selezionate restano aperti. Riprova Salva senza chiudere questa schermata.');return}
+  if(confirm(message+'\n\nRicaricare ora Overgreen? La coda salvata sul telefono verrà conservata.'))location.reload();
+}
 async function legacyPhotoRows(){
   const results=await Promise.allSettled([legacyPhotoDb('overgreen-upload-queue-v1','jobs',s=>s.getAll()),legacyPhotoDb('overgreen-photo-recovery-v1','photos',s=>s.getAll())]);
   const byId=new Map();for(const r of results)if(r.status==='fulfilled')for(const row of r.value){const old=byId.get(row.id);if(!old||(!old.file&&row.file))byId.set(row.id,row)}
@@ -91,7 +98,7 @@ async function refreshPhotoDeliveryStatus(){
 function photoStageLabel(stage){return {queued:'In coda',uploading:'Invio in corso',verifying:'Verifica ricezione',retrying:'Nuovo tentativo previsto',blocked:'Serve un intervento',received:'Ricevuta dal server'}[stage]||'In attesa'}
 async function updateSyncUi(){
   if(!photoActor())return;
-  let state;try{state=await photoQueue().snapshot()}catch(e){state={jobs:[],submissions:[],error:'Archivio locale non accessibile: '+e.message}}
+  let state;try{state=await photoQueue().snapshot()}catch(e){state={jobs:[],submissions:[],error:'Archivio locale non accessibile: '+e.message,storageUnavailable:true}}
   const pending=state.submissions.filter(s=>!s.result),missing=admin()?photoMismatchRows():employeePhotoMismatchRows(),blocked=state.jobs.filter(j=>j.blocked).length;
   const old=missing.some(i=>Date.now()-new Date(i.closed_at||i.created_at).getTime()>10*60*1000);
   const text=state.error?state.error:pending.length?`☁️ ${pending.length} chiusur${pending.length===1?'a':'e'} conservat${pending.length===1?'a':'e'} sul telefono · invio da completare`:blocked?`⚠️ ${blocked} foto da recuperare · apri dettagli`:state.running?`⬆️ Invio foto in corso · ${state.jobs.length} in coda`:state.jobs.length?`☁️ ${state.jobs.length} foto conservate sul telefono · ripresa automatica`:missing.length?`⚠️ ${missing.length} intervent${missing.length===1?'o':'i'} con foto mancanti${old?' · verifica necessaria':''}`:'✓ Tutte le foto ricevute';
@@ -102,6 +109,7 @@ async function updateSyncUi(){
 async function renderPhotoDeliveryDetails(state=null){
   let host=$('photoDeliveryDetails');if(!host){const parent=$('photoRepairStatus')?.parentElement;if(!parent)return;host=document.createElement('div');host.id='photoDeliveryDetails';parent.appendChild(host)}
   state=state||await photoQueue().snapshot();host.innerHTML='';
+  if(state.storageUnavailable){const p=document.createElement('p');p.className='error';p.textContent=state.error;host.appendChild(p);const button=document.createElement('button');button.type='button';button.textContent='Ricarica Overgreen';button.onclick=()=>recoverPhotoStorage(new Error(state.error));host.appendChild(button)}
   if(photoRemoteError){const p=document.createElement('p');p.className='error';p.textContent=photoRemoteError;host.appendChild(p)}
   for(const s of state.submissions.filter(s=>!s.result)){
     const row=document.createElement('div');row.className='photo-delivery-row';row.innerHTML=`<strong>${esc(s.siteName||'Intervento')} · chiusura da inviare</strong><p>${esc(s.lastError||'Richiesta e foto conservate su questo telefono. L’invio riprenderà automaticamente.')}</p>`;host.appendChild(row);

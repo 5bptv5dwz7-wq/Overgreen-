@@ -1,4 +1,4 @@
-const APP_VERSION='V215';
+const APP_VERSION='V216';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -5110,6 +5110,7 @@ function openExtraClosureDialog(extra,fromOrdinary=false){
     info.innerHTML=fromOrdinary?`<strong>Extra collegato al passaggio ordinario</strong><span>${esc(st?.nome||extra.nome_esterno||'')} · ${esc(extra.titolo)}</span><small>Se oggi non è concluso puoi salvarlo come parziale: resterà aperto e potrai proseguirlo in seguito.</small>`:'<strong>Solo extra</strong><small>Questa chiusura non aggiorna l’ultimo ordinario e non azzera i giorni del taglio erba.</small>';
   }
   openDialog('closeExtraDialog');
+  window.AppleDocumentScanner?.refresh();
 }
 
 function openNextCombinedExtraClosure(){
@@ -5152,25 +5153,37 @@ window.ExtraClosureDocuments.init({
   error:message=>alert(message)
 });
 
+window.AppleDocumentScanner?.init({
+  client:sb,
+  context:()=>({userId:session?.user?.id,profileId:profile?.id,extraId:$('closeExtraId').value,
+    active:$('closeExtraDialog').open&&$('closeExtraForm').dataset.profile==='eurospin'}),
+  documents:window.ExtraClosureDocuments
+});
+
 let extraSaveBusy=false;
 const extraUploadKeys=new WeakMap();
 async function saveExtraUpload(extraId,tipo,originalFile,uploadedPaths){
   let keys=extraUploadKeys.get(originalFile);if(!keys){keys=new Map();extraUploadKeys.set(originalFile,keys)}
   const key=JSON.stringify([extraId,tipo]);if(!keys.has(key))keys.set(key,crypto.randomUUID());
-  const id=keys.get(key);
+  const scan=window.AppleDocumentScanner?.metadata(originalFile,extraId,tipo);
+  const id=scan?.id||keys.get(key);
   const existing=await sb.from('attachments').select('*').eq('id',id).maybeSingle();
   if(existing.error)throw existing.error;
   let added=existing.data;
   if(!added){
     const file=originalFile.type?.startsWith('image/')?await compressImage(originalFile):originalFile;
     const safe=(file.name||originalFile.name||'documento').replace(/[^a-zA-Z0-9._-]/g,'-');
-    const path='extra/'+extraId+'/'+id+'-'+safe;
-    const up=await sb.storage.from('documenti').upload(path,file,{upsert:true,contentType:file.type||'application/octet-stream'});
-    if(up.error)throw up.error;uploadedPaths.push(path);
+    const path=scan?.path||'extra/'+extraId+'/'+id+'-'+safe;
+    if(!scan){
+      const up=await sb.storage.from('documenti').upload(path,file,{upsert:true,contentType:file.type||'application/octet-stream'});
+      if(up.error)throw up.error;
+    }
+    uploadedPaths.push(path);
     added=await addAttachment({id,tipo,extra_id:extraId,storage_path:path,nome_file:file.name||originalFile.name,mime_type:file.type,dimensione_bytes:file.size,caricato_da:profile.id});
   }
   if(!added)throw new Error('Allegato non confermato. Il file viene conservato per il recupero.');
   if(!attachments.some(a=>a.id===added.id))attachments.unshift(added);
+  window.AppleDocumentScanner?.committed(originalFile);
   return added;
 }
 function setExtraSaveBusy(busy){

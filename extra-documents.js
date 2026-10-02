@@ -28,7 +28,7 @@ window.ExtraClosureDocuments=(()=>{
         open.setAttribute('aria-label',`Apri documento ${target}`);actions.appendChild(open);
         const remove=document.createElement('button');remove.type='button';remove.className='secondary';remove.textContent='Rimuovi';
         remove.setAttribute('aria-label',`Rimuovi documento ${target} selezionato`);remove.disabled=busy;
-        remove.onclick=()=>{if(busy)return;files[target]=null;input(target).value='';node(target,'camera').value='';render(target);};
+        remove.onclick=()=>{if(busy)return;window.AppleDocumentScanner?.forget(target);files[target]=null;input(target).value='';node(target,'camera').value='';render(target);};
         actions.appendChild(remove);preview.appendChild(actions);
         if(saved){const hint=document.createElement('small');hint.textContent='Sostituirà il documento già caricato quando salvi.';preview.appendChild(hint);}
       }else{
@@ -38,11 +38,12 @@ window.ExtraClosureDocuments=(()=>{
     }
     preview.classList.toggle('hidden',!file&&!saved);
   }
-  function select(target,file){
+  function select(target,file,source='picker'){
     if(busy||!file)return; // Cancelling the camera or picker keeps the previous document.
     const image=file.type?.startsWith('image/'),pdf=file.type==='application/pdf'||(!file.type&&/\.pdf$/i.test(file.name||''));
     if((!image&&!pdf)||!file.size){options.error?.('Scegli una foto o un PDF valido.');return;}
-    files[target]=file;render(target);
+    if(source!=='apple')window.AppleDocumentScanner?.forget(target);
+    files[target]=file;render(target);return true;
   }
   function reset(){for(const target of targets){files[target]=null;input(target).value='';node(target,'camera').value='';render(target);}}
   function setBusy(value){
@@ -62,5 +63,5 @@ window.ExtraClosureDocuments=(()=>{
     }
     document.getElementById('closeExtraDialog').addEventListener('close',()=>{if(!busy)reset();});
   }
-  return {init,reset,setBusy,get:target=>files[target]||null};
+  return {init,reset,setBusy,select,isBusy:()=>busy,get:target=>files[target]||null};
 })();

@@ -1,4 +1,4 @@
-/* V219 — one-tap Apple scanner bridge with automatic return.
+/* V220 — one-tap Apple scanner bridge with manual return.
  * Shortcuts receives a single-object upload capability, never the login token.
  * Uploaded JPEG scans stay staged until the usual closure save registers the attachment.
  */
@@ -47,19 +47,12 @@ window.AppleDocumentScanner=(()=>{
       const job={id,path,userId:USER,extraId:c.extraId,target:t,createdAt:Date.now()};
       // Persist the destination before leaving the PWA; never persist the upload capability.
       update(k,job);
-      const returnUrl=new URL(location.href);
-      returnUrl.hash='scan-return';
-      const shortcut='shortcuts://x-callback-url/run-shortcut?name='+encodeURIComponent('Scansiona Overgreen')+
-        '&input=text&text='+encodeURIComponent(uploadUrl)+
-        '&x-success='+encodeURIComponent(returnUrl.href)+
-        '&x-cancel='+encodeURIComponent(returnUrl.href)+
-        '&x-error='+encodeURIComponent(returnUrl.href);
+      const shortcut='shortcuts://run-shortcut?name='+encodeURIComponent('Scansiona Overgreen')+
+        '&input=text&text='+encodeURIComponent(uploadUrl);
       const launch=panels[t].launch;
       launch.href=shortcut;
       launch.hidden=true;
-      message(t,'Apro lo scanner Apple…');
-      // Navigate immediately from the original tap. The hidden link remains as a fallback
-      // if iOS refuses the custom-scheme handoff for any reason.
+      message(t,'Apro lo scanner Apple… Dopo il salvataggio torna manualmente a Overgreen.');
       location.href=shortcut;
     }catch(err){message(t,err.message||'Impossibile preparare la scansione. Riprova.');}
     finally{preparing=false;controls();}
@@ -123,7 +116,6 @@ window.AppleDocumentScanner=(()=>{
     }
     document.getElementById('closeExtraDialog').addEventListener('close',refresh);
     window.addEventListener('focus',()=>{controls();fastRecover();});
-    window.addEventListener('hashchange',()=>{if(location.hash==='#scan-return')fastRecover();});
     document.addEventListener('visibilitychange',()=>{if(!document.hidden){controls();fastRecover();}});
     window.setInterval(()=>{controls();if(!document.hidden)void check();},5000);
     controls();

@@ -1,4 +1,4 @@
-/* V218 — native Apple scanner bridge, opt-in pilot for Lorenzo only.
+/* V219 — one-tap Apple scanner bridge with automatic return.
  * Shortcuts receives a single-object upload capability, never the login token.
  * Uploaded JPEG scans stay staged until the usual closure save registers the attachment.
  */
@@ -7,7 +7,7 @@ window.AppleDocumentScanner=(()=>{
   const USER='a59387b9-3e89-4432-bbb6-190874cc9925';
   const KEY='overgreen-apple-scans-v1',SETUP='overgreen-apple-scanner-setup-v1';
   const targets=['eurospin','overgreen'],metadataByFile=new WeakMap(),panels={};
-  let options,preparing=false,checking=false,epoch=0;
+  let options,preparing=false,checking=false,epoch=0,fastTimer=null;
   const ctx=()=>options?.context?.()||{};
   const allowed=c=>c.userId===USER&&c.profileId===USER;
   const enabled=()=>allowed(ctx())&&ctx().active;
@@ -29,7 +29,8 @@ window.AppleDocumentScanner=(()=>{
     if(!enabled()||!ios()||preparing||options.documents.isBusy())return;
     if(localStorage.getItem(SETUP)!=='1'){panels[t].help.open=true;message(t,'Prima configura il comando rapido con la guida qui sotto.');return;}
     const c={...ctx()},k=key(c,t);
-    if((jobs()[k]||options.documents.get(t))&&!confirm('Preparare una nuova scansione? Il documento selezionato resta disponibile finché arriva quello nuovo.'))return;
+    // A new scan simply supersedes any pending one. The currently selected document stays
+    // untouched until the new JPEG is actually received, so no confirmation is needed.
     preparing=true;controls();message(t,'Preparo la scansione…');const stamp=epoch;
     try{
       // Confirm the real authenticated identity before requesting a signed URL.
@@ -46,10 +47,20 @@ window.AppleDocumentScanner=(()=>{
       const job={id,path,userId:USER,extraId:c.extraId,target:t,createdAt:Date.now()};
       // Persist the destination before leaving the PWA; never persist the upload capability.
       update(k,job);
+      const returnUrl=new URL(location.href);
+      returnUrl.hash='scan-return';
+      const shortcut='shortcuts://x-callback-url/run-shortcut?name='+encodeURIComponent('Scansiona Overgreen')+
+        '&input=text&text='+encodeURIComponent(uploadUrl)+
+        '&x-success='+encodeURIComponent(returnUrl.href)+
+        '&x-cancel='+encodeURIComponent(returnUrl.href)+
+        '&x-error='+encodeURIComponent(returnUrl.href);
       const launch=panels[t].launch;
-      launch.href='shortcuts://run-shortcut?name='+encodeURIComponent('Scansiona Overgreen')+'&input=text&text='+encodeURIComponent(uploadUrl);
-      launch.hidden=false;
-      message(t,'Pronto. Tocca “Apri scanner Apple”. Dopo l’invio torna qui. Collegamento valido 2 ore.');
+      launch.href=shortcut;
+      launch.hidden=true;
+      message(t,'Apro lo scanner Apple…');
+      // Navigate immediately from the original tap. The hidden link remains as a fallback
+      // if iOS refuses the custom-scheme handoff for any reason.
+      location.href=shortcut;
     }catch(err){message(t,err.message||'Impossibile preparare la scansione. Riprova.');}
     finally{preparing=false;controls();}
   }
@@ -84,10 +95,19 @@ window.AppleDocumentScanner=(()=>{
     }catch(err){if(manual&&enabled())for(const t of targets)if(jobs()[key(c,t)])message(t,err.message||'Recupero non riuscito. Riprova.');}
     finally{checking=false;controls();}
   }
+  function fastRecover(){
+    if(fastTimer)clearInterval(fastTimer);
+    let tries=0;
+    void check();
+    fastTimer=setInterval(()=>{
+      if(++tries>24){clearInterval(fastTimer);fastTimer=null;return;}
+      if(!document.hidden)void check();
+    },750);
+  }
   function refresh(){
     epoch++;
     for(const t of targets){if(!panels[t])continue;panels[t].launch.hidden=true;panels[t].launch.removeAttribute('href');message(t,ios()?'':'Apri Overgreen su iPhone o iPad per usare lo scanner Apple.');}
-    controls();void check();
+    controls();fastRecover();
   }
   function init(config){
     options=config;
@@ -102,8 +122,9 @@ window.AppleDocumentScanner=(()=>{
       root.querySelector('[data-ready]').onclick=()=>{if(!enabled())return;localStorage.setItem(SETUP,'1');panels[t].help.open=false;message(t,'Configurazione confermata. Ora premi “Scansiona con iPhone”.');};
     }
     document.getElementById('closeExtraDialog').addEventListener('close',refresh);
-    window.addEventListener('focus',()=>{controls();void check();});
-    document.addEventListener('visibilitychange',()=>{if(!document.hidden){controls();void check();}});
+    window.addEventListener('focus',()=>{controls();fastRecover();});
+    window.addEventListener('hashchange',()=>{if(location.hash==='#scan-return')fastRecover();});
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden){controls();fastRecover();}});
     window.setInterval(()=>{controls();if(!document.hidden)void check();},5000);
     controls();
   }

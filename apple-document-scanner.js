@@ -1,4 +1,4 @@
-/* V216 — native Apple scanner bridge, opt-in pilot for Lorenzo only.
+/* V217 — native Apple scanner bridge, opt-in pilot for Lorenzo only.
  * Shortcuts receives a single-object upload capability, never the login token.
  * Uploaded PDFs stay staged until the usual closure save registers the attachment.
  */
@@ -35,14 +35,19 @@ window.AppleDocumentScanner=(()=>{
       // Confirm the real authenticated identity before requesting a signed URL.
       const auth=await options.client.auth.getUser();
       if(auth.error||auth.data?.user?.id!==USER)throw new Error('Scanner disponibile solo per Lorenzo. Accedi di nuovo.');
-      const id=crypto.randomUUID(),path=`extra/${c.extraId}/${id}-apple-${t}.pdf`;
-      const r=await bucket().createSignedUploadUrl(path,{upsert:false});if(r.error)throw r.error;
+      // Use a short-lived Overgreen upload capability instead of Supabase signed-upload JWTs.
+      // This avoids iOS Shortcuts/Supabase Storage rejecting the signed JWS while still
+      // keeping the upload single-purpose, Lorenzo-only and valid for two hours.
+      const prep=await options.client.functions.invoke('apple-scan-upload',{body:{extraId:c.extraId,target:t}});
+      if(prep.error)throw prep.error;
+      const {id,path,uploadUrl}=prep.data||{};
+      if(!id||!path||!uploadUrl)throw new Error('Impossibile preparare il collegamento di scansione.');
       if(!enabled()||ctx().extraId!==c.extraId||epoch!==stamp)return;
       const job={id,path,userId:USER,extraId:c.extraId,target:t,createdAt:Date.now()};
-      // Persist the destination before leaving the PWA; do not persist the upload token.
+      // Persist the destination before leaving the PWA; never persist the upload capability.
       update(k,job);
       const launch=panels[t].launch;
-      launch.href='shortcuts://run-shortcut?name='+encodeURIComponent('Scansiona Overgreen')+'&input=text&text='+encodeURIComponent(r.data.signedUrl);
+      launch.href='shortcuts://run-shortcut?name='+encodeURIComponent('Scansiona Overgreen')+'&input=text&text='+encodeURIComponent(uploadUrl);
       launch.hidden=false;
       message(t,'Pronto. Tocca “Apri scanner Apple”. Dopo l’invio torna qui. Collegamento valido 2 ore.');
     }catch(err){message(t,err.message||'Impossibile preparare la scansione. Riprova.');}

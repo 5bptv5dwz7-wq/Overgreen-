@@ -1,4 +1,4 @@
-const APP_VERSION='V216';
+const APP_VERSION='V221';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -3980,7 +3980,7 @@ function extraCard(e){
   c.querySelector('[data-generate-work-report]')?.addEventListener('click',ev=>generateComplexExtraReportPdf(e,ev.currentTarget));
   c.querySelector('[data-generate-closure]')?.addEventListener('click',ev=>generateExtraClosurePdf(e,ev.currentTarget));
   c.querySelector('[data-edit-closure]')?.addEventListener('click',()=>openExtraClosureEdit(e));
-  c.querySelector('[data-close-extra]')?.addEventListener('click',()=>{if(!e.giorno_intervento)return alert('Prima di chiudere il lavoro inserisci la data di esecuzione da Modifica.');const assigned=extraWorkers.some(w=>w.extra_id===e.id);if(!assigned)return alert('Prima di chiudere il lavoro assegna almeno un dipendente da Modifica.');openExtraClosureDialog(e,false)});
+  c.querySelector('[data-close-extra]')?.addEventListener('click',()=>openExtraClosureDialog(e,false));
   c.querySelector('[data-approve-extra]')?.addEventListener('click',()=>approveExtra(e));
   c.querySelector('[data-program-extra]')?.addEventListener('click',()=>openProgramExtraDialog(e));
   c.querySelector('[data-edit-extra]')?.addEventListener('click',()=>openExtraEdit(e));
@@ -5284,7 +5284,7 @@ $('closeExtraForm').onsubmit=async e=>{
     
 
     btn.textContent='Invio a Lorenzo…';
-    const {error}=await sb.from('extras').update({stato:'in_attesa',note_lorenzo:notes,closed_by:profile.id,closed_at:new Date().toISOString()}).eq('id',id).select('id').single();
+    const {error}=await sb.from('extras').update({stato:'in_attesa',giorno_intervento:extras.find(x=>x.id===id)?.giorno_intervento||today(),note_lorenzo:notes,closed_by:profile.id,closed_at:new Date().toISOString()}).eq('id',id).select('id').single();
     if(error)throw error;
     await cleanupReplacedAttachments(replacedAttachments);
     void notifyAdminClosure('extra',id,photos.length);

@@ -1,6 +1,6 @@
-/* V217 — native Apple scanner bridge, opt-in pilot for Lorenzo only.
+/* V218 — native Apple scanner bridge, opt-in pilot for Lorenzo only.
  * Shortcuts receives a single-object upload capability, never the login token.
- * Uploaded PDFs stay staged until the usual closure save registers the attachment.
+ * Uploaded JPEG scans stay staged until the usual closure save registers the attachment.
  */
 window.AppleDocumentScanner=(()=>{
   'use strict';
@@ -16,7 +16,7 @@ window.AppleDocumentScanner=(()=>{
   const key=(c,t)=>[c.userId,c.extraId,t].join(':');
   function jobs(){try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch{return {}}}
   function update(k,value){const all=jobs();if(value)all[k]=value;else delete all[k];localStorage.setItem(KEY,JSON.stringify(all));}
-  function validJob(j,c,t){return j&&j.userId===USER&&j.extraId===c.extraId&&j.target===t&&/^[0-9a-f-]{36}$/.test(j.id)&&j.path===`extra/${c.extraId}/${j.id}-apple-${t}.pdf`;}
+  function validJob(j,c,t){return j&&j.userId===USER&&j.extraId===c.extraId&&j.target===t&&/^[0-9a-f-]{36}$/.test(j.id)&&j.path===`extra/${c.extraId}/${j.id}-apple-${t}.jpg`;}
   function message(t,text){panels[t].status.textContent=text;}
   function controls(){
     const on=enabled(),busy=!!options?.documents.isBusy()||preparing;
@@ -68,14 +68,14 @@ window.AppleDocumentScanner=(()=>{
         if(!enabled()||ctx().extraId!==c.extraId||stamp!==epoch||jobs()[k]?.id!==job.id||options.documents.isBusy())return;
         if(r.error){
           const missing=/not found|does not exist|not_found/i.test(r.error.message||'')||String(r.error.statusCode)==='404';
-          if(manual||Date.now()-job.createdAt>7200000)message(t,missing?'PDF non ancora ricevuto. Completa il comando rapido oppure prepara una nuova scansione.':'Recupero non riuscito. Controlla la connessione e premi “Recupera scansione”.');
+          if(manual||Date.now()-job.createdAt>7200000)message(t,missing?'Immagine non ancora ricevuta. Completa il comando rapido oppure prepara una nuova scansione.':'Recupero non riuscito. Controlla la connessione e premi “Recupera scansione”.');
           continue;
         }
         const blob=r.data;
-        if(blob.size>50*1024*1024)throw new Error('PDF troppo grande (massimo 50 MB). Scansiona meno pagine.');
-        if(await blob.slice(0,5).text()!=='%PDF-')throw new Error('Il comando non ha inviato un PDF valido. Controlla “Usa PDF” e il corpo della richiesta nella guida.');
+        if(blob.size>10*1024*1024)throw new Error('Immagine troppo grande (massimo 10 MB). Riduci la qualità della scansione.');
+        const sig=new Uint8Array(await blob.slice(0,3).arrayBuffer());if(sig[0]!==0xff||sig[1]!==0xd8||sig[2]!==0xff)throw new Error('Il comando non ha inviato un JPEG valido. Controlla la conversione immagine e il Content-Type.');
         if(!enabled()||ctx().extraId!==c.extraId||stamp!==epoch||jobs()[k]?.id!==job.id||options.documents.isBusy())return;
-        const file=new File([blob],`Rapportino-${t}-scansione.pdf`,{type:'application/pdf'});
+        const file=new File([blob],`Rapportino-${t}-scansione.jpg`,{type:'image/jpeg'});
         if(options.documents.select(t,file,'apple')){
           metadataByFile.set(file,job);panels[t].launch.hidden=true;panels[t].launch.removeAttribute('href');
           message(t,'✓ Scansione Apple ricevuta. Conferma il salvataggio dell’extra per allegarla.');
@@ -98,7 +98,7 @@ window.AppleDocumentScanner=(()=>{
       card.appendChild(root);
       panels[t]={root,start:root.querySelector('[data-start]'),check:root.querySelector('[data-check]'),launch:root.querySelector('[data-launch]'),status:root.querySelector('[data-status]'),help:root.querySelector('details')};
       panels[t].start.onclick=()=>prepare(t);panels[t].check.onclick=()=>check(true);
-      panels[t].launch.onclick=e=>{if(!enabled()||options.documents.isBusy()||preparing){e.preventDefault();return;}message(t,'Scanner aperto. Dopo aver inviato il PDF, torna a Overgreen.');};
+      panels[t].launch.onclick=e=>{if(!enabled()||options.documents.isBusy()||preparing){e.preventDefault();return;}message(t,'Scanner aperto. Dopo aver inviato la foto, torna a Overgreen.');};
       root.querySelector('[data-ready]').onclick=()=>{if(!enabled())return;localStorage.setItem(SETUP,'1');panels[t].help.open=false;message(t,'Configurazione confermata. Ora premi “Scansiona con iPhone”.');};
     }
     document.getElementById('closeExtraDialog').addEventListener('close',refresh);

@@ -8,10 +8,11 @@ const styles=[...html.matchAll(/<style[\s\S]*?<\/style>|<link[^>]+rel="styleshee
  return '<style>'+fs.readFileSync(path.join(root,file),'utf8')+'</style>';
 }).join('\n');
 const a=html.indexOf('<dialog id="closeExtraDialog"'),b=html.indexOf('</dialog>',a)+9;
-const start=app.indexOf('function openExtraClosureDialog'),end=app.indexOf('function isRecoverableJwtError',start);
+const start=app.indexOf('function renderExtraClosureDetails'),end=app.indexOf('function isRecoverableJwtError',start);
 const setup=`
 const $=id=>document.getElementById(id);
-let attachments=[],closeExtraPhotoFiles=[],combinedExtraClosureQueue=[];
+let attachments=[],closeExtraPhotoFiles=[],combinedExtraClosureQueue=[],extraWorkers=[],profiles=[];
+const admin=()=>false,today=()=>new Date().toISOString().slice(0,10);
 const profile={id:'test-worker'},stores=[{id:'test-store',nome:'Punto vendita di prova'}];
 const extras=[{id:'test-extra',store_id:'test-store',titolo:'Pulizia parcheggio',numero_target:'PROVA-203',stato:'programmato'}];
 const closureProfile=()=> 'eurospin',renderStructuredClose=()=>{},isStructuredExtra=()=>false,workItemsForExtra=()=>[],structuredCloseRows=()=>[];

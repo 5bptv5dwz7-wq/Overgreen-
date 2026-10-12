@@ -15,13 +15,28 @@ test('cancel and invalid file preserve the previous selection',()=>{const h=setu
 test('PDF replacement releases preview and does not mix documents',()=>{const h=setup();h.pick('doc-eurospin-camera',photo);h.pick('reportOvergreen',pdf);h.pick('reportEurospin',pdf);assert.equal(h.api.get('eurospin'),pdf);assert.equal(h.api.get('overgreen'),pdf);assert.equal(h.document.querySelector('#doc-eurospin-preview img'),null);assert.equal(h.revoked.length,1);});
 test('removing a replacement restores the existing document without deleting it',()=>{const saved={overgreen:{nome_file:'precedente.pdf'}},h=setup(saved);h.pick('doc-overgreen-camera',photo);h.document.querySelector('#doc-overgreen-preview button').click();assert.equal(h.api.get('overgreen'),null);assert.equal(h.document.getElementById('doc-overgreen-status').textContent,'✓ Già caricato');assert.equal(saved.overgreen.nome_file,'precedente.pdf');});
 test('busy upload prevents changes, reset releases previews and clears both documents',()=>{const h=setup();h.pick('doc-eurospin-camera',photo);h.api.setBusy(true);h.pick('reportEurospin',pdf);assert.equal(h.api.get('eurospin'),photo);assert(h.document.getElementById('reportEurospin').disabled);h.api.setBusy(false);h.api.reset();assert.equal(h.api.get('eurospin'),null);assert.equal(h.api.get('overgreen'),null);assert.equal(h.revoked.length,1);});
-function saving(){
+function saving(options={}){
  const h=setup();const $=id=>h.document.getElementById(id),uploads=[],updates=[],notifications=[];
  $('closeExtraForm').dataset.profile='eurospin';$('closeExtraId').value='extra1';$('closeExtraForm').reset=()=>{};$('closeExtraDialog').close=()=>{};
- const c=h.context;Object.assign(c,{$,crypto:require('node:crypto'),attachments:[],extras:[{id:'extra1'}],profile:{id:'worker1'},today:()=> '2026-10-03',closeExtraPhotoFiles:[],combinedExtraClosureQueue:[],workItemsForExtra:()=>[],structuredCloseRows:()=>[],renderCloseExtraPhotoSelection(){},toast(){},alert:m=>h.errors.push(m),refreshAfterSave:async()=>{},notifyAdminClosure:(...v)=>notifications.push(v),sb:{from:()=>({update(data){updates.push(data);const q={eq:()=>q,select:()=>q,single:async()=>({})};return q;}})}});
+ const workerRows=options.workerRows||[],workerWrites=[];
+ const c=h.context;Object.assign(c,{$,crypto:require('node:crypto'),attachments:[],extras:[{id:'extra1'}],extraWorkers:workerRows.map(w=>({...w})),profiles:[{id:'worker1',nome:'Mario',attivo:true},{id:'worker2',nome:'Gianni',attivo:true},{id:'inactive',nome:'Ex operatore',attivo:false}],profile:{id:'worker1'},admin:()=>!!options.admin,esc:s=>s,today:()=> '2026-10-03',closeExtraPhotoFiles:[],combinedExtraClosureQueue:[],workItemsForExtra:()=>[],structuredCloseRows:()=>[],renderCloseExtraPhotoSelection(){},toast(){},alert:m=>h.errors.push(m),refreshAfterSave:async()=>{},notifyAdminClosure:(...v)=>notifications.push(v),sb:{from:table=>{
+  let action='select',rows=[];const filters={};const q={
+   update(data){updates.push(data);return q},select(){return q},single:async()=>options.failClose?{error:new Error('Chiusura non salvata')}:{},
+   eq(key,value){filters[key]=value;return q},in(key,values){filters[key]=values;return q},
+   insert(value){action='insert';rows=value;return q},delete(){action='delete';return q},
+   then(resolve,reject){return Promise.resolve().then(()=>{
+    assert.equal(table,'extra_workers');if(options.failWorkers&&action==='insert')return {error:new Error('Squadra non salvata')};
+    if(action==='insert'){workerWrites.push(action);workerRows.push(...rows);return {data:rows}}
+    const matches=w=>Object.entries(filters).every(([k,v])=>Array.isArray(v)?v.includes(w[k]):w[k]===v);
+    const selected=workerRows.filter(matches);if(action==='delete'){workerWrites.push(action);for(const row of selected)workerRows.splice(workerRows.indexOf(row),1)}return {data:selected};
+   }).then(resolve,reject)}
+  };return q;
+ }}});
+ vm.runInContext(src.slice(src.indexOf('function renderExtraClosureDetails('),src.indexOf('function openExtraClosureDialog(')),c);
  const a=src.indexOf('let extraSaveBusy=false;'),b=src.indexOf('function isRecoverableJwtError',a);vm.runInContext(src.slice(a,b),c);
  c.saveExtraUpload=async(id,type,file)=>{uploads.push({id,type,file});return {id:'new-'+type};};c.cleanupReplacedAttachments=async()=>{};
- return {...h,$,uploads,updates,notifications,submit:()=>$('closeExtraForm').onsubmit({preventDefault(){},submitter:$('closeExtraFinalBtn')})};
+ c.renderExtraClosureDetails(c.extras[0]);
+ return {...h,$,uploads,updates,notifications,workerRows,workerWrites,options,submit:()=>$('closeExtraForm').onsubmit({preventDefault(){},submitter:$('closeExtraFinalBtn')})};
 }
 test('final closure uploads camera/photo and PDF to correct report types',async()=>{const h=saving();h.pick('doc-eurospin-camera',photo);h.pick('reportOvergreen',pdf);await h.submit();assert.deepEqual(h.errors,[]);assert.equal(h.uploads[0].type,'rapportino_eurospin');assert.equal(h.uploads[0].file,photo);assert.equal(h.uploads[1].type,'rapportino_overgreen');assert.equal(h.uploads[1].file,pdf);assert.equal(h.updates[0].stato,'in_attesa');assert.equal(h.notifications.length,1);});
 test('missing report blocks final save before uploading',async()=>{const h=saving();h.pick('doc-eurospin-camera',photo);await h.submit();assert.match(h.errors[0],/file Overgreen/);assert.equal(h.uploads.length,0);assert.equal(h.updates.length,0);assert.equal(h.api.get('eurospin'),photo);});
@@ -31,3 +46,44 @@ test('failed upload retains selected files and permits retry',async()=>{const h=
 
 test('unplanned extra closes without workers and records execution date and closing user',async()=>{const h=saving();h.pick('reportEurospin',pdf);h.pick('reportOvergreen',pdf);await h.submit();assert.deepEqual(h.errors,[]);assert.equal(h.updates[0].giorno_intervento,'2026-10-03');assert.equal(h.updates[0].closed_by,'worker1');assert.equal(h.updates[0].stato,'in_attesa');});
 test('closing a scheduled extra preserves its execution date',async()=>{const h=saving();h.context.extras[0].giorno_intervento='2026-09-30';h.pick('reportEurospin',pdf);h.pick('reportOvergreen',pdf);await h.submit();assert.deepEqual(h.errors,[]);assert.equal(h.updates[0].giorno_intervento,'2026-09-30');});
+
+function chooseClosure(h,day='2026-09-30T16:45',workers=['worker1','worker2']){
+ h.$('closeExtraClosedAt').value=day;
+ h.$('closeExtraWorkers').querySelectorAll('input').forEach(input=>{if(workers.includes(input.value))input.setAttribute('checked','');else input.removeAttribute('checked')});
+ h.pick('reportEurospin',pdf);h.pick('reportOvergreen',pdf);
+}
+test('admin closes an unplanned extra with chosen date, time and multiple operators',async()=>{
+ const h=saving({admin:true});assert(!h.$('closeExtraDetails').classList.contains('hidden'));
+ assert.match(h.$('closeExtraClosedAt').value,/^2026-10-03T/);chooseClosure(h);await h.submit();
+ assert.deepEqual(h.errors,[]);assert.equal(h.updates[0].giorno_intervento,'2026-09-30');
+ assert.equal(h.updates[0].closed_at,new Date('2026-09-30T16:45').toISOString());assert.equal(h.updates[0].closed_by,'worker1');
+ assert.deepEqual(h.workerRows.map(w=>w.profile_id),['worker1','worker2']);assert.equal(h.notifications.length,1);
+});
+test('admin preserves selected inactive operators and can replace a scheduled team',async()=>{
+ const h=saving({admin:true,workerRows:[{extra_id:'extra1',profile_id:'inactive'}]});
+ h.context.extras[0].giorno_intervento='2026-09-22';h.context.renderExtraClosureDetails(h.context.extras[0]);
+ assert.match(h.$('closeExtraClosedAt').value,/^2026-09-22T/);assert.equal(h.$('closeExtraWorkers').querySelector('input[checked]').value,'inactive');
+ chooseClosure(h,'2026-10-02T10:00',['worker2']);await h.submit();assert.deepEqual(h.errors,[]);
+ assert.deepEqual(h.workerWrites,['insert','delete']);assert.deepEqual(h.workerRows.map(w=>w.profile_id),['worker2']);
+});
+test('missing date or operators blocks closure before uploads',async()=>{
+ for(const [day,workers,message] of [['', ['worker1'],/data e ora/],['2026-10-02T10:00',[],/almeno un operatore/]]){
+  const h=saving({admin:true});chooseClosure(h,day,workers);await h.submit();assert.match(h.errors[0],message);assert.equal(h.uploads.length,0);assert.equal(h.updates.length,0);
+ }
+});
+test('worker save failure leaves extra open and retry retains chosen values and old team',async()=>{
+ const h=saving({admin:true,failWorkers:true,workerRows:[{extra_id:'extra1',profile_id:'inactive'}]});chooseClosure(h);
+ await h.submit();assert.equal(h.updates.length,0);assert.equal(h.notifications.length,0);assert.deepEqual(h.workerRows.map(w=>w.profile_id),['inactive']);
+ assert.equal(h.$('closeExtraClosedAt').value,'2026-09-30T16:45');assert.equal(h.api.get('eurospin'),pdf);
+ h.options.failWorkers=false;await h.submit();assert.equal(h.updates[0].stato,'in_attesa');assert.deepEqual(h.workerRows.map(w=>w.profile_id),['worker1','worker2']);
+});
+test('employee does not edit team/date and a partial does not persist closure details',async()=>{
+ const employee=saving();assert(employee.$('closeExtraDetails').classList.contains('hidden'));assert(employee.$('closeExtraClosedAt').disabled);
+ const h=saving({admin:true});h.pick('reportOvergreen',pdf);await h.context.saveExtraPartial();assert.deepEqual(h.errors,[]);
+ assert.equal(h.updates[0].stato,'da_integrare');assert.equal(h.updates[0].closed_at,null);assert.equal(h.workerWrites.length,0);
+});
+test('retry after final update failure reuses saved operators without duplicates',async()=>{
+ const h=saving({admin:true,failClose:true});chooseClosure(h);await h.submit();assert.match(h.errors[0],/Chiusura non salvata/);
+ assert.equal(h.notifications.length,0);assert.equal(h.workerRows.length,2);
+ h.options.failClose=false;await h.submit();assert.equal(h.notifications.length,1);assert.deepEqual(h.workerWrites,['insert']);assert.equal(h.workerRows.length,2);
+});

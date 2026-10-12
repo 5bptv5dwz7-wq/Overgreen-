@@ -1,4 +1,4 @@
-const APP_VERSION='V221';
+const APP_VERSION='V222';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -5078,11 +5078,51 @@ $('editExtraClosureForm').onsubmit=async e=>{
 };
 
 
+function renderExtraClosureDetails(extra){
+  const editable=admin(),date=$('closeExtraClosedAt'),workers=$('closeExtraWorkers');
+  $('closeExtraDetails').classList.toggle('hidden',!editable);
+  date.disabled=!editable;
+  const now=new Date(),pad=n=>String(n).padStart(2,'0');
+  date.value=`${extra.giorno_intervento||today()}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const selected=new Set(extraWorkers.filter(w=>w.extra_id===extra.id).map(w=>w.profile_id));
+  workers.innerHTML=editable?profiles.filter(p=>p.attivo||selected.has(p.id)).map(p=>`<label><input type="checkbox" value="${esc(p.id)}"${selected.has(p.id)?' checked':''}> ${esc(p.nome||p.email||p.id)}</label>`).join(''):'';
+}
+function extraClosureDetails(extra){
+  if(!extra)throw new Error('Extra non trovato. Aggiorna i dati e riprova.');
+  if(!admin())return {day:extra.giorno_intervento||today(),closedAt:new Date().toISOString(),workers:null};
+  const local=$('closeExtraClosedAt').value,date=new Date(local);
+  if(!local||!Number.isFinite(date.getTime()))throw new Error('Seleziona una data e ora di chiusura valide.');
+  const workers=[...$('closeExtraWorkers').querySelectorAll('input:checked')].map(x=>x.value);
+  if(!workers.length)throw new Error('Seleziona almeno un operatore che ha eseguito il lavoro.');
+  return {day:local.slice(0,10),closedAt:date.toISOString(),workers};
+}
+async function saveExtraClosureWorkers(extraId,workers){
+  if(!admin()||!workers)return;
+  // Leggi le righe reali anche al retry: conserva la squadra finché i nuovi
+  // operatori non sono stati registrati; non creare una programmazione fittizia.
+  const current=await sb.from('extra_workers').select('profile_id').eq('extra_id',extraId);
+  if(current.error)throw current.error;
+  const previous=new Set((current.data||[]).map(w=>w.profile_id));
+  const added=workers.filter(id=>!previous.has(id));
+  if(added.length){
+    const r=await sb.from('extra_workers').insert(added.map(profile_id=>({extra_id:extraId,profile_id}))).select('profile_id');
+    if(r.error)throw r.error;
+    if(r.data?.length!==added.length)throw new Error('Salvataggio operatori non confermato. Riprova la chiusura.');
+  }
+  const removed=[...previous].filter(id=>!workers.includes(id));
+  if(removed.length){
+    const r=await sb.from('extra_workers').delete().eq('extra_id',extraId).in('profile_id',removed).select('profile_id');
+    if(r.error)throw r.error;
+    if(r.data?.length!==removed.length)throw new Error('Aggiornamento operatori non confermato. Riprova la chiusura.');
+  }
+  extraWorkers=extraWorkers.filter(w=>w.extra_id!==extraId).concat(workers.map(profile_id=>({extra_id:extraId,profile_id})));
+}
 function openExtraClosureDialog(extra,fromOrdinary=false){
   if(!extra)return;
   $('closeExtraForm').reset();
   closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
   $('closeExtraId').value=extra.id;
+  renderExtraClosureDetails(extra);
   window.ExtraClosureDocuments.reset();
   $('closeExtraForm').dataset.profile=closureProfile(extra);
   const euro=closureProfile(extra)==='eurospin',intesa=closureProfile(extra)==='intesa';
@@ -5189,6 +5229,8 @@ async function saveExtraUpload(extraId,tipo,originalFile,uploadedPaths){
 function setExtraSaveBusy(busy){
   window.ExtraClosureDocuments.setBusy(busy);
   for(const id of ['closeExtraFinalBtn','closeExtraPartialBtn'])if($(id))$(id).disabled=busy;
+  $('closeExtraClosedAt').disabled=busy||!admin();
+  $('closeExtraWorkers').querySelectorAll('input').forEach(input=>input.disabled=busy);
 }
 async function cleanupReplacedAttachments(rows){
   for(const row of rows){
@@ -5248,6 +5290,7 @@ $('closeExtraForm').onsubmit=async e=>{
   const uploadedPaths=[],replacedAttachments=[];
   try{
     const id=$('closeExtraId').value,profileMode=$('closeExtraForm').dataset.profile||'eurospin',ticket=$('closeExtraTicket').value.trim()||null;
+    const closure=extraClosureDetails(extras.find(x=>x.id===id));
     const structuredItems=workItemsForExtra(id);
     if(structuredItems.length){
       const incomplete=structuredItems.filter(w=>!['completata','non_eseguita'].includes(w.stato));
@@ -5284,7 +5327,8 @@ $('closeExtraForm').onsubmit=async e=>{
     
 
     btn.textContent='Invio a Lorenzo…';
-    const {error}=await sb.from('extras').update({stato:'in_attesa',giorno_intervento:extras.find(x=>x.id===id)?.giorno_intervento||today(),note_lorenzo:notes,closed_by:profile.id,closed_at:new Date().toISOString()}).eq('id',id).select('id').single();
+    await saveExtraClosureWorkers(id,closure.workers);
+    const {error}=await sb.from('extras').update({stato:'in_attesa',giorno_intervento:closure.day,note_lorenzo:notes,closed_by:profile.id,closed_at:closure.closedAt}).eq('id',id).select('id').single();
     if(error)throw error;
     await cleanupReplacedAttachments(replacedAttachments);
     void notifyAdminClosure('extra',id,photos.length);

@@ -19,7 +19,7 @@ function setup(options={}){
     openAttachment:a=>calls.push(['original',a.id]),
     sb:{from(table){const query={select(){return query},eq(){return query},order(){return query},limit(){return query},async maybeSingle(){
       if(options.load)await options.load();
-      return options.loadError?{error:Error('offline')}:{data:table==='extra_labor_hours'?db.row:table==='extras'?{id:'e1',client_type:'eurospin',categoria_target:options.category||null,closure_profile:options.profile}:db.report};
+      return options.loadError?{error:Error('offline')}:{data:table==='extra_labor_hours'?db.row:table==='extras'?{id:'e1',client_type:'eurospin',categoria_target:options.category||null,closure_profile:options.profile,night_hours:options.nightHours??0}:db.report};
     }};return query},async rpc(name,args){calls.push([name,args]);if(options.rpc)return options.rpc(name,args);
       db.row={...args.p_values,...model.rates(args.p_values.pricing_category,args.p_values.equipment),extra_id:args.p_extra_id,source_attachment_id:args.p_source_attachment_id,revision:(db.row?.revision||0)+1,updated_at:'2026-09-08T10:00:00Z'};return {data:{record:db.row,calculation:model.calculate(db.row)}};
     }}
@@ -127,4 +127,15 @@ test('V212 consuntivo: discount changes final price, persists after reopen and c
  h.$('extraHoursClose').click();await h.open();assert.equal(h.$('extraEconomicsDiscount').value,'80');
  h.$('extraEconomicsDiscount').value='580,01';const before=h.calls.length;await h.save();assert.equal(h.calls.length,before);assert.match(h.$('extraHoursFeedback').textContent,/non può superare/);
  h.$('extraEconomicsDiscount').value='';await h.save();assert.equal(h.db.row.discount_amount,0);assert.equal(model.calculate(h.db.row).total,58000);
+});
+
+test('V223 Economia loads night hours from closure, calculates the split and saves equipment/night values',async()=>{
+ const h=setup({category:'pulizie',nightHours:2.5});await h.c.openExtraHours({id:'e1',client_type:'eurospin',categoria_target:'pulizie'});
+ const $=id=>h.c.document.getElementById(id);
+ assert.equal($('extraEconomicsNightHours').value,'2,5');assert.equal($('extraEconomicsNightWrap').hidden,false);
+ $('extraEconomicsMode').value='tariffa';$('extraEconomicsTrip').value='no';$('extraHoursInput').value='6';
+ $('extraEconomicsEquipment').checked=true;$('extraHoursForm').dispatchEvent(new h.document.defaultView.Event('input'));
+ assert.match($('extraEconomicsRates').textContent,/30,00/);assert.match($('extraEconomicsNightSplit').textContent,/3,5 ore diurne/);
+ await h.save();const saved=h.calls.find(x=>x[0]==='save_extra_economics_v202')[1].p_values;
+ assert.equal(saved.night_hours,2.5);assert.equal(saved.expected_night_hours,2.5);assert.equal(saved.equipment,true);assert.equal(saved.total_hours,6);
 });

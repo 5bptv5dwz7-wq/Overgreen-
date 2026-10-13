@@ -9,7 +9,7 @@
   }
   const cents=value=>decimal(value);
   const money=value=>value==null?'Da completare':new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(value/100);
-  function rates(category,equipment=false){return category==='verde'?{hourly_rate:20,exit_rate:100}:category==='pulizie'?{hourly_rate:equipment?23:18,exit_rate:50}:{hourly_rate:null,exit_rate:null}}
+  function rates(category,equipment=false){return category==='verde'?{hourly_rate:20,exit_rate:100}:category==='pulizie'?{hourly_rate:equipment?23:18,night_hourly_rate:equipment?30:25,exit_rate:50}:{hourly_rate:null,exit_rate:null}}
   function isBillableExtra(extra){
     if(!extra)return false;
     const client=extra?.client_type||'eurospin';
@@ -28,7 +28,15 @@
     if(quoted&&quote==null)missing.push('importo preventivo');
     if(!quoted&&hours==null)missing.push('ore');
     if(hourly==null||exitRate==null)missing.push('tariffe');
-    const labor=hours!=null&&hourly!=null?Math.round(hours*hourly/100):null;
+    const night=decimal(row.night_hours??0,5),nightRate=cents(row.night_hourly_rate);
+    if(night>0&&row.pricing_category!=='pulizie')missing.push('notturno solo per pulizie');
+    if(hours!=null&&night>hours)missing.push('ore notturne superiori al totale');
+    if(night>0&&nightRate==null)missing.push('tariffa notturna');
+    const validHours=hours!=null&&night<=hours;
+    const dayHours=validHours?hours-night:null;
+    const laborDay=validHours&&hourly!=null?Math.round(dayHours*hourly/100):null;
+    const laborNight=night===0?0:nightRate!=null?Math.round(night*nightRate/100):null;
+    const labor=validHours&&hourly!=null&&laborNight!=null?Math.round((dayHours*hourly+night*(nightRate??0))/100):null;
     const exitIncluded=quoted&&row.dedicated_trip===true&&row.quote_exit_included===true;
     const exit=row.dedicated_trip===false||exitIncluded?0:row.dedicated_trip===true&&exitRate!=null&&Number(row.operator_count)>0?exitRate*Number(row.operator_count):null;
     let expenses=0;
@@ -39,10 +47,11 @@
     if(subtotal!=null&&discount>subtotal)missing.push('sconto superiore al subtotale');
     const complete=missing.length===0;
     const total=complete?subtotal-discount:null;
-    return {complete,missing:[...new Set(missing)],labor,base,exit,exitIncluded,expenses,subtotal,discount,total,quotePending:quoted&&row.quote_status!=='accettato'};
+    return {complete,missing:[...new Set(missing)],labor,laborDay,laborNight,dayHours:dayHours==null?null:dayHours/100,nightHours:night/100,base,exit,exitIncluded,expenses,subtotal,discount,total,quotePending:quoted&&row.quote_status!=='accettato'};
   }
   function review(row,extra,report){
     const result=calculate(row||{}),issues=[];
+    if(row?.pricing_category==='pulizie'&&Number(row.night_hours||0)!==Number(extra?.night_hours||0))issues.push('Ore notturne cambiate: ricontrolla Economia');
     if(row?.pricing_category&&extra?.categoria_target&&row.pricing_category!==extra.categoria_target)issues.push('Categoria cambiata: ricontrolla le tariffe');
     if(row?.total_hours!=null&&(row?.source_attachment_id||null)!==(report?.id||null))issues.push('Rapportino cambiato: ricontrolla le ore');
     return {...result,issues,ready:result.complete&&!result.quotePending&&!issues.length};

@@ -87,3 +87,27 @@ test('retry after final update failure reuses saved operators without duplicates
  assert.equal(h.notifications.length,0);assert.equal(h.workerRows.length,2);
  h.options.failClose=false;await h.submit();assert.equal(h.notifications.length,1);assert.deepEqual(h.workerWrites,['insert']);assert.equal(h.workerRows.length,2);
 });
+
+test('V223 cleaning closure records only crew night hours, with no financial data',async()=>{
+ const h=saving({admin:true});const e=h.context.extras[0];e.categoria_target='pulizie';e.night_hours=2.5;
+ h.context.renderExtraClosureDetails(e);chooseClosure(h);
+ assert(!h.$('closeExtraNightWork').classList.contains('hidden'));assert.equal(h.$('closeExtraNightHours').value,'2,5');
+ h.$('closeExtraNightHours').value='3,5';await h.submit();assert.deepEqual(h.errors,[]);
+ assert.equal(h.updates[0].night_hours,3.5);assert.equal(h.updates[0].hourly_rate,undefined);assert.equal(h.updates[0].total_hours,undefined);
+});
+test('V223 employees can record cumulative night hours on a partial and retry without adding them twice',async()=>{
+ const h=saving();const e=h.context.extras[0];e.categoria_target='pulizie';e.night_hours=1;
+ h.context.renderExtraClosureDetails(e);h.$('closeExtraNightHours').value='2';await h.context.saveExtraPartial();
+ assert.equal(h.updates[0].night_hours,2);assert.equal(h.updates[0].closed_at,null);assert.equal(h.notifications.length,0);
+ await h.context.saveExtraPartial();assert.equal(h.updates[1].night_hours,2);
+});
+test('V223 invalid night hours block uploads and unchecked night work explicitly clears the value',async()=>{
+ for(const bad of ['', '-1','0','1:30','1,333']){
+  const h=saving();const e=h.context.extras[0];e.categoria_target='pulizie';e.night_hours=1;h.context.renderExtraClosureDetails(e);
+  h.$('closeExtraNightHours').value=bad;h.pick('reportEurospin',pdf);h.pick('reportOvergreen',pdf);await h.submit();
+  assert.match(h.errors[0],/ore notturne/);assert.equal(h.uploads.length,0);assert.equal(h.updates.length,0);
+ }
+ const h=saving();const e=h.context.extras[0];e.categoria_target='pulizie';e.night_hours=1;h.context.renderExtraClosureDetails(e);
+ h.$('closeExtraNightEnabled').checked=false;h.context.syncExtraNightWork();await h.context.saveExtraPartial();
+ assert.equal(h.updates[0].night_hours,0);assert(h.$('closeExtraNightHours').disabled);
+});

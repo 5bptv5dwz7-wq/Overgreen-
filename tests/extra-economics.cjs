@@ -60,3 +60,22 @@ test('V212 Excel contains original subtotal, discount and final net price',()=>{
  const r={...cases[0].input,...model.rates('verde'),discount_amount:20};c.addEconomicsWorksheet(book,[{extra:c.extras[0],row:r,calc:model.review(r,c.extras[0])}]);
  const v=sheets[0].rows[1].values;assert.equal(v[18],300);assert.equal(v[24],320);assert.equal(v[25],20);assert.equal(sheets[1].rows[2].values[1],300);
 });
+
+test('V223 splits partial and full night work, with equipment, exact decimals and no extra operator multiplier',()=>{
+ for(const equipment of [false,true])for(const night of [0,2.5,6]){
+  const row={...cases[0].input,pricing_category:'pulizie',equipment,night_hours:night,...model.rates('pulizie',equipment)};
+  const c=model.calculate(row),expected=(6-night)*(equipment?23:18)+night*(equipment?30:25);
+  assert.equal(c.labor,Math.round(expected*100));assert.equal(c.total,Math.round(expected*100)+10000);
+  assert.equal(c.dayHours,6-night);assert.equal(c.nightHours,night);assert.equal(c.complete,true);
+ }
+ const row={...cases[0].input,pricing_category:'pulizie',night_hours:1.33,total_hours:2.33,...model.rates('pulizie')};
+ assert.equal(model.calculate(row).labor,5125);
+});
+test('V223 excessive night hours are incomplete, closure changes need review and quotes still replace labor',()=>{
+ const row={...cases[0].input,pricing_category:'pulizie',night_hours:2,...model.rates('pulizie')};
+ assert.equal(model.calculate({...row,night_hours:7}).complete,false);
+ assert.equal(model.review(row,{categoria_target:'pulizie',night_hours:3}).ready,false);
+ assert.equal(model.review(row,{categoria_target:'pulizie',night_hours:2}).ready,true);
+ const quote=model.calculate({...row,pricing_mode:'preventivo',quote_status:'accettato',quote_amount:1000,quote_exit_included:true,discount_amount:20});
+ assert.equal(quote.total,98000);assert.equal(quote.labor,12200);
+});

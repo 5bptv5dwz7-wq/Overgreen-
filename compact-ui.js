@@ -26,6 +26,7 @@
     [...card.children].filter(n=>!keep.has(n)&&n!==actions).forEach(n=>body.append(n));
     const primary=document.createElement('div');primary.className='actions extra-primary';
     const action=actions.querySelector('[data-close-extra],[data-approve-extra]')||actions.querySelector('[data-program-extra],[data-work-progress],[data-generate-closure]');
+    actions.querySelectorAll('[data-extra-map],[data-pdf]').forEach(button=>primary.append(button));
     if(action)primary.append(action);
     body.append(actions);detail.append(body);card.append(meta);
     const footer=document.createElement('div');footer.className='extra-footer';footer.append(detail,primary);card.append(footer);

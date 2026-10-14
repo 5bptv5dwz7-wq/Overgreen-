@@ -10,3 +10,10 @@ test('extra disclosure retains notes, photos and economics actions while preserv
 test('Altro preserves all destinations, role-hidden buttons and existing listeners; init is idempotent',()=>{
  const {document,ui}=setup('<header><div class="header-actions"><button data-view="dashboard">Home</button><button data-view="stores">Sedi</button><button data-view="schedule">Programma</button><button data-view="extras">Extra</button><button class="hidden admin-only" data-view="audit">Log</button><button id="helpBtn">Aiuto</button></div></header>');let called=0;document.querySelector('#helpBtn').onclick=()=>called++;ui.initNavigation();ui.initNavigation();assert.equal(document.querySelectorAll('.nav-more').length,1);assert.equal(document.querySelectorAll('.header-actions > button').length,4);assert(document.querySelector('.nav-more [data-view=audit]').classList.contains('hidden'));document.querySelector('#helpBtn').click();assert.equal(called,1);
 });
+
+test('Maps and request PDF stay outside extra details with their original click handlers',()=>{
+ const {document,ui}=setup('<article><div class="extra-card-heading">Sede</div><p>Titolo</p><div class="actions"><button data-extra-map>Maps</button><button data-pdf>Apri PDF richiesta</button><button data-close-extra>Chiudi lavoro</button><button data-edit-extra>Modifica</button></div></article>');const card=document.querySelector('article');const called=[];
+ for(const attr of ['data-extra-map','data-pdf','data-close-extra'])card.querySelector('['+attr+']').onclick=()=>called.push(attr);
+ ui.extra(card);for(const attr of ['data-extra-map','data-pdf','data-close-extra']){const button=card.querySelector('.extra-primary ['+attr+']');assert(button);button.click()}
+ assert.deepEqual(called,['data-extra-map','data-pdf','data-close-extra']);assert(card.querySelector('.extra-detail [data-edit-extra]'));
+});

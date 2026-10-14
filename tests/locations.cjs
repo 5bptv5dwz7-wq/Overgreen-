@@ -84,3 +84,13 @@ test('application links for ordinary, extra, sharing and linked activities agree
   ctx.openActivityMaps({indirizzo:'Via Roma 10'},st);assert.match(decodeURIComponent(ctx.window.location.href),/Via Roma 10, Mazzano/);
   assert.match(ctx.extraMapsDestination({nome_esterno:'Condominio Blu',indirizzo_esterno:'Via Roma, Genova'}),/Condominio Blu/);
 });
+
+test('Photon fallback uses provider default language and can resolve an address after empty Nominatim results',async()=>{
+ const urls=[];const s=G.createService({getStore:()=>null,fetch:async url=>{urls.push(url);if(url.includes('nominatim'))return {ok:true,json:async()=>[]};const u=new URL(url);if(u.searchParams.has('lang'))return {ok:false,status:400};return {ok:true,json:async()=>({features:[{geometry:{coordinates:[12.5,41.9]},properties:{name:'Via Roma',street:'Via Roma',housenumber:'1',city:'Roma',countrycode:'IT',osm_key:'building'}}]})}}});
+ const result=await s.geocode('Via Roma 1, Roma, Italia');assert.equal(result.source,'Photon');assert.equal(result.approximate,true);assert.equal(urls.length,2);assert(!new URL(urls[1]).searchParams.has('lang'));
+});
+test('travel errors identify the failing address or routing provider',async()=>{
+ const s=G.createService({getStore:()=>null,fetch:async url=>url.includes('nominatim')?{ok:true,json:async()=>[]}:{ok:false,status:400}});
+ await assert.rejects(s.geocode('Via Roma, Roma'),/Servizio indirizzi \(Photon\).*HTTP 400/);
+ await assert.rejects(s.route('41.9,12.5','42,12.6'),/Servizio percorsi \(OSRM\).*HTTP 400/);
+});

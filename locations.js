@@ -118,7 +118,7 @@
       const entries=Object.entries(cache).sort((a,b)=>b[1].savedAt-a[1].savedAt).slice(0,600);writeCache(Object.fromEntries(entries));return value};
     async function json(url){
       let r;try{r=await fetcher(url,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(12000)})}catch{throw new Error('Errore di connessione durante il calcolo viaggio')}
-      if(!r.ok)throw new Error('Servizio indirizzi o percorsi non disponibile (HTTP '+r.status+')');return r.json();
+      if(!r.ok){const service=url.includes('router.project-osrm.org')?'Servizio percorsi (OSRM)':url.includes('photon.komoot.io')?'Servizio indirizzi (Photon)':'Servizio indirizzi (Nominatim)';throw new Error(service+' non disponibile (HTTP '+r.status+')')}return r.json();
     }
     function search(query){
       const key='search:'+norm(query),old=cached(key,86400000);if(old)return Promise.resolve(old);
@@ -129,7 +129,7 @@
         try{const rows=await json('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&addressdetails=1&countrycodes=it&q='+encodeURIComponent(query));hits=(rows||[]).map(candidateNominatim).filter(Boolean)}catch(e){
           if(String(e.message).includes('429'))throw e;
         }
-        if(!hits.length){const data=await json('https://photon.komoot.io/api/?limit=5&lang=it&q='+encodeURIComponent(query));hits=(data.features||[]).map(candidatePhoton).filter(Boolean)}
+        if(!hits.length){const data=await json('https://photon.komoot.io/api/?limit=5&q='+encodeURIComponent(query));hits=(data.features||[]).map(candidatePhoton).filter(Boolean)}
         return put(key,hits.filter(h=>norm(h.country)==='it'));
       });queue=task;pending.set(key,task);task.finally(()=>pending.delete(key)).catch(()=>{});return task;
     }

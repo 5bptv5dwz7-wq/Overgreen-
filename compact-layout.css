@@ -183,3 +183,17 @@
   #app main .quick-planner-head { display:block; }
   #app main .unplanned-summary { margin:4px 0 8px; }
 }
+
+/* V226: the same complete navigation on phone and tablet. */
+@media(max-width:699px){
+  #bottomNav,#bottomMoreMenu { display:none!important; }
+  #app > header { grid-template-columns:minmax(0,1fr); gap:7px; }
+  #app > header .header-actions { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); width:100%; gap:5px; }
+  #app > header .header-actions > button.icon:is([data-view=dashboard],[data-view=stores],[data-view=schedule],[data-view=extras]) {
+    display:flex; min-width:0; width:100%; padding:5px 2px;
+  }
+  #app > header .nav-label { font-size:10px; }
+  #app > header .nav-more > summary { justify-content:center; padding:5px 2px; font-size:12px; }
+  #app > header .nav-more-body { position:absolute; top:calc(100% + 6px); right:0; }
+  #app main { padding-bottom:calc(24px + env(safe-area-inset-bottom))!important; }
+}

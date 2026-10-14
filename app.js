@@ -1,4 +1,4 @@
-const APP_VERSION='V224';
+const APP_VERSION='V225';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -2354,7 +2354,7 @@ function renderStores(){
  if(storeFilter!=='all')list=list.filter(s=>storeFilter==='today'?todayStoreIds.has(s.id):storeFilter==='due'?isOverdueStore(s):storeFilter==='scheduled'?isStoreProgrammed(s.id):storeFilter==='urgent'?isUrgentStore(s):status(s)===storeFilter);
  list.sort((a,b)=>sort==='alpha'?a.nome.localeCompare(b.nome,'it'):OvergreenCounters.compare(a,b,today()));
  $('storesList').innerHTML='';for(const s of list){const n=days(s.ultimo_passaggio),pending=interventions.some(i=>i.store_id===s.id&&i.stato==='in_attesa'),storeState=status(s),programmed=isStoreProgrammed(s.id);const c=document.createElement('article');c.className=`card store-card ${storeState}`;c.innerHTML=`<div class="status-bar"></div><div><div class="card-top"><div><h3 data-detail>${esc(s.nome)}</h3><p class="muted">${esc(s.citta||s.indirizzo||'')}</p></div><div class="days">${!storeHasInterval(s)?'Su richiesta':n===null?'—':n+' gg'}</div></div>${programmed?'<p class="programmed-label">📅 In programma</p>':''}${!storeHasInterval(s)?'<p class="muted"><strong>↪ Nessun intervallo · solo su richiesta</strong></p>':''}${pending?'<p class="pending">⏳ In attesa di convalida</p>':''}${s.site_type==='atm'&&s.importo_fisso!==null&&s.importo_fisso!==undefined?`<p class="muted"><strong>Importo fisso:</strong> ${esc(euro(s.importo_fisso))}</p>`:''}<p class="muted">Ultimo ordinario: ${fmt(s.ultimo_passaggio)}</p><div class="actions"><button class="secondary" data-map>Maps</button><button data-history>Storico</button><button class="secondary" data-site-extras>Extra della sede</button>${!pending?'<button data-done>Registra ordinario</button>':''}${admin()?'<button class="secondary" data-share>Condividi</button><button class="secondary" data-edit>Modifica</button>':''}</div></div>`;
- c.querySelector('[data-detail]').onclick=()=>showStoreDetail(s);c.querySelector('[data-map]').onclick=()=>openStoreMaps(s);c.querySelector('[data-history]').onclick=()=>showHistory(s);c.querySelector('[data-site-extras]').onclick=()=>openSiteExtras(s);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(s));c.querySelector('[data-share]')?.addEventListener('click',()=>shareStoreExternally(s));c.querySelector('[data-edit]')?.addEventListener('click',()=>openStore(s));$('storesList').appendChild(c)}
+ c.querySelector('[data-detail]').onclick=()=>showStoreDetail(s);c.querySelector('[data-map]').onclick=()=>openStoreMaps(s);c.querySelector('[data-history]').onclick=()=>showHistory(s);c.querySelector('[data-site-extras]').onclick=()=>openSiteExtras(s);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(s));c.querySelector('[data-share]')?.addEventListener('click',()=>shareStoreExternally(s));c.querySelector('[data-edit]')?.addEventListener('click',()=>openStore(s));window.OvergreenCompact?.store(c);$('storesList').appendChild(c)}
  $('totalCount').textContent=clientStores.length;
  $('dueCount').textContent=clientStores.filter(isOverdueStore).length;
  $('warningCount').textContent=clientStores.filter(s=>status(s)==='warning').length;
@@ -3989,6 +3989,7 @@ function extraCard(e){
   c.querySelector('[data-edit-extra]')?.addEventListener('click',()=>openExtraEdit(e));
   c.querySelector('[data-delete-extra]')?.addEventListener('click',()=>deleteExtra(e));
   if(showProgress&&pics.length)hydrateExtraPhotos(c,pics);
+  window.OvergreenCompact?.extra(c);
   return c;
 }
 
@@ -5455,3 +5456,6 @@ $('eurospinPackageCategory')?.addEventListener('change',()=>{$('eurospinPackageG
 
 
 
+
+// Existing navigation listeners stay attached when controls move into Altro.
+window.OvergreenCompact?.initNavigation();

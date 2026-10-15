@@ -1,4 +1,4 @@
-const APP_VERSION='V229';
+const APP_VERSION='V230';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -337,12 +337,13 @@ function setView(name){
   if(!$(name+'View')||(name==='operations'&&!admin()))name='dashboard';
   currentView=name;localStorage.setItem(CURRENT_VIEW_KEY,name);
   document.querySelectorAll('header [data-view]').forEach(b=>{const active=b.dataset.view===name;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
-  document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');document.querySelectorAll('[data-bottom-view]').forEach(b=>b.classList.toggle('active',b.dataset.bottomView===name));$('pageTitle').textContent={dashboard:'Dashboard',operations:'Da gestire',stores:'Sedi e clienti',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'}[name];if(name==='operations'&&typeof renderOperations==='function')renderOperations();if(name==='dashboard')renderDashboard();if(name==='stores')renderStores();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='reports')renderDailyReport();if(name==='stats')renderStats();if(name==='signatures')openSignatureSheetsView();if(name==='archive')openCompanyArchive();if(name==='contacts')renderWorkContacts();if(name==='audit'&&admin())openAuditView();if(name!=='audit')auditViewOpen(name);if(name==='settings'){ensureCloudSettingsUi();refreshPhotoDeliveryStatus().catch(()=>{});ensurePushSettingsUi();refreshPushSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin()){loadSupabaseUsage();renderHealthCenter();}}}
+  document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');document.querySelectorAll('[data-bottom-view]').forEach(b=>b.classList.toggle('active',b.dataset.bottomView===name));$('pageTitle').textContent={dashboard:'Dashboard',operations:'Da gestire',stores:'Sedi e clienti',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'}[name];if(name==='operations'&&typeof renderOperations==='function')renderOperations();if(name==='dashboard')renderDashboard();if(name==='stores')renderStores();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='reports')renderDailyReport();if(name==='stats')renderStats();if(name==='signatures')openSignatureSheetsView();if(name==='archive')openCompanyArchive();if(name==='contacts')renderWorkContacts();if(name==='audit'&&admin())openAuditView();if(name!=='audit')auditViewOpen(name);if(name==='settings'){void renderRemoteReloadPanel();ensureCloudSettingsUi();refreshPhotoDeliveryStatus().catch(()=>{});ensurePushSettingsUi();refreshPushSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin()){loadSupabaseUsage();renderHealthCenter();}}}
 
 
 function syncImpersonationUi(){
   if(typeof closeExtraHoursForRole==='function')closeExtraHoursForRole();
   if(typeof syncExtraEconomicsRole==='function')syncExtraEconomicsRole();
+  if(!admin())$('remoteReloadPanel')?.remove();
   const active=impersonating();
   if($('userLabel'))$('userLabel').textContent=active?`${profile.nome} · Vista dipendente (tu: ${realProfile.nome})`:`${profile.nome} · ${admin()?'Amministratore':'Dipendente'}`;
   if($('settingsUser'))$('settingsUser').textContent=active?`Stai operando come ${profile.nome} — sessione reale: ${session?.user?.email||realProfile?.email||''}`:`${profile.nome} — ${session?.user?.email||''}`;
@@ -5452,7 +5453,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=229').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=230').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);
@@ -5479,3 +5480,5 @@ $('eurospinPackageCategory')?.addEventListener('change',()=>{$('eurospinPackageG
 
 // Existing navigation listeners stay attached when controls move into Altro.
 window.OvergreenCompact?.initNavigation();
+
+startRemoteReload();

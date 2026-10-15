@@ -204,3 +204,5 @@
   #app main .extra-primary { grid-row:1; flex-wrap:wrap; min-width:0; }
   #app main .extra-primary button { flex:1 1 auto; }
 }
+
+.remote-device{padding:12px 0;border-bottom:1px solid var(--line,#dce7e1)}.remote-device p{margin:6px 0;overflow-wrap:anywhere}.remote-device .actions{display:flex;flex-wrap:wrap;gap:8px}

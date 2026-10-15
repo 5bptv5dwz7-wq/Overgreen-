@@ -11,14 +11,14 @@ test('changed category/report and unaccepted quotes cannot contribute to the ver
   assert.equal(model.review({...row,pricing_mode:'preventivo',quote_amount:10,quote_status:'inviato'},{categoria_target:'verde'},{id:'old'}).ready,false);
 });
 test('month/category/mode filters include drafts and exclude other clients or cancelled extras',()=>{
-  const extras=[{id:'1',client_type:'eurospin',categoria_target:'verde',stato:'completato',giorno_intervento:'2026-09-08'},{id:'2',client_type:'eurospin',stato:'annullato',giorno_intervento:'2026-09-08'},{id:'3',client_type:'intesa',giorno_intervento:'2026-09-08'},{id:'4',client_type:'eurospin',categoria_target:'pulizie',data_richiesta:'2026-09-02'},{id:'5',client_type:'eurospin',giorno_intervento:'2026-08-01'}];
+  const extras=[{id:'1',client_type:'eurospin',categoria_target:'verde',stato:'completato',closed_at:'2026-09-08T10:00:00Z',giorno_intervento:'2026-08-08'},{id:'2',client_type:'eurospin',stato:'annullato',giorno_intervento:'2026-09-08'},{id:'3',client_type:'intesa',giorno_intervento:'2026-09-08'},{id:'4',client_type:'eurospin',categoria_target:'pulizie',stato:'in_attesa',closed_at:'2026-09-02T10:00:00Z',data_richiesta:'2026-08-02'},{id:'5',client_type:'eurospin',giorno_intervento:'2026-08-01'}];
   assert.deepEqual(model.filterRows(extras,[],[],{month:'2026-09'}).map(x=>x.extra.id),['4','1']);
   assert.deepEqual(model.filterRows(extras,[{extra_id:'1',...cases[0].input,...model.rates('verde')}],[],{month:'2026-09',category:'verde',mode:'tariffa'}).map(x=>x.extra.id),['1']);
 });
 function uiSetup(){
   const dom=parseHTML(fs.readFileSync(__dirname+'/../index.html','utf8')),document=dom.document;
   Object.defineProperty(dom.HTMLSelectElement.prototype,'value',{configurable:true,get(){return (this.querySelector('option[selected]')||this.querySelector('option'))?.value||''},set(v){for(const o of this.querySelectorAll('option'))if(o.value===String(v))o.setAttribute('selected','');else o.removeAttribute('selected')}});
-  const c={document,window:{OvergreenEconomics:model},console,$:id=>document.getElementById(id),admin:()=>c.isAdmin,isAdmin:true,stores:[],extras:[{id:'e',client_type:'eurospin',categoria_target:'verde',nome_esterno:'<img src=x>',stato:'completato',giorno_intervento:'2026-09-08'}],attachments:[],today:()=> '2026-09-08',esc:s=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'),readAllRows:async()=>({data:[{extra_id:'e',...cases[0].input,...model.rates('verde')}]}),loadAll:async()=>{},openExtraHours:()=>{},renderExtras:()=>{}};
+  const c={document,window:{OvergreenEconomics:model},console,$:id=>document.getElementById(id),admin:()=>c.isAdmin,isAdmin:true,stores:[],extras:[{id:'e',client_type:'eurospin',categoria_target:'verde',nome_esterno:'<img src=x>',stato:'completato',closed_at:'2026-09-08T10:00:00Z',giorno_intervento:'2026-08-08'}],attachments:[],today:()=> '2026-09-08',esc:s=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'),readAllRows:async()=>({data:[{extra_id:'e',...cases[0].input,...model.rates('verde')}]}),loadAll:async()=>{},openExtraHours:()=>{},renderExtras:()=>{}};
   c.$('extraEconomicsBook').showModal=()=>c.$('extraEconomicsBook').setAttribute('open','');c.$('extraEconomicsBook').close=()=>c.$('extraEconomicsBook').removeAttribute('open');
   vm.createContext(c);vm.runInContext(fs.readFileSync(__dirname+'/../extra-economics-ui.js','utf8'),c);return c;
 }
@@ -78,4 +78,30 @@ test('V223 excessive night hours are incomplete, closure changes need review and
  assert.equal(model.review(row,{categoria_target:'pulizie',night_hours:2}).ready,true);
  const quote=model.calculate({...row,pricing_mode:'preventivo',quote_status:'accettato',quote_amount:1000,quote_exit_included:true,discount_amount:20});
  assert.equal(quote.total,98000);assert.equal(quote.labor,12200);
+});
+
+test('V229 economic periods use Italian closure month; open and undated never fall back to scheduling',()=>{
+ const extra=(id,values)=>({id,client_type:'eurospin',categoria_target:'verde',...values});
+ const rows=[extra('oct',{stato:'completato',closed_at:'2026-09-30T22:30:00Z',giorno_intervento:'2026-09-01'}),extra('pending',{stato:'in_attesa',closed_at:'2026-10-04T10:00:00Z'}),extra('partial',{stato:'da_integrare',closed_at:'2026-10-01T10:00:00Z',giorno_intervento:'2026-10-01'}),extra('scheduled',{stato:'programmato',giorno_intervento:'2026-10-02'}),extra('missing',{stato:'completato',giorno_intervento:'2026-10-02'}),extra('invalid',{stato:'in_attesa',closed_at:'invalid',created_at:'2026-10-01'}),extra('cancelled',{stato:'annullato'})];
+ const ids=month=>model.filterRows(rows,[],[],{month}).map(r=>r.extra.id).sort();
+ assert.deepEqual(ids('2026-10'),['oct','pending']);assert.deepEqual(ids('2026-09'),[]);
+ assert.deepEqual(ids('open'),['partial','scheduled']);assert.deepEqual(ids('undated'),['invalid','missing']);
+ assert.equal(model.closureDate(rows[0]),'2026-10-01');
+ assert.equal(model.period(extra('year',{stato:'completato',closed_at:'2026-12-31T23:15:00Z'})),'2027-01');
+ rows[3].stato='in_attesa';rows[3].closed_at='2026-11-03T10:00:00Z';
+ assert.deepEqual(ids('open'),['partial']);assert.deepEqual(ids('2026-11'),['scheduled']);
+});
+test('V229 period selector preserves Aperti through refresh and combines with category filters',async()=>{
+ const c=uiSetup();c.extras.push({id:'open',client_type:'eurospin',categoria_target:'pulizie',stato:'ricevuto',titolo:'Aperto'}, {id:'undated',client_type:'eurospin',stato:'completato'});
+ await c.loadExtraEconomics();c.renderExtraEconomicsBook();
+ const select=c.$('extraEconomicsMonth');assert.deepEqual([...select.options].map(o=>o.value),['','open','2026-09','undated']);
+ select.value='open';c.renderExtraEconomicsBook();assert.equal(select.value,'open');assert.equal(c.$('extraEconomicsBookList').children.length,1);assert.match(c.$('extraEconomicsBookList').textContent,/Aperti/);
+ c.$('extraEconomicsBookCategory').value='verde';c.renderExtraEconomicsBook();assert.equal(c.$('extraEconomicsBookList').children.length,0);assert.equal(c.$('extraEconomicsBookExport').disabled,true);
+});
+test('V229 Excel includes closure date and economic category, including open extras',()=>{
+ const c=uiSetup(),sheets=[];const book={addWorksheet(){const rows=[];const s={rows,getRow(){return {}},addRow(values){const r={values,getCell:()=>({})};rows.push(r);return r},eachRow(){}};sheets.push(s);return s}};
+ const closed={...c.extras[0],closed_at:'2026-09-30T22:30:00Z'},open={...c.extras[0],stato:'da_integrare',closed_at:null};
+ const r={...cases[0].input,...model.rates('verde')};c.addEconomicsWorksheet(book,[closed,open].map(extra=>({extra,row:r,calc:model.review(r,extra)})));
+ assert.equal(sheets[0].rows[0].values[31],'2026-10-01');assert.equal(sheets[0].rows[0].values[32],'ottobre 2026');
+ assert.equal(sheets[0].rows[1].values[31],'');assert.equal(sheets[0].rows[1].values[32],'Aperti');assert.match(sheets[0].autoFilter.to,/^AG/);
 });

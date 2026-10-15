@@ -34,17 +34,29 @@ function appendExtraEconomicsSummary(card,extra){
   card.querySelector('.actions').before(box);
 }
 function economicsBookFilter(){return {month:$('extraEconomicsMonth').value,category:$('extraEconomicsBookCategory').value,mode:$('extraEconomicsBookMode').value,state:$('extraEconomicsBookState').value}}
+function populateEconomicsPeriods(){
+  const model=window.OvergreenEconomics,select=$('extraEconomicsMonth');
+  const value=select.value||select.dataset.initialPeriod||'';delete select.dataset.initialPeriod;
+  const periods=new Set(model.filterRows(extras,[],[]).map(x=>model.period(x.extra)));
+  if(value)periods.add(value);
+  select.replaceChildren();
+  for(const period of ['', 'open', ...[...periods].filter(p=>!['open','undated'].includes(p)).sort().reverse(), ...(periods.has('undated')?['undated']:[])]){
+    const option=document.createElement('option');option.value=period;option.textContent=model.periodLabel(period);select.appendChild(option);
+  }
+  select.value=value;
+}
 function renderExtraEconomicsBook(){
   if(!admin())return;const model=window.OvergreenEconomics,list=$('extraEconomicsBookList');list.replaceChildren();
   $('extraEconomicsBookExport').disabled=!!extraEconomicsError;
   if(extraEconomicsError){$('extraEconomicsBookStatus').textContent=extraEconomicsError;$('extraEconomicsBookSummary').replaceChildren();extraEconomicsBookRows=[];return}
+  populateEconomicsPeriods();
   extraEconomicsBookRows=model.filterRows(extras,extraEconomicsRecords,attachments,economicsBookFilter());
   const ready=extraEconomicsBookRows.filter(x=>x.calc.ready),total=ready.reduce((sum,x)=>sum+x.calc.total,0),incomplete=extraEconomicsBookRows.length-ready.length;
   $('extraEconomicsBookSummary').innerHTML=`<div><strong>${esc(model.money(total))}</strong><span>Totale di ${ready.length} extra con dati completi</span></div><div><strong>${incomplete}</strong><span>Da completare, verificare o approvare</span></div>`;
-  $('extraEconomicsBookStatus').textContent=extraEconomicsBookRows.length?`${extraEconomicsBookRows.length} extra · preventivi non accettati e voci da verificare esclusi dal totale complessivo.`:'Nessun extra in questo periodo. Svuota il mese per vedere tutti gli extra.';
+  $('extraEconomicsBookStatus').textContent=extraEconomicsBookRows.length?`${extraEconomicsBookRows.length} extra · preventivi non accettati e voci da verificare esclusi dal totale complessivo.`:'Nessun extra in questa categoria. Seleziona Tutti per vedere tutti gli extra.';
   $('extraEconomicsBookExport').disabled=!extraEconomicsBookRows.length;
   for(const x of extraEconomicsBookRows){const st=stores.find(s=>s.id===x.extra.store_id),article=document.createElement('article');article.className='economic-book-row';
-    article.innerHTML=`<div><strong>${esc(st?.nome||x.extra.nome_esterno||'Extra')} · ${esc(x.extra.numero_target||'Target non indicato')}</strong><p>${esc(x.extra.titolo||'')}</p><small>${esc(model.modes[x.row.pricing_mode]||'Modalità da scegliere')} · ${esc(economicsStatus(x.calc,x.row))}</small></div><div><strong>${esc(model.money(x.calc.total))}</strong><button type="button" class="secondary">Apri</button></div>`;
+    article.innerHTML=`<div><strong>${esc(st?.nome||x.extra.nome_esterno||'Extra')} · ${esc(x.extra.numero_target||'Target non indicato')}</strong><p>${esc(x.extra.titolo||'')}</p><small>${esc(model.periodLabel(model.period(x.extra)))}${model.closureDate(x.extra)?' · Chiusura '+esc(model.closureDate(x.extra).split('-').reverse().join('/')):''} · ${esc(model.modes[x.row.pricing_mode]||'Modalità da scegliere')} · ${esc(economicsStatus(x.calc,x.row))}</small></div><div><strong>${esc(model.money(x.calc.total))}</strong><button type="button" class="secondary">Apri</button></div>`;
     article.querySelector('button').onclick=()=>{$('extraEconomicsBook').close();void openExtraHours(x.extra)};list.appendChild(article);
   }
 }
@@ -55,7 +67,7 @@ async function refreshExtraEconomicsBook(){
 }
 function openExtraEconomicsBook(){
   if(!admin())return;const dialog=$('extraEconomicsBook');
-  if(!dialog.dataset.bound){dialog.dataset.bound='true';$('extraEconomicsMonth').value=today().slice(0,7);
+  if(!dialog.dataset.bound){dialog.dataset.bound='true';$('extraEconomicsMonth').dataset.initialPeriod=today().slice(0,7);
     for(const id of ['extraEconomicsMonth','extraEconomicsBookCategory','extraEconomicsBookMode','extraEconomicsBookState'])$(id).onchange=renderExtraEconomicsBook;
     $('extraEconomicsBookClose').onclick=()=>dialog.close();$('extraEconomicsBookRefresh').onclick=refreshExtraEconomicsBook;$('extraEconomicsBookExport').onclick=exportExtraEconomics;
   }
@@ -63,18 +75,19 @@ function openExtraEconomicsBook(){
 }
 function addEconomicsWorksheet(workbook,rows){
   const model=window.OvergreenEconomics,ws=workbook.addWorksheet('Economia extra');
-  const columns=[['Sede',26],['Target',18],['Descrizione',35],['Data esecuzione',18],['Stato lavoro',18],['Categoria',14],['Modalità',18],['Operatori',12],['Addebito uscita',18],['Tariffa uscita per operatore',18],['Uscita aggiunta',18],['Ore complessive',16],['Tariffa oraria',16],['Manodopera a ore (informativa per preventivi)',23],['Importo preventivo',18],['Stato preventivo',18],['Uscita inclusa nel preventivo',20],['Spese',16],['Totale calcolato',18],['Incluso nel totale riepilogo',20],['Verifica',45],['Dettaglio spese',45],['Note economiche',40],['Riferimento preventivo',24],['Subtotale prima dello sconto',20],['Sconto',16],['Ore diurne',16],['Ore notturne',16],['Tariffa notturna',18],['Manodopera diurna',20],['Manodopera notturna',20]];
+  const columns=[['Sede',26],['Target',18],['Descrizione',35],['Data esecuzione',18],['Stato lavoro',18],['Categoria',14],['Modalità',18],['Operatori',12],['Addebito uscita',18],['Tariffa uscita per operatore',18],['Uscita aggiunta',18],['Ore complessive',16],['Tariffa oraria',16],['Manodopera a ore (informativa per preventivi)',23],['Importo preventivo',18],['Stato preventivo',18],['Uscita inclusa nel preventivo',20],['Spese',16],['Totale calcolato',18],['Incluso nel totale riepilogo',20],['Verifica',45],['Dettaglio spese',45],['Note economiche',40],['Riferimento preventivo',24],['Subtotale prima dello sconto',20],['Sconto',16],['Ore diurne',16],['Ore notturne',16],['Tariffa notturna',18],['Manodopera diurna',20],['Manodopera notturna',20],['Data chiusura',18],['Periodo economia',24]];
   ws.columns=columns.map(([header,width])=>({header,width}));ws.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};ws.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF075B31'}};ws.getRow(1).height=45;ws.getRow(1).alignment={wrapText:true,vertical:'middle'};
   for(const x of rows){const e=x.extra,r=x.row,c=x.calc,st=stores.find(s=>s.id===e.store_id),q=r.pricing_mode==='preventivo';
-    const row=ws.addRow([st?.nome||e.nome_esterno||'',String(e.numero_target||''),e.titolo||'',e.giorno_intervento||'',e.stato,r.pricing_category||e.categoria_target||'',model.modes[r.pricing_mode]||'',r.operator_count??null,typeof r.dedicated_trip==='boolean'?(r.dedicated_trip?'Sì':'No'):'',r.exit_rate??null,c.exit==null?null:c.exit/100,r.total_hours??null,r.hourly_rate??null,c.labor==null?null:c.labor/100,q?r.quote_amount??null:null,q?model.quoteStates[r.quote_status]||'':'',q?(c.exitIncluded?'Sì':'No'):'',c.expenses/100,c.total==null?null:c.total/100,c.ready?'Sì':'No',economicsStatus(c,r),(r.expenses||[]).map(s=>s.description+': '+model.money(model.cents(s.amount))).join(' | '),r.economic_notes||'',r.quote_reference||'',c.subtotal==null?null:c.subtotal/100,c.discount/100,c.dayHours,c.nightHours,r.night_hourly_rate??null,c.laborDay==null?null:c.laborDay/100,c.laborNight==null?null:c.laborNight/100]);
+    const row=ws.addRow([st?.nome||e.nome_esterno||'',String(e.numero_target||''),e.titolo||'',e.giorno_intervento||'',e.stato,r.pricing_category||e.categoria_target||'',model.modes[r.pricing_mode]||'',r.operator_count??null,typeof r.dedicated_trip==='boolean'?(r.dedicated_trip?'Sì':'No'):'',r.exit_rate??null,c.exit==null?null:c.exit/100,r.total_hours??null,r.hourly_rate??null,c.labor==null?null:c.labor/100,q?r.quote_amount??null:null,q?model.quoteStates[r.quote_status]||'':'',q?(c.exitIncluded?'Sì':'No'):'',c.expenses/100,c.total==null?null:c.total/100,c.ready?'Sì':'No',economicsStatus(c,r),(r.expenses||[]).map(s=>s.description+': '+model.money(model.cents(s.amount))).join(' | '),r.economic_notes||'',r.quote_reference||'',c.subtotal==null?null:c.subtotal/100,c.discount/100,c.dayHours,c.nightHours,r.night_hourly_rate??null,c.laborDay==null?null:c.laborDay/100,c.laborNight==null?null:c.laborNight/100,model.closureDate(e),model.periodLabel(model.period(e))]);
     for(const col of [10,11,13,14,15,18,19,25,26,29,30,31])row.getCell(col).numFmt='#,##0.00 "€"';for(const col of [12,27,28])row.getCell(col).numFmt='0.00';
     row.alignment={vertical:'top',wrapText:true};
   }
-  ws.views=[{state:'frozen',ySplit:1}];ws.autoFilter={from:'A1',to:`AE${Math.max(2,rows.length+1)}`};
+  ws.views=[{state:'frozen',ySplit:1}];ws.autoFilter={from:'A1',to:`AG${Math.max(2,rows.length+1)}`};
   const summary=workbook.addWorksheet('Riepilogo');summary.columns=[{width:65},{width:22}];
   summary.addRow(['Overgreen · importi IVA esclusa']);summary.addRow(['Generato',new Date().toLocaleString('it-IT')]);
   summary.addRow(['Totale extra con dati completi e preventivi accettati',rows.filter(x=>x.calc.ready).reduce((sum,x)=>sum+x.calc.total,0)/100]).getCell(2).numFmt='#,##0.00 "€"';
   summary.addRow(['Extra esclusi dal totale complessivo',rows.filter(x=>!x.calc.ready).length]);
+  summary.addRow(['I mesi si riferiscono alla data di chiusura (ora italiana). Gli extra aperti sono nella categoria Aperti.']);
   summary.addRow(['Le ore indicate sono il totale di tutti gli operatori.']);summary.addRow(['Nei preventivi la manodopera a ore è informativa: non viene sommata al preventivo.']);summary.addRow(['Il riepilogo non attesta l’emissione o il pagamento di una fattura.']);
   summary.eachRow(r=>r.alignment={wrapText:true,vertical:'top'});return ws;
 }

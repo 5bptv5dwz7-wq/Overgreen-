@@ -56,14 +56,31 @@
     if(row?.total_hours!=null&&(row?.source_attachment_id||null)!==(report?.id||null))issues.push('Rapportino cambiato: ricontrolla le ore');
     return {...result,issues,ready:result.complete&&!result.quotePending&&!issues.length};
   }
+  function closureDate(extra){
+    if(!['completato','in_attesa'].includes(extra?.stato)||!extra.closed_at)return '';
+    const date=new Date(extra.closed_at);if(Number.isNaN(date.getTime()))return '';
+    const parts=new Intl.DateTimeFormat('it-IT',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(date);
+    return ['year','month','day'].map(type=>parts.find(p=>p.type===type).value).join('-');
+  }
+  function period(extra){
+    if(!['completato','in_attesa'].includes(extra?.stato))return 'open';
+    return closureDate(extra).slice(0,7)||'undated';
+  }
+  function periodLabel(value){
+    if(value==='open')return 'Aperti';
+    if(value==='undated')return 'Chiusi senza data';
+    if(!value)return 'Tutti';
+    const [year,month]=value.split('-').map(Number);
+    return new Intl.DateTimeFormat('it-IT',{month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(Date.UTC(year,month-1,1)));
+  }
   function filterRows(extras,records,attachments,filter={}){
     const byId=new Map(records.map(r=>[r.extra_id,r]));
     const reports=new Map();for(const a of [...attachments].sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))||String(b.id).localeCompare(String(a.id))))if(a.tipo==='rapportino_eurospin'&&!reports.has(a.extra_id))reports.set(a.extra_id,a);
     return extras.filter(e=>isBillableExtra(e)&&!['annullato','rifiutato'].includes(e.stato))
       .map(e=>{const row=byId.get(e.id)||{};return {extra:e,row,calc:review(row,e,reports.get(e.id))}})
-      .filter(x=>(!filter.month||String(x.extra.giorno_intervento||x.extra.data_richiesta||x.extra.created_at||'').slice(0,7)===filter.month)&&(!filter.category||x.extra.categoria_target===filter.category)&&(!filter.mode||x.row.pricing_mode===filter.mode)&&(!filter.state||x.extra.stato===filter.state))
-      .sort((a,b)=>String(a.extra.giorno_intervento||a.extra.data_richiesta||'').localeCompare(String(b.extra.giorno_intervento||b.extra.data_richiesta||''))||String(a.extra.numero_target||'').localeCompare(String(b.extra.numero_target||'')));
+      .filter(x=>(!filter.month||period(x.extra)===filter.month)&&(!filter.category||x.extra.categoria_target===filter.category)&&(!filter.mode||x.row.pricing_mode===filter.mode)&&(!filter.state||x.extra.stato===filter.state))
+      .sort((a,b)=>period(a.extra).localeCompare(period(b.extra))||closureDate(a.extra).localeCompare(closureDate(b.extra))||String(a.extra.numero_target||'').localeCompare(String(b.extra.numero_target||'')));
   }
-  return {isBillableExtra,modes,quoteStates,decimal,cents,money,rates,calculate,review,filterRows};
+  return {closureDate,period,periodLabel,isBillableExtra,modes,quoteStates,decimal,cents,money,rates,calculate,review,filterRows};
 });
 

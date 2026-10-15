@@ -1,4 +1,4 @@
-const APP_VERSION='V231';
+const APP_VERSION='V232';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -1077,7 +1077,7 @@ function dashboardJobCompare(a,b){
   return dashboardJobRoutePosition(a)-dashboardJobRoutePosition(b)||String((a.row?.item||a.extra||a.activity)?.id||'').localeCompare(String((b.row?.item||b.extra||b.activity)?.id||''));
 }
 function globalSearchMatches(q){q=String(q||'').trim().toLowerCase();if(q.length<2)return [];const out=[],add=(k,t,s,a)=>{if((t+" "+s).toLowerCase().includes(q))out.push({k,t,s,a})};stores.forEach(x=>add("Sede",x.nome||"Sede",[x.indirizzo,x.citta].filter(Boolean).join(" · "),()=>{setView("stores");$("searchInput").value=x.nome||"";renderStores()}));extras.forEach(x=>{const st=stores.find(s=>s.id===x.store_id);add("Extra",x.titolo||"Extra",[x.numero_target?"Target "+x.numero_target:"",st?.nome||x.nome_esterno||""].filter(Boolean).join(" · "),()=>openExtraById(x.id))});profiles.forEach(x=>add("Operatore",x.nome||x.email||"Operatore",x.email||"",()=>setView("schedule")));return out.slice(0,40)}
-function renderGlobalSearchEverywhere(){const i=$("globalSearchEverywhere"),r=$("globalResultsEverywhere");if(!i||!r)return;r.innerHTML="";const rows=globalSearchMatches(i.value);if(i.value.trim().length<2)return;if(!rows.length){r.innerHTML='<p class="muted">Nessun risultato.</p>';return}rows.forEach(x=>{const b=document.createElement("button");b.className="card";b.innerHTML=`<strong>${esc(x.k)} · ${esc(x.t)}</strong><small>${esc(x.s)}</small>`;b.onclick=()=>{x.a();$("globalSearchDialog").close()};r.appendChild(b)})}
+function renderGlobalSearchEverywhere(){const i=$("globalSearchEverywhere"),r=$("globalResultsEverywhere");if(!i||!r)return;r.innerHTML="";const rows=globalSearchMatches(i.value);if(i.value.trim().length<2)return;if(!rows.length){r.innerHTML='<p class="muted">Nessun risultato.</p>';return}rows.forEach(x=>{const b=document.createElement("button");b.type="button";b.className="card";b.innerHTML=`<strong>${esc(x.k)} · ${esc(x.t)}</strong><small>${esc(x.s)}</small>`;b.onclick=()=>{x.a();$("globalSearchDialog").close()};r.appendChild(b)})}
 function anomalyCounts(){const orphan=attachments.filter(a=>(a.intervention_id&&!interventions.some(i=>i.id===a.intervention_id))||(a.extra_id&&!extras.some(e=>e.id===a.extra_id))).length,noWorker=interventions.filter(i=>["in_attesa","convalidato"].includes(i.stato)&&!interventionWorkers.some(w=>w.intervention_id===i.id)).length,noTarget=extras.filter(e=>clientType(e)==="eurospin"&&!["completato","annullato"].includes(e.stato)&&!String(e.numero_target||"").trim()).length;return{orphan,noWorker,noTarget,total:orphan+noWorker+noTarget}}
 function renderHealthCenter(){if(!$("healthSummary")||!admin())return;const h=anomalyCounts();$("healthSummary").innerHTML=`<div class="health-kpi"><strong>${h.total}</strong><span>Anomalie</span></div><div class="health-kpi"><strong>${attachments.length}</strong><span>Allegati</span></div><div class="health-kpi"><strong>${interventions.length+extras.length}</strong><span>Lavori</span></div>`;$("healthDetails").innerHTML=[["Allegati orfani",h.orphan],["Chiusure senza operatore",h.noWorker],["Extra Eurospin senza target",h.noTarget]].map(x=>`<div class="health-issue"><strong>${x[1]?"⚠️":"✓"} ${x[0]} · ${x[1]}</strong></div>`).join("")}
 function renderDashboardSmart(){const r=$("dashboardSmart");if(!r)return;if(!admin()){r.innerHTML="";r.classList.add("hidden");return}r.classList.remove("hidden");const h=anomalyCounts(),p=interventions.filter(i=>i.stato==="in_attesa").length+extras.filter(e=>e.stato==="in_attesa").length,o=extras.filter(e=>!["completato","annullato"].includes(e.stato)).length;r.innerHTML=`<button class="smart-chip ${p?"warn":"good"}" data-s="p"><strong>${p}</strong><span>Da convalidare</span></button><button class="smart-chip ${o?"warn":"good"}" data-s="e"><strong>${o}</strong><span>Extra aperti</span></button>`;r.querySelector('[data-s="p"]').onclick=()=>p?openPendingDialog():toast("Nessuna convalida");r.querySelector('[data-s="e"]').onclick=()=>setView("extras")}
@@ -5470,7 +5470,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=231').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=232').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

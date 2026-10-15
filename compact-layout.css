@@ -208,3 +208,23 @@
 .remote-device{padding:12px 0;border-bottom:1px solid var(--line,#dce7e1)}.remote-device p{margin:6px 0;overflow-wrap:anywhere}.remote-device .actions{display:flex;flex-wrap:wrap;gap:8px}
 
 .extra-cancelled-badge{padding:8px 10px;background:#eef0f2;border-radius:8px;color:#47525a}.extra-group-cancelled{border-left:4px solid #84918a}
+
+/* V232: search results need their own text color and wrapping grid track. */
+#globalSearchDialog { max-width:calc(100vw - 24px); }
+#globalSearchDialog .dialog-head > div { min-width:0; }
+#globalSearchDialog .dialog-head button { flex-shrink:0; }
+#globalResultsEverywhere {
+  grid-template-columns:minmax(0,1fr); min-width:0; width:100%;
+  white-space:normal; padding:8px 2px; gap:8px;
+}
+#globalResultsEverywhere > button.card {
+  display:flex; flex-direction:column; gap:4px; width:100%; min-width:0;
+  min-height:48px; padding:12px; text-align:left; white-space:normal;
+  overflow-wrap:anywhere; color:#173124; background:#fff; border-radius:12px;
+}
+#globalResultsEverywhere > button.card strong,
+#globalResultsEverywhere > button.card small { max-width:100%; }
+#globalResultsEverywhere > button.card strong { font-size:15px; line-height:1.35; }
+#globalResultsEverywhere > button.card small { color:#53665d; font-size:13px; font-weight:400; line-height:1.4; }
+#globalResultsEverywhere > button.card:hover { background:#edf4ef; }
+#globalResultsEverywhere > button.card:focus-visible { outline:2px solid var(--green); outline-offset:-2px; }

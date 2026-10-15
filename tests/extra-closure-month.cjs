@@ -62,3 +62,9 @@ test('V211 economics eligibility depends on closure profile, never on being sche
  assert.deepEqual(m.filterRows(rows,[],[]).map(x=>x.extra.id),['separate','together']);
  assert.equal(m.isBillableExtra({...rows[1],closure_profile:null}),true);
 });
+
+test('V231 cancelled targets remain searchable in their own group, outside open and completed lists',()=>{
+ const c=setup();c.extras.push({id:'cancelled',client_type:'eurospin',categoria_target:'verde',stato:'annullato',closed_at:'2026-10-15T20:00:00Z'});c.renderExtras();
+ assert.deepEqual(ids(c,'cancelled'),['cancelled']);assert(!ids(c,'todo').includes('cancelled'));assert(!ids(c,'scheduled').includes('cancelled'));assert(!ids(c,'completed').includes('cancelled'));
+ c.openExtraById('cancelled');assert.equal(c.extraGroupOpenState.cancelled,true);
+});

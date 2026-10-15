@@ -206,3 +206,5 @@
 }
 
 .remote-device{padding:12px 0;border-bottom:1px solid var(--line,#dce7e1)}.remote-device p{margin:6px 0;overflow-wrap:anywhere}.remote-device .actions{display:flex;flex-wrap:wrap;gap:8px}
+
+.extra-cancelled-badge{padding:8px 10px;background:#eef0f2;border-radius:8px;color:#47525a}.extra-group-cancelled{border-left:4px solid #84918a}

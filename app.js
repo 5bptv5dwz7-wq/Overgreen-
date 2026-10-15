@@ -1,4 +1,4 @@
-const APP_VERSION='V227';
+const APP_VERSION='V228';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  const key='overgreen-v198:'+operation+':'+JSON.stringify(payload);
@@ -5227,24 +5227,36 @@ window.AppleDocumentScanner?.init({
 
 let extraSaveBusy=false;
 const extraUploadKeys=new WeakMap();
-async function saveExtraUpload(extraId,tipo,originalFile,uploadedPaths){
+async function extraUploadStep(task,label,timeoutMs=60000){
+  let timer;
+  try{
+    return await Promise.race([Promise.resolve(task),new Promise((_,reject)=>{
+      timer=setTimeout(()=>reject(new Error(label+': attesa troppo lunga. I file selezionati restano in questa finestra. Controlla la connessione e riprova; gli allegati già registrati verranno riutilizzati.')),timeoutMs);
+    })]);
+  }finally{clearTimeout(timer)}
+}
+async function saveExtraUpload(extraId,tipo,originalFile,uploadedPaths,progress=()=>{}){
   let keys=extraUploadKeys.get(originalFile);if(!keys){keys=new Map();extraUploadKeys.set(originalFile,keys)}
   const key=JSON.stringify([extraId,tipo]);if(!keys.has(key))keys.set(key,crypto.randomUUID());
   const scan=window.AppleDocumentScanner?.metadata(originalFile,extraId,tipo);
   const id=scan?.id||keys.get(key);
-  const existing=await sb.from('attachments').select('*').eq('id',id).maybeSingle();
+  progress('Verifico documento…');
+  const existing=await extraUploadStep(sb.from('attachments').select('*').eq('id',id).maybeSingle(),'Verifica documento');
   if(existing.error)throw existing.error;
   let added=existing.data;
   if(!added){
-    const file=originalFile.type?.startsWith('image/')?await compressImage(originalFile):originalFile;
+    progress('Preparo documento…');
+    const file=originalFile.type?.startsWith('image/')?await extraUploadStep(compressImage(originalFile),'Preparazione immagine',20000):originalFile;
     const safe=(file.name||originalFile.name||'documento').replace(/[^a-zA-Z0-9._-]/g,'-');
     const path=scan?.path||'extra/'+extraId+'/'+id+'-'+safe;
     if(!scan){
-      const up=await sb.storage.from('documenti').upload(path,file,{upsert:true,contentType:file.type||'application/octet-stream'});
+      progress('Carico documento…');
+      const up=await extraUploadStep(sb.storage.from('documenti').upload(path,file,{upsert:true,contentType:file.type||'application/octet-stream'}),'Caricamento documento',90000);
       if(up.error)throw up.error;
     }
     uploadedPaths.push(path);
-    added=await addAttachment({id,tipo,extra_id:extraId,storage_path:path,nome_file:file.name||originalFile.name,mime_type:file.type,dimensione_bytes:file.size,caricato_da:profile.id});
+    progress('Registro documento…');
+    added=await extraUploadStep(addAttachment({id,tipo,extra_id:extraId,storage_path:path,nome_file:file.name||originalFile.name,mime_type:file.type,dimensione_bytes:file.size,caricato_da:profile.id}),'Registrazione documento');
   }
   if(!added)throw new Error('Allegato non confermato. Il file viene conservato per il recupero.');
   if(!attachments.some(a=>a.id===added.id))attachments.unshift(added);
@@ -5284,7 +5296,7 @@ async function saveExtraPartial(){
 
     if(overgreenFile){
       btn.textContent='Carico file Overgreen…';
-      const added=await saveExtraUpload(id,'rapportino_overgreen',overgreenFile,uploadedPaths);
+      const added=await saveExtraUpload(id,'rapportino_overgreen',overgreenFile,uploadedPaths,text=>{btn.textContent=text});
       replacedAttachments.push(...attachments.filter(a=>a.extra_id===id&&a.tipo==='rapportino_overgreen'&&a.id!==added.id));
     }
     for(let n=0;n<photos.length;n++){
@@ -5343,7 +5355,7 @@ $('closeExtraForm').onsubmit=async e=>{
     // Identificativi stabili: un retry nella stessa finestra riusa gli allegati.
     for(const [tipo,originalFile] of reports){
       btn.textContent='Carico documento…';
-      const added=await saveExtraUpload(id,tipo,originalFile,uploadedPaths);
+      const added=await saveExtraUpload(id,tipo,originalFile,uploadedPaths,text=>{btn.textContent=text});
       replacedAttachments.push(...attachments.filter(a=>a.extra_id===id&&a.tipo===tipo&&a.id!==added.id));
     }
     for(let n=0;n<photos.length;n++){
@@ -5400,10 +5412,17 @@ async function resetBrokenSession(){try{await sb.auth.signOut({scope:'local'})}c
 document.querySelectorAll('[data-stats-days]').forEach(b=>b.addEventListener('click',()=>setStatsDays(b.dataset.statsDays)));$('statsClient')?.addEventListener('change',renderStats);$('statsType')?.addEventListener('change',renderStats);$('statsSiteType')?.addEventListener('change',renderStats);$('statsStartDate')?.addEventListener('change',renderStats);$('statsEndDate')?.addEventListener('change',renderStats);$('statsRefresh')?.addEventListener('click',async()=>{await loadAll();renderStats();toast('Statistiche aggiornate')});
 const refreshReportAndPdfCache=()=>{renderDailyReport();prewarmDailyReportPdfs()};$('reportDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportStartDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportEndDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportMonth')?.addEventListener('change',refreshReportAndPdfCache);document.querySelectorAll('[data-report-mode]').forEach(b=>b.addEventListener('click',()=>{setReportMode(b.dataset.reportMode);prewarmDailyReportPdfs()}));$('reportClient')?.addEventListener('change',refreshReportAndPdfCache);$('reportType')?.addEventListener('change',refreshReportAndPdfCache);$('reportWorker')?.addEventListener('change',refreshReportAndPdfCache);$('reportRefresh')?.addEventListener('click',async()=>{await loadAll();dailyReportPdfCache.clear();dailyReportPdfPending.clear();renderDailyReport();prewarmDailyReportPdfs();toast('Report aggiornato')});$('shareDailyReport')?.addEventListener('click',shareDailyReport);$('exportDailyReportCompact')?.addEventListener('click',()=>exportDailyReportPdf('compact'));$('exportDailyReportFull')?.addEventListener('click',()=>exportDailyReportPdf('full'));
 
-sb.auth.onAuthStateChange(async(event,s)=>{
+sb.auth.onAuthStateChange((event,s)=>{
+  const previousUser=session?.user?.id;
   session=s;
   if(!s){$('loginScreen').classList.remove('hidden');$('app').classList.add('hidden');return}
   $('loginScreen').classList.add('hidden');$('app').classList.remove('hidden');
+  // Supabase holds its auth lock while calling this callback. Never await
+  // API calls here: a token refresh during upload would wait on its own lock.
+  // Returning from camera/files can emit SIGNED_IN for the same user.
+  if(profile&&previousUser===s.user?.id&&['TOKEN_REFRESHED','SIGNED_IN'].includes(event))return;
+  setTimeout(async()=>{
+  if(session?.user?.id!==s.user?.id)return;
   try{
     await loadAll();
     // Un rinnovo della sessione o il ritorno da un documento esterno non deve
@@ -5430,9 +5449,10 @@ sb.auth.onAuthStateChange(async(event,s)=>{
     }
     alert('Errore collegamento: '+err.message)
   }
+  },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=215').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=228').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

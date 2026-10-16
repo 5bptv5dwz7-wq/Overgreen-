@@ -1,4 +1,4 @@
-const APP_VERSION='V235';
+const APP_VERSION='V236';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  validateExtraDateOperation(operation,payload);
@@ -62,7 +62,7 @@ async function refreshPushSettingsUi(){
 }
 function ensurePushSettingsUi(){
   const host=$('cloudAccountSettings')?.parentElement||$('settingsView');if(!host||$('pushSettingsCard'))return;
-  const card=document.createElement('section');card.id='pushSettingsCard';card.className='panel admin-only';card.innerHTML=`<h2>🔔 Notifiche chiusure</h2><p class="muted">Ricevi una push quando un dipendente chiude un intervento ordinario o un extra.</p><p id="pushNotificationStatus" class="muted">Verifica in corso…</p><button id="pushNotificationToggle" type="button" class="secondary">Attiva notifiche</button><p class="muted">Su iPhone la web app deve essere aggiunta alla schermata Home.</p>`;host.appendChild(card);
+  const card=document.createElement('section');card.id='pushSettingsCard';card.className='panel admin-only';card.innerHTML=`<h2>🔔 Notifiche e promemoria</h2><p class="muted">Ricevi le notifiche di chiusura e, ogni giorno dalle 6:00, il riepilogo degli extra da ricordare: da 10 giorni prima della data, finché restano aperti.</p><p id="pushNotificationStatus" class="muted">Verifica in corso…</p><button id="pushNotificationToggle" type="button" class="secondary">Attiva notifiche</button><p class="muted">Su iPhone la web app deve essere aggiunta alla schermata Home.</p>`;host.appendChild(card);
   $('pushNotificationToggle').onclick=toggleAdminPushNotifications;refreshPushSettingsUi();
 }
 async function toggleAdminPushNotifications(){
@@ -83,7 +83,7 @@ async function notifyAdminClosure(kind,id,photoCount=0){
 }
 function handleNotificationDeepLink(){
   if(notificationDeepLinkHandled)return;const u=new URL(location.href),kind=u.searchParams.get('notificationKind'),id=u.searchParams.get('notificationId');if(!kind||!id)return;notificationDeepLinkHandled=true;
-  setTimeout(()=>{try{if(kind==='extra')openExtraById(id);else if(kind==='intervention'){const i=interventions.find(x=>x.id===id),st=stores.find(x=>x.id===i?.store_id);if(st)showHistory(st)}}catch(e){console.warn('Apertura notifica fallita',e)}finally{u.searchParams.delete('notificationKind');u.searchParams.delete('notificationId');history.replaceState(null,'',u.pathname+u.search+u.hash)}},350);
+  setTimeout(()=>{try{if(kind==='reminders'){setView('dashboard');showDailyExtraReminder(true)}else if(kind==='extra')openExtraById(id);else if(kind==='intervention'){const i=interventions.find(x=>x.id===id),st=stores.find(x=>x.id===i?.store_id);if(st)showHistory(st)}}catch(e){console.warn('Apertura notifica fallita',e)}finally{u.searchParams.delete('notificationKind');u.searchParams.delete('notificationId');history.replaceState(null,'',u.pathname+u.search+u.hash)}},350);
 }
 
 // V112-35: una chiusura ordinaria con foto diventa notificabile/convalidabile solo

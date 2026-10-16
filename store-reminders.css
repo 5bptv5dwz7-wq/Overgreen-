@@ -9,3 +9,5 @@
 #storeReminderForm .actions{flex-wrap:wrap}
 
 .extra-date-rule{padding:10px;border:1px solid #d6a94d;border-left:4px solid #b87900;border-radius:8px;background:#fff8df;color:#704700;white-space:normal;overflow-wrap:anywhere}.extra-date-rule strong,.extra-date-rule small{display:block;line-height:1.5}.extra-date-rule.on{font-weight:700}.extra-date-rule.not_before{background:#eaf2ff;color:#173f78;border-color:#7098c8}.extra-date-rule.late{background:#ffede5;color:#8a2d15;border-color:#d27859}#dashboardExtraDates[hidden],#scheduleExtraDates[hidden],[hidden]{display:none!important}
+
+.extra-reminder-countdown{color:#a45a00;font-weight:700}.extra-reminder-dialog{width:min(620px,92vw);max-height:85vh;overflow:auto}.extra-reminder-list{display:grid;gap:12px;margin:16px 0}

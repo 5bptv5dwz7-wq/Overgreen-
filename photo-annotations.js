@@ -8,7 +8,7 @@ function drawPhotoAnnotation(ctx,a){
  else{if(a.tool==='highlight'){ctx.globalAlpha=.35;ctx.lineWidth=a.width*5}ctx.beginPath();ctx.moveTo(start.x,start.y);if(p.length===1)ctx.lineTo(start.x+.1,start.y);else for(const point of p.slice(1))ctx.lineTo(point.x,point.y);ctx.stroke()}
  ctx.restore();
 }
-async function openPhotoAnnotator(store,source){
+async function openPhotoAnnotator(store,source,options={}){
  if(!admin()||!store||!source)return;
  let objectUrl,dialog;
  try{
@@ -22,8 +22,8 @@ async function openPhotoAnnotator(store,source){
   dialog.querySelector('header p').textContent=store.nome;document.body.appendChild(dialog);
   const canvas=dialog.querySelector('canvas'),ctx=canvas.getContext('2d'),scale=Math.min(1,2200/Math.max(photo.naturalWidth,photo.naturalHeight));
   canvas.width=Math.round(photo.naturalWidth*scale);canvas.height=Math.round(photo.naturalHeight*scale);
-  let tool='pen',steps=[],redo=[],stroke=null,pointer=null,saving=false,originalSaved=!isNew,frame=null;
-  const sessionId=Date.now()+'-'+crypto.randomUUID(),base=`punti-vendita/${store.id}/foto/${sessionId}`;
+  let tool='pen',steps=[],redo=[],stroke=null,pointer=null,saving=false,originalSaved=!isNew&&!options.item,originalPath=source.storage_path||null,frame=null;
+  const sessionId=Date.now()+'-'+crypto.randomUUID(),base=options.item?`punti-vendita/${store.id}/passaggi/${options.item.id}/${sessionId}`:`punti-vendita/${store.id}/foto/${sessionId}`;
   const status=dialog.querySelector('[data-pa-status]'),saveButton=dialog.querySelector('[data-pa-save]');
   const render=()=>{ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(photo,0,0,canvas.width,canvas.height);for(const a of steps)drawPhotoAnnotation(ctx,a);if(stroke)drawPhotoAnnotation(ctx,stroke);dialog.querySelector('[data-pa-undo]').disabled=!steps.length||saving;dialog.querySelector('[data-pa-redo]').disabled=!redo.length||saving;saveButton.disabled=!steps.length||saving};
   const scheduleRender=()=>{if(frame===null)frame=requestAnimationFrame(()=>{frame=null;render()})};
@@ -47,10 +47,11 @@ async function openPhotoAnnotator(store,source){
   saveButton.onclick=async()=>{
    if(saving||!steps.length||!admin())return;saving=true;stroke=null;pointer=null;render();status.textContent='Salvataggio in corso…';
    try{
-    if(!originalSaved){const ext=blob.type==='image/png'?'png':blob.type==='image/webp'?'webp':blob.type.includes('heic')?'heic':'jpg';const {error}=await sb.storage.from('documenti').upload(base+'-originale.'+ext,blob,{upsert:true,contentType:blob.type||'image/jpeg'});if(error)throw error;originalSaved=true}
+    if(!originalSaved){const ext=blob.type==='image/png'?'png':blob.type==='image/webp'?'webp':blob.type.includes('heic')?'heic':'jpg';const {error}=await sb.storage.from('documenti').upload(base+'-originale.'+ext,blob,{upsert:true,contentType:blob.type||'image/jpeg'});if(error)throw error;originalSaved=true;originalPath=base+'-originale.'+ext}
     const output=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Impossibile esportare la foto')),'image/jpeg',.92));
     const {error}=await sb.storage.from('documenti').upload(base+'-ANNOTATA.jpg',output,{upsert:true,contentType:'image/jpeg',cacheControl:'3600'});if(error)throw error;
-    steps=[];dialog.close();toast('Foto annotata salvata nella sede');await showStoreDetail(store);$('storeDetailBody').querySelector('[data-sheet-tab="photos"]')?.click();
+    if(options.item){const result=await sb.rpc('overgreen_visit_photo_v243',{p_item_id:options.item.id,p_photo:{id:sessionId,path:base+'-ANNOTATA.jpg',original_path:originalPath,caption:options.caption||''}});if(result.error)throw result.error;options.item.instruction_photos=result.data}
+    steps=[];dialog.close();toast(options.item?'Foto collegata al passaggio':'Foto annotata salvata nella sede');if(options.onSaved)await options.onSaved();else{await showStoreDetail(store);$('storeDetailBody').querySelector('[data-sheet-tab="photos"]')?.click();}
    }catch(err){status.textContent='Salvataggio non riuscito: '+err.message+'. Le annotazioni sono ancora qui: riprova.'}finally{saving=false;if(dialog.isConnected)render()}
   };
   dialog.showModal();fit();render();

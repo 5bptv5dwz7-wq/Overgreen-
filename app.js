@@ -1,4 +1,4 @@
-const APP_VERSION='V236';
+const APP_VERSION='V237';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  validateExtraDateOperation(operation,payload);
@@ -62,8 +62,8 @@ async function refreshPushSettingsUi(){
 }
 function ensurePushSettingsUi(){
   const host=$('cloudAccountSettings')?.parentElement||$('settingsView');if(!host||$('pushSettingsCard'))return;
-  const card=document.createElement('section');card.id='pushSettingsCard';card.className='panel admin-only';card.innerHTML=`<h2>🔔 Notifiche e promemoria</h2><p class="muted">Ricevi le notifiche di chiusura e, ogni giorno dalle 6:00, il riepilogo degli extra da ricordare: da 10 giorni prima della data, finché restano aperti.</p><p id="pushNotificationStatus" class="muted">Verifica in corso…</p><button id="pushNotificationToggle" type="button" class="secondary">Attiva notifiche</button><p class="muted">Su iPhone la web app deve essere aggiunta alla schermata Home.</p>`;host.appendChild(card);
-  $('pushNotificationToggle').onclick=toggleAdminPushNotifications;refreshPushSettingsUi();
+  const card=document.createElement('section');card.id='pushSettingsCard';card.className='panel admin-only';card.innerHTML=`<h2>🔔 Notifiche e promemoria</h2><p class="muted">Ricevi le notifiche di chiusura e, ogni giorno dalle 6:00, il riepilogo degli extra da ricordare: da 10 giorni prima della data, finché restano aperti.</p><p id="pushNotificationStatus" class="muted">Verifica in corso…</p><button id="pushNotificationToggle" type="button" class="secondary">Attiva notifiche</button><button id="pushNotificationTest" type="button" class="secondary">Invia notifica di test</button><p id="pushTestResult" class="muted" role="status"></p><p class="muted">Su iPhone la web app deve essere aggiunta alla schermata Home.</p>`;host.appendChild(card);
+  $('pushNotificationToggle').onclick=toggleAdminPushNotifications;$('pushNotificationTest').onclick=sendTestPushNotification;refreshPushSettingsUi();
 }
 async function toggleAdminPushNotifications(){
   const btn=$('pushNotificationToggle');if(!btn||!admin())return;btn.disabled=true;
@@ -77,13 +77,25 @@ async function toggleAdminPushNotifications(){
     toast('Notifiche attivate');
   }catch(err){alert(err.message||String(err))}finally{btn.disabled=false;refreshPushSettingsUi()}
 }
+async function sendTestPushNotification(){
+ const btn=$('pushNotificationTest'),result=$('pushTestResult');if(!btn||!admin())return;
+ btn.disabled=true;result.textContent='Invio in corso…';
+ try{
+  if(!('Notification' in window)||Notification.permission!=='granted')throw Error('Attiva prima le notifiche su questo dispositivo.');
+  const sub=await currentPushSubscription();if(!sub)throw Error('Premi prima “Attiva notifiche”.');
+  const {data,error}=await sb.functions.invoke('test-push',{body:{endpoint:sub.endpoint}});
+  if(error){let detail;try{detail=await error.context?.json()}catch{}throw Error(detail?.error||error.message)}
+  if(!data?.ok)throw Error(data?.error||'Invio non riuscito.');
+  result.textContent='Test inviato a questo dispositivo. Se non compare, controlla le notifiche di Overgreen e la modalità Full immersion nelle impostazioni del dispositivo.';
+ }catch(err){result.textContent=err.message||String(err)}finally{btn.disabled=false}
+}
 async function notifyAdminClosure(kind,id,photoCount=0){
   if(profile?.ruolo==='admin'||!id)return false;
   try{const {data,error}=await sb.functions.invoke('notify-admin-closure',{body:{kind,id,photo_count:Number(photoCount)||0}});if(error)throw error;if(data?.error)throw new Error(data.error);if(data?.waiting_photos||Number(data?.sent)===0)return false;return true}catch(err){console.warn('Notifica push non inviata:',err?.message||err);return false}
 }
 function handleNotificationDeepLink(){
   if(notificationDeepLinkHandled)return;const u=new URL(location.href),kind=u.searchParams.get('notificationKind'),id=u.searchParams.get('notificationId');if(!kind||!id)return;notificationDeepLinkHandled=true;
-  setTimeout(()=>{try{if(kind==='reminders'){setView('dashboard');showDailyExtraReminder(true)}else if(kind==='extra')openExtraById(id);else if(kind==='intervention'){const i=interventions.find(x=>x.id===id),st=stores.find(x=>x.id===i?.store_id);if(st)showHistory(st)}}catch(e){console.warn('Apertura notifica fallita',e)}finally{u.searchParams.delete('notificationKind');u.searchParams.delete('notificationId');history.replaceState(null,'',u.pathname+u.search+u.hash)}},350);
+  setTimeout(()=>{try{if(kind==='settings'){setView('settings')}else if(kind==='reminders'){setView('dashboard');showDailyExtraReminder(true)}else if(kind==='extra')openExtraById(id);else if(kind==='intervention'){const i=interventions.find(x=>x.id===id),st=stores.find(x=>x.id===i?.store_id);if(st)showHistory(st)}}catch(e){console.warn('Apertura notifica fallita',e)}finally{u.searchParams.delete('notificationKind');u.searchParams.delete('notificationId');history.replaceState(null,'',u.pathname+u.search+u.hash)}},350);
 }
 
 // V112-35: una chiusura ordinaria con foto diventa notificabile/convalidabile solo

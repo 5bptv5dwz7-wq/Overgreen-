@@ -67,14 +67,18 @@ function extraReminderCountdown(e){
 }
 function showDailyExtraReminder(force=false){
  if(typeof admin!=='function'||!admin())return;
- const rows=extraDailyReminderRows();if(!rows.length)return;
- const key='overgreen-extra-reminder-'+profile.id+'-'+today();
+ const rows=extraDailyReminderRows(),solleciti=typeof storeDailyReminderRows==='function'?storeDailyReminderRows():[];
+ if(!rows.length&&!solleciti.length)return;
+ const key='overgreen-daily-reminder-v238-'+profile.id+'-'+today();
  try{if(!force&&localStorage.getItem(key))return}catch{}
  if(document.querySelector('dialog[open]'))return;
  let dialog=$('extraDailyReminderDialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='extraDailyReminderDialog';dialog.className='extra-reminder-dialog';document.body.appendChild(dialog)}
- dialog.innerHTML=`<h2>🔔 Promemoria extra di oggi</h2><p>${rows.length} lavori con date da rispettare. Il promemoria torna ogni giorno finché restano aperti.</p><div class="extra-reminder-list"></div><button type="button" class="primary">Ho letto</button>`;
- for(const e of rows){const st=stores.find(s=>s.id===e.store_id),row=document.createElement('article');row.className='reminder-panel-row';row.innerHTML=`<strong>${esc(st?.nome||e.nome_esterno||'Extra')} · ${esc(e.titolo)}</strong>${e.numero_target?`<small>Target ${esc(e.numero_target)}</small>`:''}${extraDateRuleMarkup(e)}<small>${esc(extraReminderCountdown(e))}</small><small>${e.giorno_intervento?'In programma: '+fmt(e.giorno_intervento):'⚠ Da programmare'}</small><button type="button" class="secondary">Apri extra</button>`;row.querySelector('button').onclick=()=>{dialog.close();openExtraById(e.id)};dialog.querySelector('.extra-reminder-list').appendChild(row)}
- const remember=()=>{try{localStorage.setItem(key,'1')}catch{}};
- dialog.querySelector('.primary').onclick=()=>dialog.close();dialog.onclose=remember;
+ dialog.setAttribute('aria-labelledby','dailyReminderTitle');
+ dialog.innerHTML=`<header class="daily-reminder-head"><span class="daily-reminder-eyebrow">IL TUO RIEPILOGO</span><h2 id="dailyReminderTitle">Promemoria di oggi</h2><p>${rows.length} extra · ${solleciti.length} sedi sollecitate</p><small>Ogni giorno, finché restano aperti.</small></header><div class="extra-reminder-list"></div><footer class="daily-reminder-footer"><button type="button" class="primary">Ho letto</button></footer>`;
+ const list=dialog.querySelector('.extra-reminder-list');
+ for(const st of solleciti){const row=document.createElement('article');row.className='daily-reminder-card';row.innerHTML=`<span class="daily-reminder-kind">⚑ SEDE SOLLECITATA</span><h3>${esc(st.nome)}</h3>${storeReminderMarkup(st)}<p class="daily-reminder-status">${esc(storeReminderPlanStatus(st))}</p><button type="button" class="secondary">Apri sede</button>`;row.querySelector('button').onclick=()=>{dialog.close();showStoreDetail(st)};list.appendChild(row)}
+ for(const e of rows){const st=stores.find(s=>s.id===e.store_id),row=document.createElement('article');row.className='daily-reminder-card';row.innerHTML=`<span class="daily-reminder-kind">EXTRA${e.numero_target?' · TARGET '+esc(e.numero_target):''}</span><h3>${esc(st?.nome||e.nome_esterno||'Extra')}</h3><p class="daily-reminder-description">${esc(e.titolo)}</p>${extraDateRuleMarkup(e)}<p class="extra-reminder-countdown">${esc(extraReminderCountdown(e))}</p><p class="daily-reminder-status">${e.giorno_intervento?'In programma: '+fmt(e.giorno_intervento):'Da programmare'}</p><button type="button" class="secondary">Apri extra</button>`;row.querySelector('button').onclick=()=>{dialog.close();openExtraById(e.id)};list.appendChild(row)}
+ dialog.querySelector('.primary').onclick=()=>{try{localStorage.setItem(key,'1')}catch{}dialog.close()};
+ dialog.onclose=null;
  dialog.showModal();
 }

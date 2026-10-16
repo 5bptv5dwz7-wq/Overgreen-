@@ -1,4 +1,4 @@
-const APP_VERSION='V237';
+const APP_VERSION='V238';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  validateExtraDateOperation(operation,payload);
@@ -62,7 +62,7 @@ async function refreshPushSettingsUi(){
 }
 function ensurePushSettingsUi(){
   const host=$('cloudAccountSettings')?.parentElement||$('settingsView');if(!host||$('pushSettingsCard'))return;
-  const card=document.createElement('section');card.id='pushSettingsCard';card.className='panel admin-only';card.innerHTML=`<h2>🔔 Notifiche e promemoria</h2><p class="muted">Ricevi le notifiche di chiusura e, ogni giorno dalle 6:00, il riepilogo degli extra da ricordare: da 10 giorni prima della data, finché restano aperti.</p><p id="pushNotificationStatus" class="muted">Verifica in corso…</p><button id="pushNotificationToggle" type="button" class="secondary">Attiva notifiche</button><button id="pushNotificationTest" type="button" class="secondary">Invia notifica di test</button><p id="pushTestResult" class="muted" role="status"></p><p class="muted">Su iPhone la web app deve essere aggiunta alla schermata Home.</p>`;host.appendChild(card);
+  const card=document.createElement('section');card.id='pushSettingsCard';card.className='panel admin-only';card.innerHTML=`<h2>🔔 Notifiche e promemoria</h2><p class="muted">Ricevi le notifiche di chiusura e, ogni giorno dalle 6:00, il riepilogo di extra e sedi sollecitate: da 10 giorni prima della data; subito per i solleciti «il prima possibile». I solleciti restano nei promemoria fino alla convalida del passaggio completo o alla rimozione.</p><p id="pushNotificationStatus" class="muted">Verifica in corso…</p><button id="pushNotificationToggle" type="button" class="secondary">Attiva notifiche</button><button id="pushNotificationTest" type="button" class="secondary">Invia notifica di test</button><p id="pushTestResult" class="muted" role="status"></p><p class="muted">Su iPhone la web app deve essere aggiunta alla schermata Home.</p>`;host.appendChild(card);
   $('pushNotificationToggle').onclick=toggleAdminPushNotifications;$('pushNotificationTest').onclick=sendTestPushNotification;refreshPushSettingsUi();
 }
 async function toggleAdminPushNotifications(){

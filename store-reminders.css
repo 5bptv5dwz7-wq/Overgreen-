@@ -11,3 +11,19 @@
 .extra-date-rule{padding:10px;border:1px solid #d6a94d;border-left:4px solid #b87900;border-radius:8px;background:#fff8df;color:#704700;white-space:normal;overflow-wrap:anywhere}.extra-date-rule strong,.extra-date-rule small{display:block;line-height:1.5}.extra-date-rule.on{font-weight:700}.extra-date-rule.not_before{background:#eaf2ff;color:#173f78;border-color:#7098c8}.extra-date-rule.late{background:#ffede5;color:#8a2d15;border-color:#d27859}#dashboardExtraDates[hidden],#scheduleExtraDates[hidden],[hidden]{display:none!important}
 
 .extra-reminder-countdown{color:#a45a00;font-weight:700}.extra-reminder-dialog{width:min(620px,92vw);max-height:85vh;overflow:auto}.extra-reminder-list{display:grid;gap:12px;margin:16px 0}
+
+/* Daily summary: bounded scrolling, comfortable touch targets and distinct fields. */
+#extraDailyReminderDialog{box-sizing:border-box;width:min(640px,calc(100vw - 32px));max-height:85dvh;padding:0;border:1px solid #dfe7e1;border-radius:22px;color:#183c2c;overflow:hidden;box-shadow:0 24px 80px #102d3040}
+#extraDailyReminderDialog[open]{display:flex;flex-direction:column}
+.daily-reminder-head{padding:24px 24px 18px;border-bottom:1px solid #e4eae5;flex-shrink:0}
+.daily-reminder-eyebrow,.daily-reminder-kind{display:block;font-size:11px;font-weight:800;letter-spacing:.08em;color:#5a7666}
+#extraDailyReminderDialog h2{margin:6px 0 10px;font-size:25px;line-height:1.2}
+.daily-reminder-head p{margin:0 0 6px;font-size:15px;font-weight:700}.daily-reminder-head small{display:block;color:#65736a;font-size:13px}
+#extraDailyReminderDialog .extra-reminder-list{margin:0;padding:18px 24px;overflow-y:auto;min-height:0;overscroll-behavior:contain;background:#f5f7f4;gap:14px}
+.daily-reminder-card{display:grid;gap:10px;padding:18px;background:#fff;border:1px solid #dfe7e1;border-radius:14px;overflow-wrap:anywhere}
+#extraDailyReminderDialog h3{margin:0;font-size:20px;line-height:1.3}.daily-reminder-card p{margin:0;line-height:1.5;font-size:14px}.daily-reminder-description{color:#3e5046}.daily-reminder-status{color:#65736a}
+.daily-reminder-card .deadline,.daily-reminder-card .store-reminder-badge{margin:0;font-size:14px}
+.daily-reminder-card button{justify-self:start;min-height:44px;margin-top:4px;padding:10px 18px;font-size:14px}
+.daily-reminder-footer{padding:14px 24px;border-top:1px solid #e4eae5;display:flex;justify-content:flex-end;background:white;flex-shrink:0}.daily-reminder-footer button{min-height:44px;padding:10px 24px}
+.reminder-panel-row{display:grid;gap:8px}.reminder-panel-row>strong{line-height:1.4}.reminder-panel-row>small{display:block}.reminder-panel-row .actions{margin-top:4px}
+@media(max-width:480px){#extraDailyReminderDialog{width:calc(100vw - 20px);max-height:90dvh;border-radius:18px}.daily-reminder-head{padding:20px 16px 16px}#extraDailyReminderDialog .extra-reminder-list{padding:14px 12px}.daily-reminder-card{padding:14px}.daily-reminder-footer{padding:12px 16px}.daily-reminder-footer button{width:100%}}

@@ -63,3 +63,8 @@ async function saveStoreReminder(remove=false){
 }
 document.getElementById('storeReminderForm').addEventListener('submit',e=>{e.preventDefault();void saveStoreReminder()});
 document.getElementById('removeStoreReminder').addEventListener('click',()=>void saveStoreReminder(true));
+
+function storeDailyReminderRows(day=today()){
+ const limit=new Date(Date.parse(day+'T00:00:00Z')+10*86400000).toISOString().slice(0,10);
+ return stores.filter(st=>{const r=activeStoreReminder(st);return r&&(!r.due_date||r.due_date<=limit)}).sort(compareStoreReminders);
+}

@@ -1,4 +1,4 @@
-const APP_VERSION='V238';
+const APP_VERSION='V239';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  validateExtraDateOperation(operation,payload);
@@ -1127,12 +1127,12 @@ function renderDashboard(){renderDashboardSmart();renderStoreReminderPanels();re
   const openClientExtras=type=>extras.filter(e=>clientType(e)===type&&!['completato','in_attesa','annullato'].includes(e.stato));
   if(admin()){
     const rawDue=isOverdueStore;
-    const counterWithUnscheduled=(list,test)=>{const total=list.filter(test).length,available=list.filter(s=>test(s)&&!isStoreProgrammed(s.id)).length;return `${total} · ${total-available} in programma`};
+    const counterWithUnscheduled=(list,test)=>{const total=list.filter(test).length,available=list.filter(s=>test(s)&&!isStoreProgrammed(s.id)).length;return `${total}<small>${total-available} in programma</small>`};
     $('dashEurospinDue').textContent=clientStores('eurospin').filter(rawDue).length;
-    $('dashEurospinUrgent').textContent=counterWithUnscheduled(clientStores('eurospin'),isUrgentStore);
+    $('dashEurospinUrgent').innerHTML=counterWithUnscheduled(clientStores('eurospin'),isUrgentStore);
     $('dashEurospinTargets').textContent=openClientExtras('eurospin').length;
     $('dashIntesaDue').textContent=clientStores('intesa').filter(rawDue).length;
-    $('dashIntesaUrgent').textContent=counterWithUnscheduled(clientStores('intesa'),isUrgentStore);
+    $('dashIntesaUrgent').innerHTML=counterWithUnscheduled(clientStores('intesa'),isUrgentStore);
     $('dashIntesaTickets').textContent=openClientExtras('intesa').length;
     $('dashboardClientCounters')?.classList.remove('hidden');
   }else{
@@ -1151,7 +1151,7 @@ function renderDashboard(){renderDashboardSmart();renderStoreReminderPanels();re
   if(oldStrip)oldStrip.remove();
 
   const next=$('dashboardNext');next.innerHTML='';
-  const title=next.closest('.panel')?.querySelector('h2');if(title)title.textContent=admin()?'Programma operativo · prossimi 7 giorni':'I tuoi prossimi 7 giorni';
+  const title=next.closest('.panel')?.querySelector('h2');if(title)title.textContent=admin()?'Programmazione · prossimi 7 giorni':'I tuoi prossimi 7 giorni';
   const startDate=new Date(todayStr+'T12:00:00');
   for(let offset=0;offset<7;offset++){
     const d=new Date(startDate);d.setDate(d.getDate()+offset);const date=d.toISOString().slice(0,10);
@@ -1162,7 +1162,7 @@ function renderDashboard(){renderDashboardSmart();renderStoreReminderPanels();re
     const allJobsCount=ordinary.length+dayExtras.length+dayActivities.length;
     const completedCount=ordinary.filter(x=>itemDone(x.item)).length+dayExtras.filter(extraIsDone).length+dayActivities.filter(a=>a.stato==='completato').length;
     const percent=allJobsCount?Math.round(completedCount/allJobsCount*100):0;
-    const details=document.createElement('details');details.className='dashboard-day';details.open=offset===0;
+    const details=document.createElement('details');details.className='dashboard-day'+(offset===0?' is-today':'');details.open=offset===0;
     const dayName=new Intl.DateTimeFormat('it-IT',{weekday:'long'}).format(d);
     details.innerHTML=`<summary><span class="dashboard-day-title"><strong>${offset===0?'Oggi · ':''}${esc(dayName.charAt(0).toUpperCase()+dayName.slice(1))}</strong><small>${fmt(date)}</small></span><span class="dashboard-day-summary"><span class="day-type-count"><b>${ordinary.length}</b> ordinari</span><span class="day-type-count extra"><b>${dayExtras.length}</b> extra</span><span class="day-type-count"><b>${dayActivities.length}</b> attività</span><span class="dashboard-day-count">${allJobsCount}</span></span></summary><div class="dashboard-day-progress"><div style="width:${percent}%"></div></div><div class="dashboard-day-progress-label"><strong>${percent}%</strong><span>${completedCount} completati su ${allJobsCount} in programma · ${ordinary.length} ordinari, ${dayExtras.length} extra, ${dayActivities.length} attività</span></div><div class="dashboard-day-jobs"></div>`;
     const box=details.querySelector('.dashboard-day-jobs');

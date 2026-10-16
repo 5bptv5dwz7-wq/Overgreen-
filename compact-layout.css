@@ -228,3 +228,39 @@
 #globalResultsEverywhere > button.card small { color:#53665d; font-size:13px; font-weight:400; line-height:1.4; }
 #globalResultsEverywhere > button.card:hover { background:#edf4ef; }
 #globalResultsEverywhere > button.card:focus-visible { outline:2px solid var(--green); outline-offset:-2px; }
+
+/* V239: schedule first, secondary metrics and clear expandable days. */
+#app main #dashboardProgram{padding:18px;border:1px solid #d4e3d9;border-top:4px solid #17643e;background:#fff}
+#app main #dashboardProgram>.panel-head{align-items:center;margin-bottom:14px;gap:12px}
+#dashboardProgram .eyebrow{font-size:10px;color:#64776b;letter-spacing:.12em;margin:0 0 5px}
+#app main #dashboardProgram h2{font-size:21px;line-height:1.3}
+#dashboardProgram>.panel-head .actions{margin:0}
+#app main #dashboardNext{display:grid;gap:10px;margin-top:0}
+#app main #dashboardNext .dashboard-day{border:1px solid #e0e7e2;border-radius:12px}
+#app main #dashboardNext .dashboard-day.is-today{border-color:#78ad8b}
+#app main #dashboardNext .dashboard-day>summary{padding:13px 14px;min-height:64px;gap:12px}
+#app main #dashboardNext .dashboard-day>summary::after{content:'⌄';font-size:20px;color:#587464;flex:0 0 auto;transition:transform .15s}
+#app main #dashboardNext .dashboard-day[open]>summary::after{transform:rotate(180deg)}
+#dashboardNext .dashboard-day-title{flex:1;min-width:0}#dashboardNext .dashboard-day-title strong{font-size:15px}#dashboardNext .dashboard-day-title small{font-size:12px;margin-top:3px}
+#app main #dashboardNext .dashboard-day.is-today>summary{background:#eef7f0}
+#dashboardNext .dashboard-day-summary{justify-content:flex-end}
+#app main #dashboardNext .dashboard-day-count{background:#e8f1eb;color:#205238;font-size:14px;min-width:32px;height:32px}
+#app main #dashboardNext .dashboard-day-progress{height:4px}
+#app main #dashboardNext .dashboard-day-progress-label{padding:10px 14px;font-size:12px}
+#app main #dashboardNext .dashboard-line-job{padding:13px 10px;gap:12px}
+#app main #dashboardNext .job-main>strong{font-size:15px;line-height:1.4}
+#app main #dashboardNext .dashboard-worker-group>h3{padding:10px 12px;font-size:14px;background:#f0f4f1}
+#app main #dashboardView>.dashboard-grid{margin-top:18px;gap:10px}
+#app main #dashboardView .dash-card{display:flex;align-items:center;gap:12px;text-align:left;padding:14px;min-height:74px}
+#app main #dashboardView .dash-card span{margin:0;font-size:12px;line-height:1.4}
+#app main #dashboardView .dash-card strong{font-size:28px;flex-shrink:0}
+#dashDoneDetails{font-size:12px;margin:8px 2px 16px}
+#app main #dashboardClientCounters{gap:12px;margin-bottom:16px}
+#app main #dashboardClientCounters .client-counter-values button{min-width:0;padding:12px 6px}
+#app main #dashboardClientCounters .client-counter-values b{display:block;font-size:24px;line-height:1.2}
+#app main #dashboardClientCounters .client-counter-values b small{display:block;font-size:11px;font-weight:500;margin-top:4px;color:#65736a}
+#app main #dashboardClientCounters .client-counter-values span{font-size:11px;white-space:normal;line-height:1.4;display:block;margin-top:5px}
+#app main #dashboardView :is(#dashboardExtraDates,#dashboardReminders){padding:16px;margin-top:14px}
+#app main #dashboardView .reminder-panel-row{padding:14px 0}
+.dashboard-diagnostics{margin:18px 0 4px;color:#748078;font-size:11px}.dashboard-diagnostics summary{cursor:pointer}.dashboard-diagnostics .startup-perf{text-align:left;margin-top:8px}
+@media(max-width:600px){#app main #dashboardProgram{padding:12px}#app main #dashboardProgram h2{font-size:18px}#app main #dashboardProgram>.panel-head{align-items:flex-start}#app main #dashboardNext .dashboard-day>summary{padding:11px 10px;gap:8px}#app main #dashboardView .dash-card{flex-direction:column;align-items:flex-start;gap:5px;padding:10px}#app main #dashboardView .dash-card strong{font-size:24px}#app main #dashboardView>.dashboard-grid{gap:7px}#app main #dashboardClientCounters{grid-template-columns:1fr}#app main #dashboardNext .dashboard-line-job{padding:12px 6px}}

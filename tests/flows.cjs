@@ -1,7 +1,7 @@
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict'),{randomUUID}=require('crypto');
 const src=fs.readFileSync(__dirname+'/../app.js','utf8');
 function block(start,end){const a=src.indexOf(start),b=src.indexOf(end,a+start.length);assert(a>=0&&b>a);return src.slice(a,b)}
-function ctx(extra={}){const nodes=new Map();const c={console,crypto:{randomUUID},sessionStorage:{data:new Map(),getItem(k){return this.data.get(k)||null},setItem(k,v){this.data.set(k,v)},removeItem(k){this.data.delete(k)}},alert(){},$:id=>{if(!nodes.has(id))nodes.set(id,{value:'all',dataset:{},querySelectorAll:()=>[],textContent:'Salva'});return nodes.get(id)},...extra};vm.createContext(c);return c}
+function ctx(extra={}){const nodes=new Map();const c={validateExtraDateOperation(){},console,crypto:{randomUUID},sessionStorage:{data:new Map(),getItem(k){return this.data.get(k)||null},setItem(k,v){this.data.set(k,v)},removeItem(k){this.data.delete(k)}},alert(){},$:id=>{if(!nodes.has(id))nodes.set(id,{value:'all',dataset:{},querySelectorAll:()=>[],textContent:'Salva'});return nodes.get(id)},...extra};vm.createContext(c);return c}
 (async()=>{
  const c=ctx();vm.runInContext(block('async function withFormBusy','const cfg'),c); // following declarations harmless if present
  let sends=0;await Promise.all([c.withFormBusy('f',async()=>{sends++;await Promise.resolve()}),c.withFormBusy('f',async()=>{sends++})]);assert.equal(sends,1);

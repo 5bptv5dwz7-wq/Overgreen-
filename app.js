@@ -1,4 +1,4 @@
-const APP_VERSION='V241';
+const APP_VERSION='V242';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  validateExtraDateOperation(operation,payload);
@@ -1402,7 +1402,7 @@ async function showStoreDetail(s){
       <div class="sheet-timeline">${ex.map(e=>{const names=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean),pics=extraPhotos.filter(a=>a.extra_id===e.id);return `<article class="sheet-record"><div><strong>${fmt(e.giorno_intervento)} · ${esc(e.titolo)}</strong><span class="badge-state">${extraStatus(e)}</span></div><p>${esc(e.note_lorenzo||e.descrizione||'Nessuna nota')}</p><small>${names.length?'👤 '+names.map(esc).join(' · '):'Operatori non indicati'}${pics.length?` · 📷 ${pics.length} foto`:''}</small><button class="secondary compact-btn" data-open-extra-id="${e.id}">Apri extra</button></article>`}).join('')||'<p class="muted">Nessun extra collegato.</p>'}</div>
     </section>
     <section class="store-sheet-panel hidden" data-sheet-panel="photos">
-      <div class="sheet-section-head"><h3>Archivio fotografico</h3>${admin()?'<label class="file-label small"><span>＋ Aggiungi foto</span><input data-upload-photo type="file" accept="image/*" multiple></label>':''}</div>
+      <div class="sheet-section-head"><h3>Archivio fotografico</h3>${admin()?'<label class="file-label small"><span>＋ Aggiungi foto</span><input data-upload-photo type="file" accept="image/*" multiple></label><label class="file-label small"><span>✏️ Annota una foto</span><input data-annotate-new type="file" accept="image/*"></label>':''}</div>
       <div class="sheet-photo-gallery" data-all-photos>${allPhotos.length?'<p class="muted">Caricamento anteprime…</p>':'<p class="muted">Nessuna foto disponibile.</p>'}</div>
     </section>
     <section class="store-sheet-panel hidden" data-sheet-panel="documents">
@@ -1425,8 +1425,9 @@ async function showStoreDetail(s){
   body.querySelector('[data-upload-plan]')?.addEventListener('change',e=>uploadStoreArchiveFiles(s,'planimetria',[...e.target.files]).catch(err=>alert(err.message)));
   body.querySelector('[data-upload-photo]')?.addEventListener('change',e=>uploadStoreArchiveFiles(s,'foto',[...e.target.files]).catch(err=>alert(err.message)));
 
+  body.querySelector('[data-annotate-new]')?.addEventListener('change',e=>{const file=e.target.files[0];if(file)void openPhotoAnnotator(s,file);e.target.value=''});
   const photoBox=body.querySelector('[data-all-photos]');
-  if(allPhotos.length){photoBox.innerHTML='';for(const a of allPhotos){const card=document.createElement('button');card.type='button';card.className='sheet-photo-card';const source=a.intervention_id?'Intervento':a.extra_id?'Extra':'Archivio';card.innerHTML=`<span class="sheet-photo-placeholder">📷</span><small>${source}${a.created_at?' · '+new Date(a.created_at).toLocaleDateString('it-IT'):''}</small>`;photoBox.appendChild(card);signedAttachmentUrl(a).then(url=>{card.innerHTML=`<img src="${url}" alt="${esc(a.nome_file||'Foto')}" loading="lazy"><small>${source}${a.created_at?' · '+new Date(a.created_at).toLocaleDateString('it-IT'):''}</small>`;card.onclick=()=>window.open(url,'_blank')}).catch(()=>{card.onclick=()=>openArchiveAttachment(a)})}}
+  if(allPhotos.length){photoBox.innerHTML='';for(const a of allPhotos){const card=document.createElement('button');card.type='button';card.className='sheet-photo-card';const source=String(a.nome_file||a.storage_path).includes('-ANNOTATA')?'📌 Foto annotata':a.intervention_id?'Intervento':a.extra_id?'Extra':'Archivio';card.innerHTML=`<span class="sheet-photo-placeholder">📷</span><small>${source}${a.created_at?' · '+new Date(a.created_at).toLocaleDateString('it-IT'):''}</small>`;const wrapper=document.createElement('div');wrapper.className='pa-photo-wrap';wrapper.appendChild(card);if(admin()){const annotate=document.createElement('button');annotate.type='button';annotate.className='secondary photo-annotate-action';annotate.textContent='✏️ Annota';annotate.onclick=()=>openPhotoAnnotator(s,a);wrapper.appendChild(annotate)}photoBox.appendChild(wrapper);signedAttachmentUrl(a).then(url=>{card.innerHTML=`<img src="${url}" alt="${esc(a.nome_file||'Foto')}" loading="lazy"><small>${source}${a.created_at?' · '+new Date(a.created_at).toLocaleDateString('it-IT'):''}</small>`;card.onclick=()=>window.open(url,'_blank')}).catch(()=>{card.onclick=()=>openArchiveAttachment(a)})}}
 
   const docBox=body.querySelector('[data-doc-list]');
   for(const a of [...plans,...documents]){const row=document.createElement('div');row.className='sheet-document';row.innerHTML=`<button class="secondary" data-open>📄 <span>${esc(attachmentLabel(a))}</span><small>${esc(a.nome_file||'Documento')}</small></button>${admin()&&archiveKind(a)?'<button class="danger-btn compact-btn" data-delete>Elimina</button>':''}`;row.querySelector('[data-open]').onclick=()=>archiveKind(a)?openArchiveAttachment(a):openAttachment(a);row.querySelector('[data-delete]')?.addEventListener('click',()=>deleteArchiveAttachment(a,s));docBox.appendChild(row)}

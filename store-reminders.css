@@ -1,0 +1,9 @@
+.store-reminder-badge{display:block;margin:8px 0;padding:9px 12px;border:1px solid #e8b650;border-left:4px solid #a96c00;border-radius:8px;background:#fff8df;color:#704700;font-size:13px;overflow-wrap:anywhere;white-space:normal}
+.store-reminder-badge strong,.store-reminder-badge small{display:block;line-height:1.5}
+.store-reminder-badge.is-urgent{background:#fff0e9;border-color:#df7957;color:#8a2d15}
+.reminder-conflict{font-weight:700;margin-top:4px}
+.reminder-panel-row{padding:12px 0;border-bottom:1px solid #e7e4da}.reminder-panel-row:last-child{border:0}.reminder-panel-row>p{font-size:13px;margin:6px 0}
+#dashboardReminders[hidden],#scheduleReminders[hidden]{display:none}
+#storeReminderDialog{max-width:520px;width:calc(100% - 24px)}
+#storeReminderForm{display:grid;gap:14px}
+#storeReminderForm .actions{flex-wrap:wrap}

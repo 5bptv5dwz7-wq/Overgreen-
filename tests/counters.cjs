@@ -34,8 +34,8 @@ test('program denominator stays 15 before and after its two linked targets close
  c.scheduleItems.push({id:'cancelled',tipo:'ordinario',stato:'annullato'},{id:'rollover',tipo:'ordinario',stato:'riportato'},{id:'extraItem',tipo:'extra',stato:'da_fare'});assert.equal(run().allJobsCount,15);
 });
 test('site summary and filters use the same overdue and ordinary-today sets',()=>{
- const {document}=parseHTML('<input id="searchInput" value=""><select id="sortSelect"><option value="urgent" selected>Urgent</option></select><div id="storesList"></div><b id="totalCount"></b><b id="dueCount"></b><b id="warningCount"></b><b id="todayCount"></b>');
+ const {document}=parseHTML('<input id="searchInput" value=""><select id="sortSelect"><option value="urgent" selected>Urgent</option></select><div id="storesList"></div><b id="reminderCount"></b><b id="totalCount"></b><b id="dueCount"></b><b id="warningCount"></b><b id="todayCount"></b>');
  const stores=[{id:'a',nome:'Urgent',intervallo_giorni:15,ultimo_passaggio:'2026-09-01'},{id:'b',nome:'Ordinary today',intervallo_giorni:15,ultimo_passaggio:date},{id:'c',nome:'Extra only',intervallo_giorni:15,ultimo_passaggio:'2026-09-10'}];
- const ctx={document,$:id=>document.getElementById(id),OvergreenCounters:C,today:()=>date,completedToday:()=>({ordinary:[{store_id:'b'}]}),stores,storeClientFilter:'all',storeFilter:'all',clientType:()=> 'eurospin',clientLabel:()=> 'Eurospin'};
+ const ctx={activeStoreReminder:()=>null,compareStoreReminders:()=>0,document,$:id=>document.getElementById(id),OvergreenCounters:C,today:()=>date,completedToday:()=>({ordinary:[{store_id:'b'}]}),stores,storeClientFilter:'all',storeFilter:'all',clientType:()=> 'eurospin',clientLabel:()=> 'Eurospin'};
  document.getElementById('searchInput').value='no match';vm.createContext(ctx);vm.runInContext(block('function status(s)','function completedToday'),ctx);vm.runInContext(block('function renderStores(){','function renderWorkers'),ctx);ctx.renderStores();assert.equal(ctx.$('dueCount').textContent,'2');assert.equal(ctx.$('todayCount').textContent,'1');
 });

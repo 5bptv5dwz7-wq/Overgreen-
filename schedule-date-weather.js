@@ -10,17 +10,19 @@
   return {stores:[...found.values()],unknown};
  }
  function assess(rows,unknown,score){
-  let good=0,bad=0,uncertain=unknown,severe=0;
+  let good=0,caution=0,bad=0,uncertain=unknown,severe=0;
   for(const row of rows){
    const w=row.summary,s=w?score(w):null;
    if(s!==null&&s<2){bad++;if(s===0)severe++}
    else if(!w||w.partial||row.result?.stale||w.rain==null||w.condition?.rank<0)uncertain++;
+   else if(w.rain>0||w.condition?.rank>=3||s===2)caution++;
    else good++;
   }
-  if(bad)return {tone:'bad',title:severe?'Meteo critico per lavori esterni':'Giornata da valutare: pioggia prevista',good,bad,uncertain};
-  if(uncertain)return {tone:'unknown',title:'Fattibilità non confermata: dati incompleti',good,bad,uncertain};
-  if(!rows.length)return {tone:'unknown',title:'Nessuna sede da valutare',good,bad,uncertain};
-  return {tone:'good',title:'Meteo favorevole per il giro',good,bad,uncertain};
+  if(bad)return {tone:'bad',title:severe?'Meteo critico per lavori esterni':'Giornata da valutare: pioggia prevista',good,caution,bad,uncertain};
+  if(uncertain)return {tone:'unknown',title:'Fattibilità non confermata: dati incompleti',good,caution,bad,uncertain};
+  if(!rows.length)return {tone:'unknown',title:'Nessuna sede da valutare',good,caution,bad,uncertain};
+  if(caution)return {tone:'caution',title:'Giro fattibile, possibile erba bagnata',good,caution,bad,uncertain};
+  return {tone:'good',title:'Meteo favorevole per il giro',good,caution,bad,uncertain};
  }
  function create({dialog,input,host,getScheduleId,getLocations,load,summarize,score,formatDate}){
   let generation=0,lastKey='';
@@ -42,7 +44,7 @@
     if(token!==generation||!dialog.open||id!==getScheduleId()||date!==input.value)return;
     const review=assess(rows,selection.unknown,score);host.classList.add('is-'+review.tone);pending.remove();
     host.append(node('p',review.title,'schedule-weather-verdict'));
-    host.append(node('p',`${review.good} sedi favorevoli · ${review.bad} da valutare${review.uncertain?' · '+review.uncertain+' sedi/lavori non valutabili con dati completi':''}`,'schedule-weather-counts'));
+    host.append(node('p',`${review.good} sedi con meteo asciutto${review.caution?' · '+review.caution+' con possibile erba bagnata':''} · ${review.bad} da valutare${review.uncertain?' · '+review.uncertain+' sedi/lavori non valutabili con dati completi':''}`,'schedule-weather-counts'));
     if(rows.length){
      const details=document.createElement('details');details.append(node('summary','Dettaglio delle '+rows.length+' sedi'));
      const list=document.createElement('ul');

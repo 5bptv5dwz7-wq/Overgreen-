@@ -216,3 +216,17 @@ dialog :is(.picker,.reuse-schedule-stores){overscroll-behavior:contain}
 #pendingList .pending-review-photo{height:128px;min-height:128px;max-height:128px;min-width:0;box-sizing:border-box}
 #pendingList .pending-review-photo img{height:100%;width:100%;object-fit:cover}
 @media(max-width:520px){#pendingList .pending-review-photo{height:112px;min-height:112px;max-height:112px}}
+
+
+/* Compact weather preview before moving a schedule. */
+.schedule-date-weather{margin:12px 0;padding:12px;border:1px solid #dce5df;border-radius:14px;background:#f5f8f6;min-width:0;overflow-wrap:anywhere}
+.schedule-date-weather.is-good{background:#edf7ef;border-color:#a8c9ae}
+.schedule-date-weather.is-bad{background:#fff3e8;border-color:#e9bc8e}
+.schedule-date-weather.is-unknown{background:#f3f5f7;border-color:#d1d8de}
+.schedule-date-weather p{margin:6px 0;font-size:.85rem;line-height:1.45}
+.schedule-date-weather .schedule-weather-verdict{font-size:.95rem;font-weight:750}
+.schedule-date-weather details{margin-top:10px;font-size:.85rem}
+.schedule-date-weather summary{cursor:pointer;font-weight:650;padding:6px 0}
+.schedule-date-weather ul{list-style:none;margin:6px 0;padding:0}
+.schedule-date-weather li{display:grid;gap:3px;padding:8px 0;border-top:1px solid #00000012}
+.schedule-date-weather .schedule-weather-note,.schedule-date-weather small{font-size:.73rem;color:#59685f}

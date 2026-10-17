@@ -1,4 +1,4 @@
-const APP_VERSION='V262';
+const APP_VERSION='V263';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -3106,12 +3106,29 @@ async function editScheduleDayNote(schedule){
   toast(note?'Nota della giornata aggiornata':'Nota della giornata eliminata');
   renderSchedules();renderDashboard();
 }
+let scheduleDateWeatherPreview=null;
+function previewScheduleDateWeather(){
+  if(!scheduleDateWeatherPreview)scheduleDateWeatherPreview=OvergreenScheduleDateWeather.create({
+    dialog:$('editScheduleDateDialog'),input:$('editScheduleDateValue'),host:$('editScheduleDateWeather'),
+    getScheduleId:()=>$('editScheduleDateId').value,
+    getLocations:id=>{
+      const allItems=scheduleItems.filter(i=>i.schedule_id===id),itemIds=new Set(allItems.map(i=>i.id));
+      return OvergreenScheduleDateWeather.locations({
+        items:allItems.filter(i=>effectiveScheduleState(i)==='da_fare'),
+        extras:extras.filter(e=>(e.schedule_id===id||itemIds.has(e.schedule_item_id))&&!['completato','in_attesa','annullato'].includes(e.stato)),
+        activities:scheduleActivities.filter(a=>a.schedule_id===id&&!['completato','annullato'].includes(a.stato)),stores
+      });
+    },load:loadStoreWeather,summarize:OvergreenWeather.summarize,score:scoreRouteWeather,formatDate:fmt
+  });
+  void scheduleDateWeatherPreview.refresh(true);
+}
 function openEditScheduleDate(schedule){
   if(!admin()||!schedule)return;
   $('editScheduleDateId').value=schedule.id;
   $('editScheduleDateValue').value=schedule.giorno||today();
   $('editScheduleDateInfo').textContent=`Data attuale: ${fmt(schedule.giorno)} · ${scheduleMemberNames(schedule.id).join(' + ')||'Squadra non indicata'}`;
   openDialog('editScheduleDateDialog');
+  previewScheduleDateWeather();
 }
 async function saveEditScheduleDate(){
   if(!admin())return;
@@ -5660,4 +5677,5 @@ window.OvergreenVoice?.init({
  async confirm(draft){if(!admin())throw Error('Accesso riservato');await adminOperation('schedule_create',draft);await loadAll()}
 });
 window.OvergreenVoice?.sync();
+
 

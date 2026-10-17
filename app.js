@@ -1,4 +1,4 @@
-const APP_VERSION='V249';
+const APP_VERSION='V250';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -350,6 +350,7 @@ function setView(name){
 
 
 function syncImpersonationUi(){
+  window.OvergreenVoice?.sync();
   if(typeof closeExtraHoursForRole==='function')closeExtraHoursForRole();
   if(typeof syncExtraEconomicsRole==='function')syncExtraEconomicsRole();
   if(!admin())$('remoteReloadPanel')?.remove();
@@ -830,7 +831,7 @@ async function uploadSignatureSheet(file,year,month,round){
 }
 
 async function signIn(email,password){const {error}=await sb.auth.signInWithPassword({email,password});if(error)throw error;}
-async function signOut(){photoDelivery?.stop();await writeClientAudit('LOGOUT','auth','Uscita dall’app');sessionStorage.removeItem(IMPERSONATE_PROFILE_KEY);await sb.auth.signOut();location.reload()}
+async function signOut(){await window.OvergreenVoice?.close();photoDelivery?.stop();await writeClientAudit('LOGOUT','auth','Uscita dall’app');sessionStorage.removeItem(IMPERSONATE_PROFILE_KEY);await sb.auth.signOut();location.reload()}
 // V197: non assumere che una risposta contenga tutte le righe o che il limite API sia 1000.
 async function readAllRows(table,configure=q=>q,keys=['id']){
   const rows=[],seen=new Set();let offset=0;
@@ -1101,7 +1102,7 @@ function renderGlobalSearchEverywhere(){const i=$("globalSearchEverywhere"),r=$(
 function anomalyCounts(){const orphan=attachments.filter(a=>(a.intervention_id&&!interventions.some(i=>i.id===a.intervention_id))||(a.extra_id&&!extras.some(e=>e.id===a.extra_id))).length,noWorker=interventions.filter(i=>["in_attesa","convalidato"].includes(i.stato)&&!interventionWorkers.some(w=>w.intervention_id===i.id)).length,noTarget=extras.filter(e=>clientType(e)==="eurospin"&&!["completato","annullato"].includes(e.stato)&&!String(e.numero_target||"").trim()).length;return{orphan,noWorker,noTarget,total:orphan+noWorker+noTarget}}
 function renderHealthCenter(){if(!$("healthSummary")||!admin())return;const h=anomalyCounts();$("healthSummary").innerHTML=`<div class="health-kpi"><strong>${h.total}</strong><span>Anomalie</span></div><div class="health-kpi"><strong>${attachments.length}</strong><span>Allegati</span></div><div class="health-kpi"><strong>${interventions.length+extras.length}</strong><span>Lavori</span></div>`;$("healthDetails").innerHTML=[["Allegati orfani",h.orphan],["Chiusure senza operatore",h.noWorker],["Extra Eurospin senza target",h.noTarget]].map(x=>`<div class="health-issue"><strong>${x[1]?"⚠️":"✓"} ${x[0]} · ${x[1]}</strong></div>`).join("")}
 function renderDashboardSmart(){const r=$("dashboardSmart");if(!r)return;if(!admin()){r.innerHTML="";r.classList.add("hidden");return}r.classList.remove("hidden");const h=anomalyCounts(),p=interventions.filter(i=>i.stato==="in_attesa").length+extras.filter(e=>e.stato==="in_attesa").length,o=extras.filter(e=>!["completato","annullato"].includes(e.stato)).length;r.innerHTML=`<button class="smart-chip ${p?"warn":"good"}" data-s="p"><strong>${p}</strong><span>Da convalidare</span></button><button class="smart-chip ${o?"warn":"good"}" data-s="e"><strong>${o}</strong><span>Extra aperti</span></button>`;r.querySelector('[data-s="p"]').onclick=()=>p?openPendingDialog():toast("Nessuna convalida");r.querySelector('[data-s="e"]').onclick=()=>setView("extras")}
-function renderDashboard(){renderDashboardSmart();renderStoreReminderPanels();renderExtraDateAlerts();
+function renderDashboard(){window.OvergreenVoice?.sync();renderDashboardSmart();renderStoreReminderPanels();renderExtraDateAlerts();
   if(typeof renderOperationsShortcut==='function')renderOperationsShortcut();
   if(currentView==='operations'&&typeof renderOperations==='function')renderOperations();
   if(!$('dashToday'))return;
@@ -5558,3 +5559,28 @@ async function saveGrassSettings(st,settings){
  if(error||!data)throw error||new Error('Salvataggio non confermato');
  Object.assign(st,data);renderDashboard();
 }
+
+// V250: private voice assistant. AI tools can prepare drafts, never commit them.
+window.OvergreenVoice?.init({
+ allowed:()=>admin()&&!!session?.user?.id&&profile?.attivo!==false,
+ userId:()=>session?.user?.id,
+ context:()=>({today:today(),profiles,stores,extras,schedules,items:scheduleItems}),
+ async refresh(){
+  if(!admin())throw Error('Accesso riservato');
+  const tables=['profiles','stores','extras','schedules','schedule_items','schedule_members','store_reminders'];
+  const rows=await Promise.all(tables.map(t=>readAllRows(t)));
+  if(rows.some(r=>r.error))throw Error('Non riesco ad aggiornare i dati. Nessuna modifica effettuata.');
+  [profiles,stores,extras,schedules,scheduleItems,scheduleMembers,storeReminders]=rows.map(r=>r.data||[]);
+ },
+ snapshot(){
+  const pick=(row,keys)=>Object.fromEntries(keys.map(k=>[k,row[k]??null]));
+  const upcoming=schedules.filter(s=>s.giorno>=today()),ids=new Set(upcoming.map(s=>s.id));
+  return {today:today(),timezone:'Europe/Rome',stores:stores.map(s=>({...pick(s,['id','nome','citta','indirizzo','client_type','ultimo_passaggio','intervallo_giorni']),sollecito:activeStoreReminder(s)})),employees:profiles.filter(p=>p.attivo).map(p=>pick(p,['id','nome'])),extras:extras.filter(e=>!['completato','annullato'].includes(e.stato)).map(e=>pick(e,['id','store_id','titolo','numero_target','stato','giorno_intervento','schedule_item_id','execution_date','execution_date_mode','deadline_at'])),schedules:upcoming.map(s=>pick(s,['id','giorno','nota_generale'])),members:scheduleMembers.filter(m=>ids.has(m.schedule_id)),items:scheduleItems.filter(i=>ids.has(i.schedule_id)).map(i=>pick(i,['id','schedule_id','store_id','extra_id','tipo','stato','nota','posizione']))};
+ },
+ async weather(id){const st=stores.find(s=>s.id===id);if(!st)throw Error('Sede non trovata');const r=await loadStoreWeather(st);return {store:st.nome,stale:r.stale,approximate:r.approximate,forecast:r.forecast?.properties?.timeseries?.slice(0,100).map(t=>({time:t.time,temperature:t.data?.instant?.details?.air_temperature,next_1_hours:t.data?.next_1_hours,next_6_hours:t.data?.next_6_hours}))}},
+ async invoke(body){const {data,error}=await sb.functions.invoke('voice-assistant',{body});if(error){let detail;try{detail=await error.context?.json()}catch{}throw Error(detail?.error||'Assistente non disponibile. Verifica la connessione e la configurazione.')}if(data?.error)throw Error(data.error);return data},
+ async loadState(id){const {data,error}=await sb.from('voice_assistant_state').select('preferences,conversation,draft').eq('owner_id',id).maybeSingle();if(error)throw Error('Memoria non disponibile');return data},
+ async saveState(id,state){if(!admin()||id!==session?.user?.id)throw Error('Accesso riservato');const {error}=await sb.from('voice_assistant_state').upsert({owner_id:id,...state,updated_at:new Date().toISOString()});if(error)throw Error('Memoria non sincronizzata')},
+ async confirm(draft){if(!admin())throw Error('Accesso riservato');await adminOperation('schedule_create',draft);await loadAll()}
+});
+window.OvergreenVoice?.sync();

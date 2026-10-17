@@ -1,4 +1,4 @@
-const APP_VERSION='V246';
+const APP_VERSION='V247';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  validateExtraDateOperation(operation,payload);
@@ -1252,7 +1252,7 @@ function renderDashboard(){renderDashboardSmart();renderStoreReminderPanels();re
     }
     if(!allJobsCount)box.innerHTML='<p class="muted dashboard-day-empty">Nessun lavoro programmato.</p>';
     next.appendChild(details);
-    details.querySelectorAll('[data-weather-store]').forEach(card=>OvergreenWeather.mount(card,stores.find(st=>st.id===card.dataset.weatherStore),date,{load:loadStoreWeather}));
+    details.querySelectorAll('[data-weather-store]').forEach(card=>OvergreenWeather.mount(card,stores.find(st=>st.id===card.dataset.weatherStore),date,{load:loadStoreWeather,loadGrowth:loadGrowthHistory,canEdit:admin,saveGrowth:saveGrassSettings}));
   }
   const attribution=document.createElement('p');attribution.className='weather-attribution';attribution.innerHTML='Meteo: <a href="https://www.met.no/en" target="_blank" rel="noopener">MET Norway</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · riepilogo giornaliero elaborato da Overgreen';next.appendChild(attribution);
 }
@@ -5555,4 +5555,23 @@ function loadStoreWeather(st){
  });
  weatherQueue=promise;storeWeatherCache.set(key,{promise,until:Date.now()+3600000});
  promise.catch(()=>{storeWeatherCache.delete(key)});return promise;
+}
+
+// V247: background historical context, cached separately so forecasts remain responsive.
+const grassHistoryCache=new Map();
+let grassHistoryQueue=Promise.resolve();
+function loadGrowthHistory(st){
+ const key=JSON.stringify([st.id,st.latitudine,st.longitudine,st.indirizzo,st.citta]);
+ const old=grassHistoryCache.get(key);if(old&&old.until>Date.now())return old.promise;
+ const promise=grassHistoryQueue.catch(()=>{}).then(async()=>{
+  const point=await locationService.geocode('store:'+st.id);
+  const {data,error}=await sb.functions.invoke('store-growth-history',{body:{store_id:st.id,lat:point.lat,lon:point.lon}});
+  if(error)throw error;return {...data,latitude:point.lat};
+ });grassHistoryQueue=promise;grassHistoryCache.set(key,{promise,until:Date.now()+3600000});promise.catch(()=>grassHistoryCache.delete(key));return promise;
+}
+async function saveGrassSettings(st,settings){
+ if(!admin())throw new Error('Operazione riservata agli amministratori');
+ const {data,error}=await sb.from('stores').update(settings).eq('id',st.id).select('id,grass_kind,grass_irrigation').single();
+ if(error||!data)throw error||new Error('Salvataggio non confermato');
+ Object.assign(st,data);renderDashboard();
 }

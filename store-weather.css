@@ -6,7 +6,7 @@
 #dashboardNext .store-weather.has-rain{background:#fff7e7;border-color:#e8d4a2;color:#725113}
 #dashboardNext .store-weather.is-loading,#dashboardNext .store-weather.is-unavailable{display:block;font-size:.8rem;color:#65736e;background:#f4f7f5;border-color:#e1e8e3}
 .weather-attribution{font-size:.75rem;color:#63726b;margin:10px 0}.weather-attribution a{color:inherit;text-decoration:underline}
-@media(min-width:768px){#dashboardNext .job-main:has(.store-weather){padding-right:265px;min-height:155px}#dashboardNext .store-weather{position:absolute;right:0;top:0;width:245px;box-sizing:border-box;margin:0}}
+@media(min-width:768px){#dashboardNext .job-main:has(.store-weather){padding-right:265px;min-height:270px}#dashboardNext .store-weather{position:absolute;right:0;top:0;width:245px;box-sizing:border-box;margin:0}}
 
 #dashboardNext .weather-bands-button{grid-column:1/-1;background:transparent;color:inherit;border-top:1px solid #cbdfe9;border-radius:0;padding:8px 0 0;min-height:36px;text-align:left;font-size:.8rem}
 .weather-bands-dialog{width:min(720px,94vw);padding:22px;max-height:90dvh;overflow:auto;color:#224034;background:#fff}
@@ -15,3 +15,6 @@
 @media(max-width:540px){.weather-bands-list{grid-template-columns:1fr}.weather-bands-dialog{padding:16px}.weather-bands-head h2{font-size:1.1rem}}
 
 .grass-wetness{margin-top:12px;padding:10px;border-radius:9px;background:#e5ede8;border-left:3px solid #87978d}.grass-wetness strong{display:block;font-size:.85rem;margin-bottom:5px}.grass-wetness.is-wet{background:#ddeef8;border-color:#3984b1}.grass-wetness.is-damp{background:#fff1cd;border-color:#b78d27}.grass-wetness.is-dry{background:#e2f0df;border-color:#5a914a}.grass-wetness.is-unknown{background:#f0f1ef;color:#637168}
+
+.grass-growth{padding:14px;margin:0 0 16px;background:#f3f7ef;border:1px solid #d2dfc9;border-radius:12px;color:#2d4f2d}.grass-growth>strong,.grass-growth>small{display:block}.grass-growth>strong{margin-bottom:6px}.grass-growth>small{font-size:.8rem;line-height:1.45;margin-top:5px}.grass-growth>p{font-size:.85rem;line-height:1.45;margin:10px 0}.grass-growth.level-3{border-left:5px solid #258135}.grass-growth.level-2{border-left:5px solid #73a04f}.grass-growth.level-1{border-left:5px solid #c49b36}.grass-growth.level-0{border-left:5px solid #85928a}.grass-growth.is-unknown{background:#f1f2ef;color:#647068}
+#dashboardNext .grass-growth{grid-column:1/-1;margin:5px 0 0;padding:8px;border-radius:8px}#dashboardNext .grass-growth>strong{font-size:.8rem}#dashboardNext .grass-growth>small{font-size:.7rem}.grass-growth-settings{border-top:1px solid #d2dfc9;margin-top:12px;padding-top:4px}.grass-growth-settings label{font-size:.85rem}.grass-growth-settings select{font-size:16px}.grass-growth-settings button{font-size:.8rem;min-height:44px}.grass-growth-settings [data-status]{display:block;margin-top:8px}

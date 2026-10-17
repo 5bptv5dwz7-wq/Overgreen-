@@ -58,13 +58,19 @@ function renderExtraEconomicsBook(){
   $('extraEconomicsBookExport').disabled=!extraEconomicsBookRows.length;
   for(const x of extraEconomicsBookRows){const st=stores.find(s=>s.id===x.extra.store_id),article=document.createElement('article');article.className='economic-book-row';
     article.innerHTML=`<div><strong>${esc(st?.nome||x.extra.nome_esterno||'Extra')} · ${esc(x.extra.numero_target||'Target non indicato')}</strong><p>${esc(x.extra.titolo||'')}</p><small>${esc(model.periodLabel(model.period(x.extra)))}${model.closureDate(x.extra)?' · Chiusura '+esc(model.closureDate(x.extra).split('-').reverse().join('/')):''} · ${esc(model.modes[x.row.pricing_mode]||'Modalità da scegliere')} · ${esc(economicsStatus(x.calc,x.row))}</small>${x.extra.categoria_target==='pulizie'?`<p><strong>${esc(model.cleaningInvoiceLabel(x.row,'pulizie'))}</strong></p>`:''}</div><div><strong>${esc(model.money(x.calc.total))}</strong><button type="button" class="secondary">Apri</button></div>`;
-    article.querySelector('button').onclick=()=>{$('extraEconomicsBook').close();void openExtraHours(x.extra)};list.appendChild(article);
+    article.querySelector('button').onclick=()=>{$('extraEconomicsBook').close();void openExtraHours(x.extra,{returnToEconomics:true})};list.appendChild(article);
   }
 }
 async function refreshExtraEconomicsBook(){
   if(!admin())return;const b=$('extraEconomicsBookRefresh');b.disabled=true;$('extraEconomicsBookExport').disabled=true;$('extraEconomicsBookStatus').textContent='Aggiornamento…';
   try{await loadAll();if(admin())renderExtraEconomicsBook()}catch(error){extraEconomicsError='Aggiornamento non riuscito. Riprova prima di esportare.';if(admin())renderExtraEconomicsBook()}
   finally{b.disabled=false}
+}
+function restoreExtraEconomicsBook(){
+  if(!admin())return;
+  const dialog=$('extraEconomicsBook');
+  if(!dialog.open)dialog.showModal();
+  renderExtraEconomicsBook();
 }
 function openExtraEconomicsBook(){
   if(!admin())return;const dialog=$('extraEconomicsBook');

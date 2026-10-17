@@ -104,6 +104,7 @@ const ExtraHoursUi=(()=>{
     if(!force&&s.loaded&&formKey()!==s.savedForm&&!confirm('Chiudere senza salvare le modifiche economiche?'))return;
     state=null;dispose(s);el('extraHoursCanvas').replaceChildren();el('extraHoursInput').value='';
     el('extraHoursDialog').close();
+    if(!force&&s.returnToEconomics&&admin())restoreExtraEconomicsBook();
   }
   async function render(s){
     if(!current(s))return;
@@ -159,10 +160,10 @@ const ExtraHoursUi=(()=>{
       }else throw new Error('Unsupported preview');
     }catch(error){if(current(s))el('extraHoursPreviewStatus').textContent='Anteprima non disponibile. Puoi usare Apri originale e inserire le ore manualmente.'}
   }
-  async function open(extra){
+  async function open(extra,options={}){
     if(!admin()||!model().isBillableExtra(extra))return;
     bind();if(state){close();if(state)return}
-    const s={extraId:extra.id,row:null,report:null,page:1,zoom:1,loaded:false,saving:false,savedText:'',savedForm:'',extraCategory:extra.categoria_target||null,nightHours:extra.night_hours??0,suggestedOperators:typeof extraWorkers==='undefined'?0:new Set(extraWorkers.filter(w=>w.extra_id===extra.id).map(w=>w.profile_id)).size,pdf:null,image:null};state=s;
+    const s={returnToEconomics:options.returnToEconomics===true,extraId:extra.id,row:null,report:null,page:1,zoom:1,loaded:false,saving:false,savedText:'',savedForm:'',extraCategory:extra.categoria_target||null,nightHours:extra.night_hours??0,suggestedOperators:typeof extraWorkers==='undefined'?0:new Set(extraWorkers.filter(w=>w.extra_id===extra.id).map(w=>w.profile_id)).size,pdf:null,image:null};state=s;
     const store=stores.find(x=>x.id===extra.store_id);
     el('extraHoursContext').textContent=[store?.nome||extra.nome_esterno,extra.numero_target?'Target '+extra.numero_target:'',extra.titolo].filter(Boolean).join(' · ');
     el('extraHoursInput').value='';el('extraHoursMeta').textContent='Caricamento ore…';el('extraHoursChanged').hidden=true;el('extraHoursOriginal').hidden=true;
@@ -192,7 +193,7 @@ const ExtraHoursUi=(()=>{
       const row=data?.record;if(!row||row.extra_id!==s.extraId)throw new Error('Salvataggio non confermato. Riprova.');
       s.row=row;s.nightHours=row.night_hours??0;s.extraCategory=row.pricing_category||s.extraCategory;s.savedText=valueText(row.total_hours);el('extraHoursInput').value=s.savedText;fillEconomics(s);s.savedForm=formKey();metadata(s);
       if(typeof rememberExtraEconomics==='function')rememberExtraEconomics(row,s.report);
-      const result=model().calculate(row);tell(result.complete?'Dati economici salvati.':'Bozza salvata. Da completare: '+result.missing.join(', '));
+      s.saving=false;close();
     }catch(error){if(current(s))tell(error?.message||'Salvataggio non riuscito. Le ore inserite sono ancora qui: riprova.',true)}
     finally{s.saving=false;if(current(s))controls(s)}
   }
@@ -215,7 +216,7 @@ const ExtraHoursUi=(()=>{
   }
   return {open,close,save};
 })();
-function openExtraHours(extra){return ExtraHoursUi.open(extra)}
+function openExtraHours(extra,options){return ExtraHoursUi.open(extra,options)}
 function closeExtraHoursForRole(){if(!admin())ExtraHoursUi.close(true)}
 
 

@@ -1,0 +1,9 @@
+#dashboardNext .job-main{position:relative}
+#dashboardNext .store-weather{display:grid;grid-template-columns:1fr auto;gap:5px 12px;background:#edf5fa;border:1px solid #cbdfe9;border-radius:12px;padding:10px 12px;margin:10px 0 2px;max-width:420px;color:#22495b;line-height:1.35}
+#dashboardNext .store-weather strong{font-size:.95rem;margin:0;min-width:0}
+#dashboardNext .weather-temperatures{font-size:1.05rem;font-weight:800;white-space:nowrap}
+#dashboardNext .weather-rain,#dashboardNext .store-weather small{grid-column:1/-1;font-size:.78rem}
+#dashboardNext .store-weather.has-rain{background:#fff7e7;border-color:#e8d4a2;color:#725113}
+#dashboardNext .store-weather.is-loading,#dashboardNext .store-weather.is-unavailable{display:block;font-size:.8rem;color:#65736e;background:#f4f7f5;border-color:#e1e8e3}
+.weather-attribution{font-size:.75rem;color:#63726b;margin:10px 0}.weather-attribution a{color:inherit;text-decoration:underline}
+@media(min-width:768px){#dashboardNext .job-main:has(.store-weather){padding-right:265px;min-height:108px}#dashboardNext .store-weather{position:absolute;right:0;top:0;width:245px;box-sizing:border-box;margin:0}}

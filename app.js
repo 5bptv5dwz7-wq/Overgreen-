@@ -1,4 +1,4 @@
-const APP_VERSION='V243';
+const APP_VERSION='V244';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  validateExtraDateOperation(operation,payload);
@@ -1200,7 +1200,7 @@ function renderDashboard(){renderDashboardSmart();renderStoreReminderPanels();re
           const ordinaryNotes=[row.schedule?.nota_generale,st?.note].filter(v=>String(v||'').trim());
           c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span>${clientBadge(st)}<strong>${esc(st?.nome||'Punto vendita')}</strong>${!done?storeReminderMarkup(st,row.schedule?.giorno):''}${(st?.indirizzo||st?.citta)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${done?'Completato':pending?'In attesa di convalida':'Da eseguire'}</small>${!done?nextVisitNoteMarkup(st):''}${scheduleItemNoteMarkup(row.item)}${visitPhotosMarkup(row.item)}${ordinaryNotes.length?`<div class="dashboard-job-notes"><strong>Note</strong>${ordinaryNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>{const pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');return `<div class="embedded-extra ${extraCategoryClass(e)} ${extraIsDone(e)?'is-done':'is-open'}" data-open-linked-extra="${e.id}" role="button" tabindex="0"><span>${extraIsDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b>${deadlineLabel(e)}<span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span>${e.numero_target?`<small class="target-number">Target: ${esc(e.numero_target)}</small>`:''}<small>${extraIsDone(e)?'Completato':'Da fare insieme al passaggio'} · Tocca per aprire</small>${e.descrizione?`<p class="embedded-extra-description">${esc(e.descrizione)}</p>`:''}${pdf?`<button type="button" class="secondary compact-btn" data-open-linked-pdf="${e.id}">📄 Apri PDF</button>`:''}</div></div>`}).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${admin()?'<button class="secondary" data-share>Condividi</button>':''}${done?(admin()?'<button class="reopen-intervention-btn" data-reopen>↩ Riapri intervento</button>':'<button class="secondary" disabled>✓ Completato</button>'):pending?'<button class="secondary" disabled>⏳ In attesa</button>':'<button data-done>Registra ordinario</button>'}</div>`;
           if(admin()){const noteBtn=document.createElement('button');noteBtn.className='secondary';noteBtn.textContent=row.item.nota?'📌 Modifica appunto':'📌 Appunto';noteBtn.onclick=()=>openScheduleItemNote(row.item);c.querySelector('.actions').appendChild(noteBtn);addVisitPhotosButton(c.querySelector('.actions'),row.item)}
-          c.dataset.routeAddress=routeAddressForStore(st);
+          c.dataset.routeAddress=routeAddressForStore(st);if(st)c.dataset.weatherStore=st.id;
           c.querySelector('[data-map]').onclick=()=>openStoreMaps(st);
           const shareBtn=c.querySelector('[data-share]');
           if(shareBtn){
@@ -1235,14 +1235,14 @@ function renderDashboard(){renderDashboardSmart();renderStoreReminderPanels();re
           const canClose=!done&&!isIntesaOrdinaryTicket(e)&&['programmato','ricevuto','da_integrare'].includes(e.stato)&&(admin()||myExtraIds.has(e.id));
           const hasMap=!!extraMapsDestination(e,st);
           c.innerHTML=`<div class="job-main"><span class="job-kind">EXTRA</span>${clientBadge(e)}<span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span><strong>${esc(st?.nome||e.nome_esterno||'Extra')}</strong>${(st?.indirizzo||st?.citta||e.indirizzo_esterno)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo||e.indirizzo_esterno,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${esc(e.titolo)} · ${done?'Completato':urgent?'Urgente':'Da eseguire'}</small>${deadlineLabel(e)}${extraNotes.length?`<div class="dashboard-job-notes"><strong>${done?'Descrizione / note':'Descrizione'}</strong>${extraNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}</div><div class="actions">${hasMap?'<button class="secondary" data-map-extra>Maps</button>':''}${requestPdf?'<button class="secondary" data-pdf-extra>Apri PDF</button>':''}${canClose?'<button data-close-extra-dashboard>✓ Eseguito</button>':''}<button class="secondary" data-open-extra>Apri extra</button></div>`;
-          c.dataset.routeAddress=routeAddressForExtra(e,st);
+          c.dataset.routeAddress=routeAddressForExtra(e,st);if(st)c.dataset.weatherStore=st.id;
           c.querySelector('[data-map-extra]')?.addEventListener('click',()=>openExtraMaps(e,st));
           c.querySelector('[data-pdf-extra]')?.addEventListener('click',()=>openAttachment(requestPdf));
           c.querySelector('[data-close-extra-dashboard]')?.addEventListener('click',()=>openExtraClosureDialog(e));
           c.querySelector('[data-open-extra]').onclick=()=>openExtraById(e.id);list.appendChild(c)
         }else{
           const a=job.activity,st=stores.find(x=>x.id===a.store_id),ct=workContacts.find(x=>x.id===a.contact_id),done=a.stato==='completato',meta=activityTypeMeta(a.tipo),c=document.createElement('article');
-          c.className=`dashboard-line-job schedule-activity ${done?'is-done':'is-open'}`;c.dataset.routeAddress=activityRouteAddress(a,st);
+          c.className=`dashboard-line-job schedule-activity ${done?'is-done':'is-open'}`;c.dataset.routeAddress=activityRouteAddress(a,st);if(st)c.dataset.weatherStore=st.id;
           c.innerHTML=`<div class="job-main"><span class="job-kind">${meta.icon} ATTIVITÀ</span><strong>${esc(a.titolo||meta.label)}</strong><small>${esc([a.ora?String(a.ora).slice(0,5):null,st?.nome||a.indirizzo].filter(Boolean).join(' · '))}</small>${ct?`<div class="dashboard-job-notes"><strong>Contatto</strong><p>${esc([ct.nome,ct.azienda,ct.ruolo,ct.telefono].filter(Boolean).join(' · '))}</p></div>`:''}${a.note?`<div class="dashboard-job-notes"><strong>Note</strong><p>${esc(a.note)}</p></div>`:''}</div><div class="actions">${c.dataset.routeAddress?'<button class="secondary" data-map-activity>Maps</button>':''}${done?'<button class="secondary" disabled>✓ Fatto</button>':'<button data-done-activity>✓ Fatto</button>'}</div>`;
           c.querySelector('[data-map-activity]')?.addEventListener('click',()=>openActivityMaps(a,st));c.querySelector('[data-done-activity]')?.addEventListener('click',()=>completeScheduleActivity(a));list.appendChild(c)
         }
@@ -1251,8 +1251,10 @@ function renderDashboard(){renderDashboardSmart();renderStoreReminderPanels();re
       hydrateWorkerTravel(section,currentTravelToken);
     }
     if(!allJobsCount)box.innerHTML='<p class="muted dashboard-day-empty">Nessun lavoro programmato.</p>';
-    next.appendChild(details)
+    next.appendChild(details);
+    details.querySelectorAll('[data-weather-store]').forEach(card=>OvergreenWeather.mount(card,stores.find(st=>st.id===card.dataset.weatherStore),date,{load:loadStoreWeather}));
   }
+  const attribution=document.createElement('p');attribution.className='weather-attribution';attribution.innerHTML='Meteo: <a href="https://www.met.no/en" target="_blank" rel="noopener">MET Norway</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · riepilogo giornaliero elaborato da Overgreen';next.appendChild(attribution);
 }
 function openScheduleDate(date){
   scheduleExactDate=date;
@@ -5538,3 +5540,19 @@ $('eurospinPackageCategory')?.addEventListener('change',()=>{$('eurospinPackageG
 window.OvergreenCompact?.initNavigation();
 
 startRemoteReload();
+
+// V244: non-blocking weather with per-store deduplication and bounded concurrency.
+const storeWeatherCache=new Map();
+let weatherQueue=Promise.resolve();
+function loadStoreWeather(st){
+ const key=JSON.stringify([st.id,st.latitudine,st.longitudine,st.indirizzo,st.citta]);
+ const cached=storeWeatherCache.get(key);if(cached&&cached.until>Date.now())return cached.promise;
+ const promise=weatherQueue.catch(()=>{}).then(async()=>{
+  let point;try{point=await locationService.geocode('store:'+st.id)}catch{throw new Error('location')}
+  const {data,error}=await sb.functions.invoke('store-weather',{body:{store_id:st.id,lat:point.lat,lon:point.lon}});
+  if(error||!data?.forecast)throw new Error('weather');
+  return {...data,approximate:point.approximate};
+ });
+ weatherQueue=promise;storeWeatherCache.set(key,{promise,until:Date.now()+3600000});
+ promise.catch(()=>{storeWeatherCache.delete(key)});return promise;
+}

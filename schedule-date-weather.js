@@ -24,6 +24,26 @@
   if(caution)return {tone:'caution',title:'Giro fattibile, possibile erba bagnata',good,caution,bad,uncertain};
   return {tone:'good',title:'Meteo favorevole per il giro',good,caution,bad,uncertain};
  }
+ // Best effort: keep PDF export usable when the weather service is unavailable.
+ async function pdfForecasts(groups,stores,load,timeoutMs=12000){
+  const ids=new Set(groups.flatMap(g=>g.jobs.map(job=>(job.item||job.extra||job.activity)?.store_id)).filter(Boolean));
+  const results=new Map();let timer;
+  const work=Promise.all([...ids].map(async id=>{
+   const st=stores.find(s=>s.id===id);if(!st)return;
+   try{results.set(id,await load(st))}catch{results.set(id,null)}
+  }));
+  try{await Promise.race([work,new Promise(resolve=>{timer=setTimeout(resolve,timeoutMs)})])}
+  finally{clearTimeout(timer)}
+  return new Map(results);
+ }
+ function pdfSummary(result,date,summarize,score){
+  let w=null;try{if(result?.forecast)w=summarize(result.forecast,date,{from:6,to:18})}catch{}
+  if(!w)return {text:'Meteo: previsione non disponibile per questa data o sede.',tone:'unknown'};
+  const review=assess([{summary:w,result}],0,score);
+  const verdict=review.tone==='caution'?'Possibile erba bagnata':review.tone==='good'?'Meteo asciutto':review.tone==='bad'?'Pioggia o condizioni critiche: valutare il lavoro':'Dati incompleti: fattibilita non confermata';
+  const hints=[w.partial?'copertura parziale':'',w.coarse?'intervalli di piu ore':'',result.stale?'previsione non aggiornata':'',result.approximate?'posizione stimata':''].filter(Boolean);
+  return {text:`Meteo 06-18: ${w.condition.label} | ${w.min} / ${w.max} °C | ${w.rain==null?'pioggia n/d':w.rain.toLocaleString('it-IT')+' mm'}${w.probability==null?'':' | probabilita max '+Math.round(w.probability)+'%'}. ${verdict}.${hints.length?' '+hints.join(', ')+'.':''}`,tone:review.tone};
+ }
  function create({dialog,input,host,getScheduleId,getLocations,load,summarize,score,formatDate}){
   let generation=0,lastKey='';
   const node=(tag,text,cls)=>{const el=document.createElement(tag);el.textContent=text;if(cls)el.className=cls;return el};
@@ -71,5 +91,5 @@
   dialog.addEventListener('close',()=>{generation++;lastKey='';host.removeAttribute('aria-busy')});
   return {refresh};
  }
- const api={locations,assess,create};if(typeof module==='object'&&module.exports)module.exports=api;else root.OvergreenScheduleDateWeather=api;
+ const api={locations,assess,create,pdfForecasts,pdfSummary};if(typeof module==='object'&&module.exports)module.exports=api;else root.OvergreenScheduleDateWeather=api;
 })(typeof window!=='undefined'?window:globalThis);

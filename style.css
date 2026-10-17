@@ -314,3 +314,56 @@
 #scheduleView .schedule-head-actions button{flex:1 1 auto}
 }
 
+
+
+/* v261 — densità mobile: programmazione, giri salvati e meteo */
+@media(max-width:700px){
+#scheduleView{gap:7px}
+#scheduleView .schedule-program-list{gap:7px}
+#scheduleView .schedule-day-card{border-radius:12px}
+#scheduleView .schedule-card-head{padding:9px 10px}
+#scheduleView .schedule-item-compact{padding:8px 10px}
+#scheduleView .schedule-item-row{gap:7px}
+#scheduleView .schedule-item-copy>strong{font-size:.94rem}
+#scheduleView .schedule-order-number{width:27px;height:27px;font-size:.85rem}
+#scheduleView .schedule-item-actions{margin:6px 0 0;gap:5px;grid-template-columns:repeat(2,minmax(0,1fr))}
+#scheduleView .schedule-item-actions button{min-height:34px;padding:6px 7px;font-size:.78rem;border-radius:8px}
+#scheduleView .schedule-item-actions .full{min-height:34px}
+#scheduleView .order-buttons .compact-btn{width:30px;height:30px}
+#scheduleView .schedule-travel-leg,#scheduleView .dashboard-travel-leg{padding:4px 3px;margin:2px 0;font-size:.82rem}
+#scheduleView .schedule-toolbar{padding:7px;gap:5px}
+#scheduleView .schedule-library-actions button{min-height:34px;padding:6px 8px}
+#savedRoutesDialog{width:calc(100% - 12px);height:90dvh;max-height:90dvh;border-radius:16px}
+#savedRoutesDialog>.dialog-body{padding:12px}
+#savedRoutesDialog .dialog-head{margin-bottom:5px;gap:8px}
+#savedRoutesDialog .dialog-head h2{font-size:1.25rem}
+#savedRoutesDialog .dialog-head button{min-width:36px;min-height:36px;padding:5px}
+#savedRoutesDialog .dialog-body>p.muted{font-size:.77rem;margin:3px 0 8px}
+#savedRoutesList{gap:7px}
+#savedRoutesList .saved-route-card{padding:10px;border-radius:12px;margin:0}
+#savedRoutesList .schedule-history-head{gap:8px;margin-bottom:5px}
+#savedRoutesList .schedule-history-head h3{font-size:1rem;margin:0}
+#savedRoutesList .schedule-history-head p{font-size:.78rem;margin:2px 0}
+#savedRoutesList .schedule-history-stores{display:flex;flex-wrap:wrap;gap:4px;margin:7px 0}
+#savedRoutesList .schedule-history-stores span{font-size:.69rem;padding:3px 7px;border-radius:20px}
+#savedRoutesList .actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:7px}
+#savedRoutesList .actions button{min-height:34px;padding:6px 8px;font-size:.8rem;border-radius:9px}
+#savedRouteWeatherDialog{width:calc(100% - 12px);max-height:92dvh;border-radius:15px}
+#savedRouteWeatherDialog .dialog-body{padding:10px}
+#savedRouteWeatherDialog .dialog-head{top:-10px;padding:3px 0 6px}
+#savedRouteWeatherDialog .dialog-head h2{font-size:1.1rem}
+#savedRouteWeatherDialog .dialog-head button{min-height:34px;min-width:34px;padding:4px}
+#savedRouteWeatherDialog .route-weather-progress{margin:3px 0 7px;font-size:.75rem}
+#savedRouteWeatherDialog .route-weather-days{gap:5px}
+#savedRouteWeatherDialog .route-weather-day{border-radius:9px}
+#savedRouteWeatherDialog .route-weather-day-main{display:grid;grid-template-columns:minmax(94px,1.3fr) minmax(65px,.8fr) minmax(57px,.7fr) auto;gap:5px;padding:7px 7px}
+#savedRouteWeatherDialog .route-weather-date{gap:1px}
+#savedRouteWeatherDialog .route-weather-date strong{font-size:.77rem}
+#savedRouteWeatherDialog .route-weather-date span{font-size:.67rem}
+#savedRouteWeatherDialog .route-weather-stats strong{font-size:.76rem}
+#savedRouteWeatherDialog .route-weather-stats small{font-size:.58rem}
+#savedRouteWeatherDialog .route-weather-pick{min-height:30px;padding:5px 7px;font-size:.72rem}
+#savedRouteWeatherDialog .route-weather-detail{padding:0 8px 3px}
+#savedRouteWeatherDialog .route-weather-detail summary{padding:4px 0;font-size:.7rem}
+#savedRouteWeatherDialog .route-weather-footnote{font-size:.66rem}
+}

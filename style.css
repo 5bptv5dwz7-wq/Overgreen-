@@ -252,3 +252,22 @@ body.schedule-drag-active{overscroll-behavior:none}
 .route-weather-day strong{font-size:1rem}.route-weather-day span{font-weight:700}.route-weather-day small{font-size:.8rem;line-height:1.4}
 .route-weather-day:active{background:#deebdf}
 @media(max-width:500px){.route-weather-days{grid-template-columns:1fr 1fr;gap:8px}.route-weather-day{padding:10px;min-height:115px}}
+
+/* v254: compact route weather planner */
+#savedRouteWeatherDialog{width:min(900px,calc(100% - 20px));max-height:88dvh;overflow:auto}
+#savedRouteWeatherDialog .dialog-body{padding:18px}
+#savedRouteWeatherDialog .dialog-head{top:-18px;padding:6px 0 12px}
+#savedRouteWeatherDialog .dialog-head h2{font-size:1.25rem;line-height:1.25}
+.route-weather-progress{font-size:.83rem;color:#64776a;margin:8px 0 12px}
+#savedRouteWeatherDialog .route-weather-days{display:flex;flex-direction:column;gap:7px;margin:0 0 14px}
+#savedRouteWeatherDialog .route-weather-day{display:block;min-height:0;padding:0;border:1px solid #d9e5dd;background:#fff;border-radius:13px;color:#173b29}
+#savedRouteWeatherDialog .route-weather-day.is-good{border-left:4px solid #399467}
+#savedRouteWeatherDialog .route-weather-day.is-critical{border-left:4px solid #c48c43}
+.route-weather-day-main{display:grid;grid-template-columns:minmax(115px,1.4fr) minmax(72px,.75fr) minmax(70px,.75fr) minmax(65px,.7fr) auto;align-items:center;gap:9px;padding:10px 12px}
+.route-weather-date{display:flex;flex-direction:column;gap:3px}.route-weather-date strong{font-size:.91rem;text-transform:capitalize}.route-weather-date span{font-size:.77rem;font-weight:650}
+.route-weather-stats{display:flex;flex-direction:column;gap:2px}.route-weather-stats strong{font-size:.9rem}.route-weather-stats small,.route-weather-score small{font-size:.66rem;color:#718178}
+.route-weather-score{display:flex;flex-direction:column;font-weight:800;font-size:.94rem}
+#savedRouteWeatherDialog .route-weather-pick{min-height:34px;padding:6px 11px;border-radius:9px;font-size:.82rem;background:#16643c;color:white;white-space:nowrap}
+.route-weather-detail{border-top:1px solid #edf0ee;padding:0 12px 8px}.route-weather-detail summary{cursor:pointer;font-size:.75rem;color:#5e7264;padding:7px 0}.route-weather-detail ul{list-style:none;padding:0;margin:0}.route-weather-detail li{display:flex;justify-content:space-between;gap:8px;padding:5px 0;font-size:.75rem;border-top:1px solid #f0f3f1}
+.route-weather-footnote{font-size:.73rem;line-height:1.45;color:#728075;margin:10px 0 0}
+@media(max-width:650px){#savedRouteWeatherDialog .dialog-body{padding:14px}#savedRouteWeatherDialog .dialog-head{top:-14px}.route-weather-day-main{grid-template-columns:minmax(92px,1.2fr) minmax(60px,.8fr) minmax(54px,.7fr) auto;gap:5px;padding:9px 8px}.route-weather-date strong{font-size:.81rem}.route-weather-date span{font-size:.7rem}.route-weather-stats strong{font-size:.78rem}.route-weather-stats small{font-size:.6rem}.route-weather-score{display:none}#savedRouteWeatherDialog .route-weather-pick{padding:6px 8px;font-size:.75rem}.route-weather-detail{padding:0 9px 7px}}

@@ -1,12 +1,35 @@
 let visitPhotoHydrationQueued=false;
 const visitPhotoUrls=new Map();
-async function visitPhotoUrl(path){let entry=visitPhotoUrls.get(path);if(!entry||entry.until<Date.now()){const url=await signedAttachmentUrl({storage_path:path});entry={url,until:Date.now()+480000};visitPhotoUrls.set(path,entry)}return entry.url}
+async function visitPhotoUrl(path,refresh=false){
+ if(!path)throw Error('Percorso foto non disponibile');
+ const key=`${profile?.id||''}:${path}`;
+ if(refresh)visitPhotoUrls.delete(key);
+ let entry=visitPhotoUrls.get(key);
+ if(!entry||entry.until<Date.now()){
+  entry={until:Date.now()+480000};
+  entry.promise=signedAttachmentUrl({storage_path:path}).catch(error=>{if(visitPhotoUrls.get(key)===entry)visitPhotoUrls.delete(key);throw error});
+  if(visitPhotoUrls.size>=150)visitPhotoUrls.delete(visitPhotoUrls.keys().next().value);
+  visitPhotoUrls.set(key,entry);
+ }
+ return entry.promise;
+}
+function loadVisitPhoto(img,path){
+ const request=String(Number(img.dataset.photoRequest||0)+1);img.dataset.photoRequest=request;
+ img.loading='eager';img.decoding='async';img.style.minHeight='115px';
+ let retried=false;
+ const current=()=>img.dataset.photoRequest===request;
+ const failed=()=>{if(!current())return;img.alt='Foto non disponibile · tocca per riprovare';img.title=img.alt;img.onclick=()=>loadVisitPhoto(img,path);delete img.dataset.loading};
+ const start=async refresh=>{try{const url=await visitPhotoUrl(path,refresh);if(current())img.src=url}catch{failed()}};
+ img.onload=()=>{if(current()){delete img.dataset.loading;img.title='';img.onclick=null}};
+ img.onerror=()=>{if(!current())return;if(!retried){retried=true;void start(true)}else failed()};
+ img.alt='Caricamento foto…';void start(false);
+}
 function visitPhotosMarkup(item){
  const photos=item?.instruction_photos||[];if(!photos.length)return '';
  if(!visitPhotoHydrationQueued){visitPhotoHydrationQueued=true;queueMicrotask(()=>{visitPhotoHydrationQueued=false;hydrateVisitPhotos()})}
- return `<section class="visit-photo-panel"><strong>📷 FOTO E INDICAZIONI PER QUESTO PASSAGGIO</strong><div class="visit-photo-previews">${photos.map(p=>`<button type="button" class="visit-photo-thumb" data-visit-photos="${esc(item.id)}"><img data-visit-photo-path="${esc(p.path)}" alt="${esc(p.caption||'Indicazione fotografica')}" loading="lazy"><span>${esc(p.caption||'Foto annotata · apri')}</span></button>`).join('')}</div></section>`;
+ return `<section class="visit-photo-panel"><strong>📷 FOTO E INDICAZIONI PER QUESTO PASSAGGIO</strong><div class="visit-photo-previews">${photos.map(p=>`<button type="button" class="visit-photo-thumb" data-visit-photos="${esc(item.id)}"><img data-visit-photo-path="${esc(p.path)}" alt="${esc(p.caption||'Indicazione fotografica')}" loading="eager"><span>${esc(p.caption||'Foto annotata · apri')}</span></button>`).join('')}</div></section>`;
 }
-function hydrateVisitPhotos(){document.querySelectorAll('img[data-visit-photo-path]:not([src])').forEach(img=>{if(img.dataset.loading)return;img.dataset.loading='1';visitPhotoUrl(img.dataset.visitPhotoPath).then(url=>{if(img.isConnected)img.src=url}).catch(()=>{delete img.dataset.loading;img.alt='Anteprima non disponibile · apri per riprovare'})})}
+function hydrateVisitPhotos(){document.querySelectorAll('img[data-visit-photo-path]:not([src])').forEach(img=>{if(img.dataset.loading)return;img.dataset.loading='1';loadVisitPhoto(img,img.dataset.visitPhotoPath)})}
 async function openVisitPhotos(item){
  if(!item)return;let dialog=$('visitPhotosDialog');if(dialog)dialog.remove();
  dialog=document.createElement('dialog');dialog.id='visitPhotosDialog';dialog.className='visit-photos-dialog';
@@ -15,8 +38,8 @@ async function openVisitPhotos(item){
  document.body.appendChild(dialog);dialog.querySelector('[data-close-visit]').onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();
  dialog.querySelector('[data-visit-upload]')?.addEventListener('change',e=>{const file=e.target.files[0];e.target.value='';if(file)void openPhotoAnnotator(store,file,{item,caption:dialog.querySelector('[data-visit-caption]').value.trim(),onSaved:async()=>{dialog.close();await loadAll();await openVisitPhotos(scheduleItems.find(x=>x.id===item.id)||item)}})});
  const list=dialog.querySelector('.visit-photos-list');
- for(const p of item.instruction_photos||[]){const card=document.createElement('article');card.innerHTML=`<img alt="${esc(p.caption||'Indicazione fotografica')}" loading="lazy"><p>${esc(p.caption||'Foto annotata')}</p><div class="actions"><button type="button" class="secondary" data-original>Vedi originale</button>${admin()?'<button type="button" class="secondary" data-remove>Rimuovi dal passaggio</button>':''}</div>`;list.appendChild(card);visitPhotoUrl(p.path).then(url=>card.querySelector('img').src=url).catch(()=>card.querySelector('img').alt='Foto non disponibile: chiudi e riapri per riprovare');
-  card.querySelector('[data-original]').onclick=async()=>{try{const url=await visitPhotoUrl(p.original_path);const img=card.querySelector('img');img.src=img.src===url?await visitPhotoUrl(p.path):url;card.querySelector('[data-original]').textContent=img.src===url?'Vedi annotata':'Vedi originale'}catch(err){alert(err.message)}};
+ for(const p of item.instruction_photos||[]){const card=document.createElement('article');card.innerHTML=`<img alt="${esc(p.caption||'Indicazione fotografica')}" loading="eager"><p>${esc(p.caption||'Foto annotata')}</p><div class="actions"><button type="button" class="secondary" data-original>Vedi originale</button>${admin()?'<button type="button" class="secondary" data-remove>Rimuovi dal passaggio</button>':''}</div>`;list.appendChild(card);loadVisitPhoto(card.querySelector('img'),p.path);
+  let original=false;card.querySelector('[data-original]').onclick=()=>{original=!original;loadVisitPhoto(card.querySelector('img'),original?p.original_path:p.path);card.querySelector('[data-original]').textContent=original?'Vedi annotata':'Vedi originale'};
   card.querySelector('[data-remove]')?.addEventListener('click',async e=>{if(!admin()||!confirm('Rimuovere questa foto dalle indicazioni di questo passaggio?'))return;const btn=e.currentTarget;btn.disabled=true;try{const r=await sb.rpc('overgreen_visit_photo_v243',{p_item_id:item.id,p_remove_id:p.id});if(r.error)throw r.error;item.instruction_photos=r.data;await loadAll();dialog.close();await openVisitPhotos(scheduleItems.find(x=>x.id===item.id)||item)}catch(err){alert(err.message);btn.disabled=false}});
  }
  if(!(item.instruction_photos||[]).length)list.innerHTML='<p class="muted">Nessuna foto collegata a questo passaggio.</p>';

@@ -169,10 +169,15 @@ const ExtraHoursUi=(()=>{
     el('extraHoursInput').value='';el('extraHoursMeta').textContent='Caricamento ore…';el('extraHoursChanged').hidden=true;el('extraHoursOriginal').hidden=true;
     el('extraHoursPreviewStatus').textContent='Caricamento del rapportino…';el('extraHoursCanvas').replaceChildren();tell('');fillEconomics(s);controls(s);
     el('extraHoursDialog').showModal();
+    el('extraHoursForm').hidden=true;el('extraHoursForm').style.display='none';
+    const loading=document.createElement('p');loading.className='eh-meta';loading.textContent='Caricamento dati economici salvati…';el('extraHoursForm').before(loading);
     try{
       const [hours,report,freshExtra]=await Promise.all([
         sb.from('extra_labor_hours').select('*').eq('extra_id',extra.id).maybeSingle(),
-        sb.from('attachments').select('id,extra_id,tipo,storage_path,nome_file,mime_type,created_at').eq('extra_id',extra.id).eq('tipo','rapportino_eurospin').order('created_at',{ascending:false}).order('id',{ascending:false}).limit(1).maybeSingle(),
+        sb.from('attachments').select('id,extra_id,tipo,storage_path,nome_file,mime_type,created_at').eq('extra_id',extra.id).eq('tipo','rapportino_eurospin').order('created_at',{ascending:false}).order('id',{ascending:false}).limit(1).maybeSingle().then(result=>{
+          if(current(s)&&!result.error){s.report=result.data;void preview(s)}
+          return result;
+        }),
         sb.from('extras').select('id,categoria_target,client_type,closure_profile,night_hours').eq('id',extra.id).maybeSingle()
       ]);
       if(!current(s))return;
@@ -180,8 +185,9 @@ const ExtraHoursUi=(()=>{
       if(!model().isBillableExtra(freshExtra.data)){close(true);return}
       s.extraCategory=freshExtra.data.categoria_target||null;s.nightHours=freshExtra.data.night_hours??0;
       s.row=hours.data;s.report=report.data;s.loaded=true;s.savedText=valueText(s.row?.total_hours);
-      el('extraHoursInput').value=s.savedText;fillEconomics(s);s.savedForm=formKey();metadata(s);controls(s);await preview(s);
+      el('extraHoursInput').value=s.savedText;fillEconomics(s);s.savedForm=formKey();metadata(s);controls(s);
     }catch(error){if(current(s)){tell('Impossibile caricare i dati. Chiudi e riapri la scheda per riprovare.',true);el('extraHoursMeta').textContent='Dati non caricati';el('extraHoursPreviewStatus').textContent='Rapportino non caricato'}}
+    finally{loading.remove();if(current(s)){el('extraHoursForm').hidden=false;el('extraHoursForm').style.display=''}}
   }
   async function save(){
     const s=state;if(!s||!current(s)||!s.loaded||s.saving)return;

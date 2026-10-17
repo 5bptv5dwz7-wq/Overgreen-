@@ -1,4 +1,4 @@
-const APP_VERSION='V268';
+const APP_VERSION='V269';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -1303,8 +1303,10 @@ function scheduleMatchesDate(s){if(scheduleExactDate)return s.giorno===scheduleE
 async function storeArchiveFiles(storeId){
   const base=`punti-vendita/${storeId}`;
   const out=[];
-  for(const kind of ['planimetria','foto']){
-    const {data,error}=await sb.storage.from('documenti').list(`${base}/${kind}`,{limit:100,sortBy:{column:'created_at',order:'desc'}});
+  const kinds=['planimetria','foto'];
+  const results=await Promise.all(kinds.map(kind=>sb.storage.from('documenti').list(`${base}/${kind}`,{limit:100,sortBy:{column:'created_at',order:'desc'}})));
+  for(const [index,kind] of kinds.entries()){
+    const {data,error}=results[index];
     if(error){console.warn('Archivio punto vendita non leggibile:',error.message);continue}
     for(const f of (data||[])){
       if(!f.name||f.name==='.emptyFolderPlaceholder')continue;
@@ -1329,12 +1331,27 @@ async function uploadStoreArchiveFiles(store,kind,files){
   }
   toast(`${files.length} file caricati`);await showStoreDetail(stores.find(x=>x.id===store.id)||store)
 }
+let storeDetailRequest=0;
 async function showStoreDetail(s){
+  const request=++storeDetailRequest,actor=profile?.id;
+  const dialog=$('storeDetailDialog'),body=$('storeDetailBody');
   $('storeDetailTitle').textContent=s.nome;
-  $('storeDetailBody').innerHTML='<p class="muted">Caricamento scheda completa…</p>';
-  if(!$('storeDetailDialog').open)openDialog('storeDetailDialog');
-
-  const archive=await storeArchiveFiles(s.id);
+  if(!dialog.open)openDialog('storeDetailDialog');
+  renderStoreDetail(s,[]);
+  const notice=document.createElement('p');notice.className='muted';notice.textContent='Caricamento foto e documenti dell’archivio…';body.prepend(notice);
+  try{
+    const archive=await storeArchiveFiles(s.id);
+    if(request!==storeDetailRequest||!dialog.open||profile?.id!==actor)return;
+    const active=body.querySelector('[data-sheet-tab].active')?.dataset.sheetTab;
+    const scroll=dialog.scrollTop;
+    renderStoreDetail(s,archive);
+    if(active)body.querySelector(`[data-sheet-tab="${active}"]`)?.click();
+    dialog.scrollTop=scroll;
+  }catch(error){
+    if(request===storeDetailRequest&&dialog.open)notice.textContent='Archivio non disponibile. Chiudi e riapri la scheda per riprovare.';
+  }
+}
+function renderStoreDetail(s,archive){
   const rows=interventions.filter(i=>i.store_id===s.id&&!i.multi_day_open).sort((a,b)=>String(interventionEndDate(b)).localeCompare(String(interventionEndDate(a))));
   const ex=extras.filter(e=>e.store_id===s.id).sort((a,b)=>String(b.giorno_intervento).localeCompare(String(a.giorno_intervento)));
   const plans=archive.filter(a=>archiveKind(a)==='planimetria');
@@ -1352,11 +1369,7 @@ async function showStoreDetail(s){
   const futureItems=scheduleItems.filter(i=>i.store_id===s.id&&effectiveScheduleState(i)==='da_fare').map(i=>schedules.find(x=>x.id===i.schedule_id)).filter(x=>x&&x.giorno>=todayDate).sort((a,b)=>String(a.giorno).localeCompare(String(b.giorno)));
   const nextDate=futureItems[0]?.giorno||null;
 
-  const workerRows=[];
-  for(const i of rows){
-    const names=await workerNames(i.id);
-    workerRows.push({intervention:i,names});
-  }
+  const workerRows=rows.map(i=>({intervention:i,names:interventionWorkers.filter(w=>w.intervention_id===i.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean)}));
   const operatorCounts=new Map();
   for(const r of workerRows)for(const name of r.names)operatorCounts.set(name,(operatorCounts.get(name)||0)+1);
   for(const e of ex){

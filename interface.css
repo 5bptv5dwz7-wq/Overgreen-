@@ -196,3 +196,9 @@ dialog :is(.picker,.reuse-schedule-stores){overscroll-behavior:contain}
  #dashboardNext .actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}
  #dashboardNext .actions>button{min-width:0;white-space:normal;overflow-wrap:anywhere}
 }
+
+/* V258: schedule actions wrap according to available space and label length. */
+@media screen {
+ #app main .schedule-item-compact > .schedule-item-actions{display:flex!important;flex-wrap:wrap;align-items:stretch;gap:8px!important;margin-left:0}
+ #app main .schedule-item-compact > .schedule-item-actions > button{flex:1 1 130px;width:auto;min-width:0;max-width:100%;height:auto;min-height:44px;white-space:normal;overflow-wrap:anywhere;line-height:1.35!important;margin:0;padding:10px 12px!important}
+}

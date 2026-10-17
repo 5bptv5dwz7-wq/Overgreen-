@@ -237,3 +237,9 @@ body.schedule-drag-active{overscroll-behavior:none}
 #dashDoneDetails{padding:0 8px;font-size:.85rem}
 #counterDetailDialog .cards{display:grid;gap:10px}
 #counterDetailDialog .cards button{text-align:left;white-space:normal}
+
+/* v252 — Scorrimento autonomo delle finestre Giri salvati e Storico su iOS */
+#savedRoutesDialog,#scheduleHistoryDialog{height:min(85dvh,850px);max-height:85dvh;overflow:hidden;overscroll-behavior:contain}
+#savedRoutesDialog>.dialog-body,#scheduleHistoryDialog>.dialog-body{height:100%;min-height:0;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden}
+#savedRoutesList,#scheduleHistoryList{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;padding-bottom:calc(18px + env(safe-area-inset-bottom))}
+#savedRoutesDialog .dialog-head,#scheduleHistoryDialog .dialog-head{flex-shrink:0}

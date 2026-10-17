@@ -24,6 +24,7 @@ const ExtraHoursUi=(()=>{
   function fillEconomics(s){
     const r=s.row||{};el('extraEconomicsNightHours').value=valueText(s.nightHours??r.night_hours??0);el('extraEconomicsDiscount').value=valueText(r.discount_amount||null);el('extraEconomicsMode').value=r.pricing_mode||'';
     el('extraEconomicsCategory').value=s.extraCategory||r.pricing_category||'';
+    el('extraEconomicsCleaningScope').value=r.cleaning_scope||'';
     el('extraEconomicsOperators').value=r.operator_count??(s.suggestedOperators||'');
     el('extraEconomicsTrip').value=r.dedicated_trip===true?'yes':r.dedicated_trip===false?'no':'';
     el('extraEconomicsEquipment').checked=r.equipment===true;el('extraEconomicsQuoteAmount').value=valueText(r.quote_amount);
@@ -42,7 +43,7 @@ const ExtraHoursUi=(()=>{
       if(!description&&!text)continue;const amount=asAmount(text);if(!description||amount==null)throw new Error('Ogni spesa richiede descrizione e importo.');expenses.push({description,amount});
     }
     const category=el('extraEconomicsCategory').value||null;
-    return {discount_amount:asAmount(el('extraEconomicsDiscount').value)??0,total_hours:parseExtraHours(el('extraHoursInput').value),pricing_mode:el('extraEconomicsMode').value||null,pricing_category:category,
+    return {discount_amount:asAmount(el('extraEconomicsDiscount').value)??0,total_hours:parseExtraHours(el('extraHoursInput').value),pricing_mode:el('extraEconomicsMode').value||null,pricing_category:category,cleaning_scope:category==='pulizie'?(el('extraEconomicsCleaningScope').value||null):null,
       dedicated_trip:el('extraEconomicsTrip').value==='yes'?true:el('extraEconomicsTrip').value==='no'?false:null,
       night_hours:category==='pulizie'?(parseExtraHours(el('extraEconomicsNightHours').value)??0):0,expected_night_hours:state.nightHours??0,
       operator_count:count?Number(count):null,equipment:category==='pulizie'&&el('extraEconomicsEquipment').checked,
@@ -52,6 +53,9 @@ const ExtraHoursUi=(()=>{
   function syncEconomics(){
     if(!state)return;const m=model(),quote=el('extraEconomicsMode').value==='preventivo',category=el('extraEconomicsCategory').value;
     el('extraEconomicsNightWrap').hidden=category!=='pulizie';
+    el('extraEconomicsCleaningWrap').hidden=category!=='pulizie';
+    el('extraEconomicsCleaningScope').required=category==='pulizie';
+    el('extraEconomicsCleaningHint').textContent=category==='pulizie'?m.cleaningInvoiceLabel({cleaning_scope:el('extraEconomicsCleaningScope').value},category):'';
     el('extraEconomicsQuote').hidden=!quote;el('extraEconomicsEquipmentWrap').hidden=category!=='pulizie';
     el('extraEconomicsIncludedWrap').hidden=!quote||el('extraEconomicsTrip').value!=='yes';
     if(category!=='pulizie')el('extraEconomicsEquipment').checked=false;
@@ -180,7 +184,7 @@ const ExtraHoursUi=(()=>{
   }
   async function save(){
     const s=state;if(!s||!current(s)||!s.loaded||s.saving)return;
-    let values;try{values=economicValues();const c=model().calculate({...values,...model().rates(values.pricing_category,values.equipment)});if(c.missing.some(x=>x.includes('notturn')))throw new Error(c.missing.filter(x=>x.includes('notturn')).join(', '));if(c.subtotal!=null&&c.discount>c.subtotal)throw new Error('Lo sconto non può superare il subtotale.');}catch(error){tell(error.message,true);el('extraHoursInput').focus();return}
+    let values;try{values=economicValues();if(values.pricing_category==='pulizie'&&!['interni','esterni'].includes(values.cleaning_scope))throw new Error('Scegli pulizie interne (reverse charge) oppure esterne (IVA ordinaria).');const c=model().calculate({...values,...model().rates(values.pricing_category,values.equipment)});if(c.missing.some(x=>x.includes('notturn')))throw new Error(c.missing.filter(x=>x.includes('notturn')).join(', '));if(c.subtotal!=null&&c.discount>c.subtotal)throw new Error('Lo sconto non può superare il subtotale.');}catch(error){tell(error.message,true);el('extraHoursInput').focus();return}
     s.saving=true;controls(s);tell('Salvataggio…');
     try{
       const {data,error}=await sb.rpc('save_extra_economics_v202',{p_extra_id:s.extraId,p_values:values,p_expected_revision:s.row?.revision||0,p_source_attachment_id:s.report?.id||null,p_expected_extra_category:s.extraCategory});
@@ -213,5 +217,6 @@ const ExtraHoursUi=(()=>{
 })();
 function openExtraHours(extra){return ExtraHoursUi.open(extra)}
 function closeExtraHoursForRole(){if(!admin())ExtraHoursUi.close(true)}
+
 
 

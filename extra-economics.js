@@ -49,6 +49,10 @@
     const total=complete?subtotal-discount:null;
     return {complete,missing:[...new Set(missing)],labor,laborDay,laborNight,dayHours:dayHours==null?null:dayHours/100,nightHours:night/100,base,exit,exitIncluded,expenses,subtotal,discount,total,quotePending:quoted&&row.quote_status!=='accettato'};
   }
+  function cleaningInvoiceLabel(row,category=row?.pricing_category){
+    if(category!=='pulizie')return '';
+    return row?.cleaning_scope==='interni'?'Pulizie interne · Reverse charge':row?.cleaning_scope==='esterni'?'Pulizie esterne · IVA ordinaria':'Pulizie: interni/esterni da indicare';
+  }
   function review(row,extra,report){
     const result=calculate(row||{}),issues=[];
     if(row?.pricing_category==='pulizie'&&Number(row.night_hours||0)!==Number(extra?.night_hours||0))issues.push('Ore notturne cambiate: ricontrolla Economia');
@@ -81,6 +85,7 @@
       .filter(x=>(!filter.month||period(x.extra)===filter.month)&&(!filter.category||x.extra.categoria_target===filter.category)&&(!filter.mode||x.row.pricing_mode===filter.mode)&&(!filter.state||x.extra.stato===filter.state))
       .sort((a,b)=>period(a.extra).localeCompare(period(b.extra))||closureDate(a.extra).localeCompare(closureDate(b.extra))||String(a.extra.numero_target||'').localeCompare(String(b.extra.numero_target||'')));
   }
-  return {closureDate,period,periodLabel,isBillableExtra,modes,quoteStates,decimal,cents,money,rates,calculate,review,filterRows};
+  return {cleaningInvoiceLabel,closureDate,period,periodLabel,isBillableExtra,modes,quoteStates,decimal,cents,money,rates,calculate,review,filterRows};
 });
+
 

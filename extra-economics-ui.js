@@ -31,6 +31,7 @@ function appendExtraEconomicsSummary(card,extra){
   if(extraEconomicsError)box.textContent=extraEconomicsError;
   else if(!row?.pricing_mode)box.textContent='Economia da compilare'+(row?.total_hours!=null?' · '+String(row.total_hours).replace('.',',')+' ore inserite':'');
   else{const c=model.review(row,extra,latestEconomicsReport(extra.id));box.innerHTML=`<strong>${esc(model.modes[row.pricing_mode])} · ${esc(model.money(c.total))}</strong><small>${esc(economicsStatus(c,row))} · IVA esclusa</small>`}
+  const invoice=model.cleaningInvoiceLabel(row,extra.categoria_target||row?.pricing_category);if(invoice){const label=document.createElement('small');label.textContent=invoice;box.appendChild(label)}
   card.querySelector('.actions').before(box);
 }
 function economicsBookFilter(){return {month:$('extraEconomicsMonth').value,category:$('extraEconomicsBookCategory').value,mode:$('extraEconomicsBookMode').value,state:$('extraEconomicsBookState').value}}
@@ -56,7 +57,7 @@ function renderExtraEconomicsBook(){
   $('extraEconomicsBookStatus').textContent=extraEconomicsBookRows.length?`${extraEconomicsBookRows.length} extra · preventivi non accettati e voci da verificare esclusi dal totale complessivo.`:'Nessun extra in questa categoria. Seleziona Tutti per vedere tutti gli extra.';
   $('extraEconomicsBookExport').disabled=!extraEconomicsBookRows.length;
   for(const x of extraEconomicsBookRows){const st=stores.find(s=>s.id===x.extra.store_id),article=document.createElement('article');article.className='economic-book-row';
-    article.innerHTML=`<div><strong>${esc(st?.nome||x.extra.nome_esterno||'Extra')} · ${esc(x.extra.numero_target||'Target non indicato')}</strong><p>${esc(x.extra.titolo||'')}</p><small>${esc(model.periodLabel(model.period(x.extra)))}${model.closureDate(x.extra)?' · Chiusura '+esc(model.closureDate(x.extra).split('-').reverse().join('/')):''} · ${esc(model.modes[x.row.pricing_mode]||'Modalità da scegliere')} · ${esc(economicsStatus(x.calc,x.row))}</small></div><div><strong>${esc(model.money(x.calc.total))}</strong><button type="button" class="secondary">Apri</button></div>`;
+    article.innerHTML=`<div><strong>${esc(st?.nome||x.extra.nome_esterno||'Extra')} · ${esc(x.extra.numero_target||'Target non indicato')}</strong><p>${esc(x.extra.titolo||'')}</p><small>${esc(model.periodLabel(model.period(x.extra)))}${model.closureDate(x.extra)?' · Chiusura '+esc(model.closureDate(x.extra).split('-').reverse().join('/')):''} · ${esc(model.modes[x.row.pricing_mode]||'Modalità da scegliere')} · ${esc(economicsStatus(x.calc,x.row))}</small>${x.extra.categoria_target==='pulizie'?`<p><strong>${esc(model.cleaningInvoiceLabel(x.row,'pulizie'))}</strong></p>`:''}</div><div><strong>${esc(model.money(x.calc.total))}</strong><button type="button" class="secondary">Apri</button></div>`;
     article.querySelector('button').onclick=()=>{$('extraEconomicsBook').close();void openExtraHours(x.extra)};list.appendChild(article);
   }
 }
@@ -104,5 +105,6 @@ async function exportExtraEconomics(){
   }catch(error){if(admin())$('extraEconomicsBookStatus').textContent=error.message||'Esportazione non riuscita.'}
   finally{if(admin())b.disabled=false}
 }
+
 
 

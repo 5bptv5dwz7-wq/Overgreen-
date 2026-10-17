@@ -77,6 +77,8 @@
   const load=async()=>{
    if(node.dataset.started)return;node.dataset.started='1';
    try{
+    // Start the independent history request while the forecast is loading.
+    if(options.loadGrowth)void options.loadGrowth(store).catch(()=>{});
     const result=await options.load(store);if(!node.isConnected)return;
     const w=summarize(result.forecast,date);if(!w)throw new Error('Previsione non ancora disponibile');
     node.className='store-weather'+(w.condition.rank>=3?' has-rain':'');

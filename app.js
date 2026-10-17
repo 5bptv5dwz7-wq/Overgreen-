@@ -1,4 +1,4 @@
-const APP_VERSION='V248';
+const APP_VERSION='V249';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -5543,34 +5543,15 @@ window.OvergreenCompact?.initNavigation();
 
 startRemoteReload();
 
-// V244: non-blocking weather with per-store deduplication and bounded concurrency.
-const storeWeatherCache=new Map();
-let weatherQueue=Promise.resolve();
-function loadStoreWeather(st){
- const key=JSON.stringify([st.id,st.latitudine,st.longitudine,st.indirizzo,st.citta]);
- const cached=storeWeatherCache.get(key);if(cached&&cached.until>Date.now())return cached.promise;
- const promise=weatherQueue.catch(()=>{}).then(async()=>{
-  let point;try{point=await locationService.geocode('store:'+st.id)}catch{throw new Error('location')}
-  const {data,error}=await sb.functions.invoke('store-weather',{body:{store_id:st.id,lat:point.lat,lon:point.lon}});
-  if(error||!data?.forecast)throw new Error('weather');
-  return {...data,approximate:point.approximate};
- });
- weatherQueue=promise;storeWeatherCache.set(key,{promise,until:Date.now()+3600000});
- promise.catch(()=>{storeWeatherCache.delete(key)});return promise;
-}
-
-// V247: background historical context, cached separately so forecasts remain responsive.
-const grassHistoryCache=new Map();
-let grassHistoryQueue=Promise.resolve();
-function loadGrowthHistory(st){
- const key=JSON.stringify([st.id,st.latitudine,st.longitudine,st.indirizzo,st.citta]);
- const old=grassHistoryCache.get(key);if(old&&old.until>Date.now())return old.promise;
- const promise=grassHistoryQueue.catch(()=>{}).then(async()=>{
-  const point=await locationService.geocode('store:'+st.id);
-  const {data,error}=await sb.functions.invoke('store-growth-history',{body:{store_id:st.id,lat:point.lat,lon:point.lon}});
-  if(error)throw error;return {...data,latitude:point.lat};
- });grassHistoryQueue=promise;grassHistoryCache.set(key,{promise,until:Date.now()+3600000});promise.catch(()=>grassHistoryCache.delete(key));return promise;
-}
+// V249: bounded parallel requests and persistent fresh weather/history caches.
+const weatherLoader=OvergreenWeatherLoader.create({
+ geocode:st=>locationService.geocode('store:'+st.id),
+ invoke:async(name,body)=>{const {data,error}=await sb.functions.invoke(name,{body});if(error)throw error;return data},
+ storage:{getItem:key=>localStorage.getItem(key),setItem:(key,value)=>localStorage.setItem(key,value)},
+ scope:()=>session?.user?.id||'signed-out'
+});
+function loadStoreWeather(st){return weatherLoader.weather(st)}
+function loadGrowthHistory(st){return weatherLoader.history(st)}
 async function saveGrassSettings(st,settings){
  if(!admin())throw new Error('Operazione riservata agli amministratori');
  const {data,error}=await sb.from('stores').update(settings).eq('id',st.id).select('id,grass_kind,grass_irrigation').single();

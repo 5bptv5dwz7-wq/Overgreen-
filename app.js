@@ -1,4 +1,4 @@
-const APP_VERSION='V258';
+const APP_VERSION='V259';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -2890,7 +2890,7 @@ const helpPages={
   operations:{title:'Come usare Da gestire',html:`<p>Questa pagina riunisce le azioni da fare sui lavori già registrati.</p><ul><li>Filtra per cliente, ricerca o tipo di azione. Ogni lavoro compare una volta, anche quando ha più segnalazioni.</li><li><strong>Foto e dati</strong> segnala foto attese ma non registrate e target mancanti. Le foto rimaste sul telefono vanno controllate dal dispositivo usato per caricarle.</li><li><strong>Prepara programma</strong> aggiunge la sede alla selezione: scegli data e squadra, poi salva il programma.</li><li><strong>Squadre · 7 giorni</strong> conta ordinari, extra e attività separatamente. Un operatore in più squadre è un invito a verificare gli orari, non la certezza di una sovrapposizione.</li><li>Il PDF apre il programma completo con le date modificabili; non applica i filtri della lista.</li></ul>`},
   dashboard:{title:'Come usare la Dashboard',html:`<p>Questa schermata riassume il lavoro dell’azienda.</p><ul><li>Il dipendente vede separatamente i lavori assegnati per oggi e quelli dei prossimi giorni.</li><li>Tocca i riquadri in alto per vedere lavori di oggi, convalide e punti vendita scaduti.</li><li>Usa <strong>Ricerca globale</strong> per trovare punti vendita, extra o dipendenti.</li><li>Premi <strong>Aggiorna</strong> per scaricare manualmente i dati più recenti.</li></ul>`},
   stores:{title:'Come usare Punti vendita',html:`<p>Qui trovi l’anagrafica di tutti i punti vendita.</p><ul><li>I punti vendita già inseriti in una programmazione sono indicati come <strong>In programma</strong> ma mantengono il loro ritardo finché non viene convalidato un nuovo ordinario.</li><li><strong>Registra ordinario</strong> aggiorna i giorni alla convalida. Per un’uscita solo extra usa <strong>Extra della sede</strong>: non azzera i giorni dell’ordinario.</li><li>Tocca un punto vendita per aprire scheda, storico, note, foto e planimetrie.</li><li>Lorenzo può aggiungere o modificare i punti vendita.</li><li>Il pulsante <strong>Maps</strong> apre la navigazione verso l’indirizzo salvato.</li></ul>`},
-  schedule:{title:'Come usare la Programmazione',html:`<p>Qui vengono mostrati soltanto i lavori ancora da eseguire.</p><ul><li>Lorenzo può creare una programmazione scegliendo data, squadra, sedi ed extra standalone, e aggiungere in seguito sedi, extra o attività con <strong>Aggiungi lavoro</strong>.</li><li>Le <strong>Attività</strong> servono per sopralluoghi, preventivi, incontri, ritiri e altri impegni non fatturati come intervento.</li><li>Le frecce <strong>↑ ↓</strong> cambiano l’ordine di esecuzione del dipendente.</li><li>Il pulsante <strong>Elimina</strong> rimuove un singolo punto vendita programmato, dopo conferma.</li><li><strong>Storico programmazioni</strong> permette di recuperare una vecchia giornata e riutilizzarla cambiando data, squadra e sedi.</li><li><strong>Giri salvati</strong> conserva i percorsi che usi spesso e li rende richiamabili in qualsiasi momento.</li><li>Con <strong>Continua automaticamente nei giorni successivi</strong>, i lavori non eseguiti vengono riportati al giorno corrente mantenendo squadra, ordine ed extra collegati.</li><li>Il dipendente preme <strong>Eseguito</strong> per chiudere il lavoro e allegare le foto. Data, ora e utente della chiusura vengono registrati automaticamente.</li></ul>`},
+  schedule:{title:'Come usare la Programmazione',html:`<p>Qui vengono mostrati soltanto i lavori ancora da eseguire.</p><ul><li>Lorenzo può creare una programmazione scegliendo data, squadra, sedi ed extra standalone, e aggiungere in seguito sedi, extra o attività con <strong>Aggiungi lavoro</strong>.</li><li>Le <strong>Attività</strong> servono per sopralluoghi, preventivi, incontri, ritiri e altri impegni non fatturati come intervento.</li><li>Le frecce <strong>↑ ↓</strong> cambiano l’ordine di esecuzione del dipendente. Usa <strong>Sposta alla posizione…</strong> per scegliere direttamente il posto nel giro.</li><li>Il pulsante <strong>Elimina</strong> rimuove un singolo punto vendita programmato, dopo conferma.</li><li><strong>Storico programmazioni</strong> permette di recuperare una vecchia giornata e riutilizzarla cambiando data, squadra e sedi.</li><li><strong>Giri salvati</strong> conserva i percorsi che usi spesso e li rende richiamabili in qualsiasi momento.</li><li>Con <strong>Continua automaticamente nei giorni successivi</strong>, i lavori non eseguiti vengono riportati al giorno corrente mantenendo squadra, ordine ed extra collegati.</li><li>Il dipendente preme <strong>Eseguito</strong> per chiudere il lavoro e allegare le foto. Data, ora e utente della chiusura vengono registrati automaticamente.</li></ul>`},
   reports:{title:'Come usare i Report',html:`<p>Seleziona una data per ricostruire tutta la giornata.</p><ul><li>Il riepilogo mostra interventi ordinari, extra, convalide, operatori, foto e documenti.</li><li>Puoi filtrare per tipologia e dipendente.</li><li>Apri foto, rapportini e schede dei punti vendita direttamente dal report.</li><li>Premi <strong>Condividi riepilogo</strong> per inviarlo su WhatsApp o copiarlo.</li><li>Usa <strong>PDF sintetico</strong> per l'elenco essenziale oppure <strong>PDF completo</strong> per includere note e fotografie.</li></ul>`},
   contacts:{title:'Come usare la Rubrica',html:`<p>Qui trovi i contatti di lavoro.</p><ul><li>Puoi registrare azienda, ruolo, telefono, email e competenze.</li><li>Ogni contatto può essere collegato a uno o più punti vendita o filiali.</li><li>I contatti possono essere richiamati nelle attività della programmazione.</li></ul>`},
   extras:{title:'Come usare gli Extra',html:`<p>Gli extra sono separati tra aperti ed eseguiti.</p><ul><li>Lorenzo crea l’extra, assegna la squadra e allega il PDF della richiesta.</li><li>Il dipendente chiude il lavoro caricando i file Eurospin e Overgreen. Data, ora e utente della chiusura vengono registrati automaticamente.</li><li>Lorenzo convalida l’extra e può successivamente modificarlo o eliminarlo.</li></ul>`},
@@ -2954,73 +2954,60 @@ async function persistScheduleOrder(scheduleId,orderedJobs){
     }
   }
 }
-function enableScheduleDrag(container,schedule){
+let scheduleOrderBusy=false;
+function enableScheduleOrder(container,schedule){
   if(!admin()||!container||!schedule)return;
-  // Se è attivo un filtro cliente vediamo solo una parte del giro:
-  // riordinare quella porzione produrrebbe posizioni ambigue sul giro completo.
-  if(scheduleClientFilter!=='all')return;
-  let dragging=null,placeholder=null,startY=0,startTop=0,pointerId=null,moved=false;
-  const rows=()=>[...container.querySelectorAll('.schedule-item[data-schedule-item-id], .schedule-item[data-schedule-extra-id], .schedule-item[data-schedule-activity-id]')];
-  const cleanup=()=>{
-    if(dragging){dragging.classList.remove('dragging');dragging.style.transform='';dragging.style.width='';dragging.style.zIndex='';}
-    placeholder?.remove();dragging=null;placeholder=null;pointerId=null;moved=false;
-    document.body.classList.remove('schedule-drag-active');
+  const rows=[...container.querySelectorAll('.schedule-item[data-schedule-item-id],.schedule-item[data-schedule-extra-id],.schedule-item[data-schedule-activity-id]')];
+  if(rows.length<2)return;
+  if(scheduleClientFilter!=='all'||scheduleWorkerFilter!=='all'){
+    const hint=document.createElement('p');hint.className='schedule-order-hint muted';hint.textContent='Per riordinare il giro completo, seleziona Tutti i clienti e Tutte le squadre nei filtri.';
+    container.querySelector('.schedule-progress-label')?.after(hint);return;
+  }
+  const jobs=rows.map(r=>{
+    if(r.dataset.scheduleItemId)return {kind:'ordinary',row:scheduleItems.find(x=>x.id===r.dataset.scheduleItemId)};
+    if(r.dataset.scheduleExtraId)return {kind:'extra',row:extras.find(x=>x.id===r.dataset.scheduleExtraId)};
+    return {kind:'activity',row:scheduleActivities.find(x=>x.id===r.dataset.scheduleActivityId)};
+  });
+  if(jobs.some(j=>!j.row))return;
+  const title=r=>r.querySelector('.schedule-item-copy>strong,.extra-card-heading + h3,h3')?.textContent?.trim()||'Lavoro';
+  const move=async(from,to)=>{
+    if(scheduleOrderBusy||!admin()||!container.isConnected||scheduleClientFilter!=='all'||scheduleWorkerFilter!=='all')return false;
+    if(!Number.isInteger(to)||to<0||to>=jobs.length||from===to)return false;
+    const reordered=jobs.slice(),[moved]=reordered.splice(from,1);reordered.splice(to,0,moved);
+    const originalTop=rows[from].getBoundingClientRect().top;
+    scheduleOrderBusy=true;container.setAttribute('aria-busy','true');
+    container.querySelectorAll('.schedule-order-controls button').forEach(b=>b.disabled=true);
+    try{
+      await persistScheduleOrder(schedule.id,reordered);
+      scheduleOrderBusy=false;
+      renderSchedules();renderDashboard();
+      const key=moved.kind==='ordinary'?'scheduleItemId':moved.kind==='extra'?'scheduleExtraId':'scheduleActivityId';
+      const target=[...document.querySelectorAll('#scheduleList .schedule-item')].find(r=>r.dataset[key]===moved.row.id);
+      if(target){window.scrollBy(0,target.getBoundingClientRect().top-originalTop);target.querySelector('[data-order-position]')?.focus({preventScroll:true})}
+      toast('Ordine salvato · posizione '+(to+1)+' di '+jobs.length);return true;
+    }catch(error){
+      alert('Non riesco a completare il riordino: '+(error?.message||String(error))+'. Ricarico la programmazione.');
+      await loadAll();return false;
+    }finally{scheduleOrderBusy=false;container.removeAttribute('aria-busy')}
   };
-  container.querySelectorAll('[data-drag-handle]').forEach(handle=>{
-    handle.addEventListener('pointerdown',ev=>{
-      if(ev.button!==undefined&&ev.button!==0)return;
-      const row=handle.closest('.schedule-item[data-schedule-item-id], .schedule-item[data-schedule-extra-id], .schedule-item[data-schedule-activity-id]');if(!row)return;
-      ev.preventDefault();ev.stopPropagation();
-      pointerId=ev.pointerId;handle.setPointerCapture?.(pointerId);
-      const rect=row.getBoundingClientRect();startY=ev.clientY;startTop=rect.top;
-      placeholder=document.createElement('div');placeholder.className='schedule-drag-placeholder';placeholder.style.height=rect.height+'px';
-      row.after(placeholder);dragging=row;dragging.classList.add('dragging');dragging.style.width=rect.width+'px';dragging.style.zIndex='1000';
-      document.body.classList.add('schedule-drag-active');
-    });
-    handle.addEventListener('pointermove',ev=>{
-      if(!dragging||ev.pointerId!==pointerId)return;
-      ev.preventDefault();moved=true;
-      const dy=ev.clientY-startY;dragging.style.transform=`translateY(${dy}px)`;
-      const center=startTop+dy+dragging.getBoundingClientRect().height/2;
-      const candidates=rows().filter(x=>x!==dragging);
-      let before=null;
-      for(const candidate of candidates){const r=candidate.getBoundingClientRect();if(center<r.top+r.height/2){before=candidate;break}}
-      if(before)container.insertBefore(placeholder,before);else container.appendChild(placeholder);
-      const edge=70;if(ev.clientY<edge)window.scrollBy(0,-12);else if(ev.clientY>window.innerHeight-edge)window.scrollBy(0,12);
-    });
-    const finish=async ev=>{
-      if(!dragging||ev.pointerId!==pointerId)return;
-      ev.preventDefault();
-
-      // IMPORTANTE: cleanup() azzera "moved".
-      // Salviamo prima lo stato del trascinamento, altrimenti il drop
-      // viene sempre interpretato come un semplice tap e non viene persistito.
-      const didMove=moved;
-      const row=dragging;
-      if(placeholder)container.insertBefore(row,placeholder);
-      cleanup();
-      if(!didMove)return;
-
-      const orderedRows=rows();
-      const orderedJobs=orderedRows.map(r=>{
-        if(r.dataset.scheduleItemId){const row=scheduleItems.find(i=>i.id===r.dataset.scheduleItemId);return row?{kind:'ordinary',row}:null}
-        if(r.dataset.scheduleExtraId){const row=extras.find(e=>e.id===r.dataset.scheduleExtraId);return row?{kind:'extra',row}:null}
-        if(r.dataset.scheduleActivityId){const row=scheduleActivities.find(a=>a.id===r.dataset.scheduleActivityId);return row?{kind:'activity',row}:null}
-        return null;
-      }).filter(Boolean);
-
-      try{
-        await persistScheduleOrder(schedule.id,orderedJobs);
-        orderedRows.forEach((r,i)=>{const n=r.querySelector('.schedule-order-number');if(n)n.textContent=String(i+1);const b=r.querySelector('.schedule-next-visit strong');if(r.dataset.scheduleExtraId&&b)b.textContent=`🔧 Extra standalone della giornata · posizione ${i+1}`;});
-
-        toast('Ordine del giro salvato');
-        renderDashboard();
-      }catch(error){
-        alert('Non riesco a salvare il nuovo ordine: '+(error?.message||String(error)));
-        await loadAll();
-      }
+  rows.forEach((row,index)=>{
+    const controls=document.createElement('div');controls.className='schedule-order-controls';controls.setAttribute('role','group');controls.setAttribute('aria-label','Ordine di '+title(row));
+    const up=document.createElement('button');up.type='button';up.className='secondary';up.textContent='↑';up.setAttribute('aria-label','Sposta su');up.disabled=index===0;up.onclick=()=>move(index,index-1);
+    const down=document.createElement('button');down.type='button';down.className='secondary';down.textContent='↓';down.setAttribute('aria-label','Sposta giù');down.disabled=index===rows.length-1;down.onclick=()=>move(index,index+1);
+    const position=document.createElement('button');position.type='button';position.className='secondary';position.dataset.orderPosition='';position.textContent='Sposta alla posizione…';
+    position.onclick=()=>{
+      if(scheduleOrderBusy)return;
+      document.getElementById('scheduleOrderDialog')?.remove();
+      const dialog=document.createElement('dialog');dialog.id='scheduleOrderDialog';dialog.setAttribute('aria-labelledby','scheduleOrderTitle');
+      dialog.innerHTML='<form><div class="dialog-head"><h2 id="scheduleOrderTitle">Sposta lavoro</h2><button type="button" aria-label="Chiudi finestra">×</button></div><p class="order-job-name"></p><label>Nuova posizione<select name="position" required></select></label><p class="muted">Gli altri lavori scorrono automaticamente. Il lavoro resta nella stessa giornata e squadra.</p><button type="submit" class="full">Sposta e salva</button></form>';
+      dialog.querySelector('.order-job-name').textContent=title(row)+' · posizione attuale '+(index+1)+' di '+rows.length;
+      const select=dialog.querySelector('select');rows.forEach((r,i)=>{const option=document.createElement('option');option.value=String(i);option.textContent=(i+1)+'ª posizione'+(i===index?' · attuale':' · '+title(r));select.appendChild(option)});select.value=String(index);
+      dialog.querySelector('.dialog-head button').onclick=()=>dialog.close();
+      dialog.querySelector('form').onsubmit=async event=>{event.preventDefault();const to=Number(select.value);dialog.close();await move(index,to)};
+      dialog.addEventListener('close',()=>dialog.remove(),{once:true});document.body.appendChild(dialog);dialog.showModal();
     };
-    handle.addEventListener('pointerup',finish);handle.addEventListener('pointercancel',finish);
+    controls.append(up,down,position);
+    const heading=row.querySelector('.schedule-item-main,.schedule-next-visit');if(heading)heading.after(controls);else row.prepend(controls);
   });
 }
 function openAddScheduleItems(schedule){
@@ -3264,7 +3251,7 @@ function renderSchedules(){
       r.dataset.routeAddress=routeAddressForStore(st);
       r.dataset.scheduleItemId=item.id;
       const stato=effectiveState==='in_attesa'?'In attesa di convalida':'Da eseguire',linked=linkedExtrasForScheduleItem(item.id);
-      r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${displayIndex+1}</div><div class="schedule-item-copy">${scheduleClientBadge(st)}<strong data-store-detail>${esc(st?.nome||'Sede')}</strong>${storeReminderMarkup(st,s.giorno)}<small>${esc(st?.citta||st?.indirizzo||'')} · ${stato}</small></div>${admin()&&scheduleClientFilter==='all'?'<button type="button" class="drag-handle" data-drag-handle title="Tieni premuto e trascina" aria-label="Trascina per cambiare ordine">☰</button>':''}</div>${scheduleItemNoteMarkup(item)}${visitPhotosMarkup(item)}${effectiveState==='da_fare'?nextVisitNoteMarkup(st):''}${linked.length?`<div class="linked-extra-reminder compact-linked"><strong>Extra collegati (${linked.length})</strong>${linked.map(e=>`<span class="linked-extra-category ${extraCategoryClass(e)}"><b>${esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}</span>`).join('')}</div>`:''}<div class="actions schedule-item-actions"><button class="secondary" data-map>Maps</button>${effectiveState==='da_fare'?`<button data-done>${openMultiDayIntervention(st?.id)?'Continua intervento':'Registra ordinario'}</button>`:''}${admin()&&effectiveState==='da_fare'?'<button class="danger-btn" data-delete-scheduled>Elimina</button>':''}</div>`;
+      r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${displayIndex+1}</div><div class="schedule-item-copy">${scheduleClientBadge(st)}<strong data-store-detail>${esc(st?.nome||'Sede')}</strong>${storeReminderMarkup(st,s.giorno)}<small>${esc(st?.citta||st?.indirizzo||'')} · ${stato}</small></div></div>${scheduleItemNoteMarkup(item)}${visitPhotosMarkup(item)}${effectiveState==='da_fare'?nextVisitNoteMarkup(st):''}${linked.length?`<div class="linked-extra-reminder compact-linked"><strong>Extra collegati (${linked.length})</strong>${linked.map(e=>`<span class="linked-extra-category ${extraCategoryClass(e)}"><b>${esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}</span>`).join('')}</div>`:''}<div class="actions schedule-item-actions"><button class="secondary" data-map>Maps</button>${effectiveState==='da_fare'?`<button data-done>${openMultiDayIntervention(st?.id)?'Continua intervento':'Registra ordinario'}</button>`:''}${admin()&&effectiveState==='da_fare'?'<button class="danger-btn" data-delete-scheduled>Elimina</button>':''}</div>`;
       if(admin()){const noteBtn=document.createElement('button');noteBtn.type='button';noteBtn.className='secondary';noteBtn.textContent=item.nota?'📌 Modifica appunto':'📌 Appunto';noteBtn.onclick=()=>openScheduleItemNote(item);r.querySelector('.schedule-item-actions').appendChild(noteBtn);addVisitPhotosButton(r.querySelector('.schedule-item-actions'),item)}
       r.querySelector('[data-store-detail]').onclick=()=>showStoreDetail(st);r.querySelector('[data-map]').onclick=()=>openStoreMaps(st);
       r.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,item.id));r.querySelector('[data-delete-scheduled]')?.addEventListener('click',()=>deleteScheduleItem(item,st));c.appendChild(r)
@@ -3273,8 +3260,6 @@ function renderSchedules(){
         const badge=document.createElement('div');badge.className='schedule-next-visit';badge.innerHTML=`<strong>🔧 Extra standalone della giornata · posizione ${displayIndex+1}</strong>`;
         r.prepend(badge);
         if(admin()&&scheduleClientFilter==='all'){
-          const heading=r.querySelector('.extra-card-heading')||r;
-          const handle=document.createElement('button');handle.type='button';handle.className='drag-handle';handle.dataset.dragHandle='';handle.title='Tieni premuto e trascina';handle.setAttribute('aria-label','Trascina per cambiare ordine');handle.textContent='☰';heading.appendChild(handle);
           const actions=r.querySelector('.actions')||r;
           const remove=document.createElement('button');remove.type='button';remove.className='danger-btn';remove.textContent='Togli dalla giornata';remove.onclick=()=>unlinkExtraFromSchedule(e);actions.appendChild(remove);
         }
@@ -3284,7 +3269,7 @@ function renderSchedules(){
         r.className='schedule-item schedule-item-compact schedule-activity-card';r.dataset.scheduleActivityId=a.id;
         r.dataset.routeAddress=activityRouteAddress(a,st);
         const type=activityTypeMeta(a.tipo);
-        r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${displayIndex+1}</div><div class="schedule-item-copy"><span class="activity-pill">${type.icon} ${esc(type.label)}</span><strong>${esc(a.titolo||type.label)}</strong><small>${a.ora?esc(String(a.ora).slice(0,5))+' · ':''}${esc(st?.nome||a.indirizzo||'Luogo non indicato')}</small></div>${admin()&&scheduleClientFilter==='all'?'<button type="button" class="drag-handle" data-drag-handle title="Tieni premuto e trascina" aria-label="Trascina per cambiare ordine">☰</button>':''}</div>${ct?`<div class="schedule-next-visit"><strong>👤 ${esc(ct.nome)}</strong><p>${esc([ct.azienda,ct.ruolo,ct.telefono].filter(Boolean).join(' · '))}</p></div>`:''}${a.note?`<div class="schedule-next-visit"><p>${esc(a.note)}</p></div>`:''}<div class="actions schedule-item-actions">${r.dataset.routeAddress?'<button class="secondary" data-activity-map>Maps</button>':''}<button data-activity-done>✓ Eseguito</button>${admin()?'<button class="secondary" data-edit-activity>Modifica</button><button class="danger-btn" data-delete-activity>Elimina</button>':''}</div>`;
+        r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${displayIndex+1}</div><div class="schedule-item-copy"><span class="activity-pill">${type.icon} ${esc(type.label)}</span><strong>${esc(a.titolo||type.label)}</strong><small>${a.ora?esc(String(a.ora).slice(0,5))+' · ':''}${esc(st?.nome||a.indirizzo||'Luogo non indicato')}</small></div></div>${ct?`<div class="schedule-next-visit"><strong>👤 ${esc(ct.nome)}</strong><p>${esc([ct.azienda,ct.ruolo,ct.telefono].filter(Boolean).join(' · '))}</p></div>`:''}${a.note?`<div class="schedule-next-visit"><p>${esc(a.note)}</p></div>`:''}<div class="actions schedule-item-actions">${r.dataset.routeAddress?'<button class="secondary" data-activity-map>Maps</button>':''}<button data-activity-done>✓ Eseguito</button>${admin()?'<button class="secondary" data-edit-activity>Modifica</button><button class="danger-btn" data-delete-activity>Elimina</button>':''}</div>`;
         r.querySelector('[data-activity-map]')?.addEventListener('click',()=>openActivityMaps(a,st));
         r.querySelector('[data-activity-done]')?.addEventListener('click',()=>completeScheduleActivity(a));
         r.querySelector('[data-edit-activity]')?.addEventListener('click',()=>openScheduleActivityDialog(s,a));
@@ -3292,7 +3277,7 @@ function renderSchedules(){
         c.appendChild(r);
       }
     }
-    enableScheduleDrag(c,s);
+    enableScheduleOrder(c,s);
     $('scheduleList').appendChild(c);
     hydrateScheduleTravel(c,currentScheduleTravelToken);
   }
@@ -5651,3 +5636,4 @@ window.OvergreenVoice?.init({
  async confirm(draft){if(!admin())throw Error('Accesso riservato');await adminOperation('schedule_create',draft);await loadAll()}
 });
 window.OvergreenVoice?.sync();
+

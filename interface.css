@@ -202,3 +202,12 @@ dialog :is(.picker,.reuse-schedule-stores){overscroll-behavior:contain}
  #app main .schedule-item-compact > .schedule-item-actions{display:flex!important;flex-wrap:wrap;align-items:stretch;gap:8px!important;margin-left:0}
  #app main .schedule-item-compact > .schedule-item-actions > button{flex:1 1 130px;width:auto;min-width:0;max-width:100%;height:auto;min-height:44px;white-space:normal;overflow-wrap:anywhere;line-height:1.35!important;margin:0;padding:10px 12px!important}
 }
+
+@media screen {
+ #app main .schedule-order-controls{display:grid;grid-template-columns:46px 46px minmax(0,1fr);gap:8px;margin:12px 0;padding:8px;background:#f1f6f3;border-radius:12px}
+ #app main .schedule-order-controls button{min-width:0;min-height:46px!important;white-space:normal;line-height:1.3!important;padding:8px!important}
+ #app main .schedule-order-controls button:not([data-order-position]){font-size:22px}
+ #app main .schedule-order-controls [data-order-position]{font-size:13px}
+ #app main .schedule-order-hint{padding:10px 16px;font-size:13px}
+ #scheduleOrderDialog .order-job-name{overflow-wrap:anywhere;font-weight:650}
+}

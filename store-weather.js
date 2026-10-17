@@ -88,7 +88,7 @@
     const rain=document.createElement('span');rain.className='weather-rain';rain.textContent=w.rain==null?'':`Precipitazioni ≈ ${w.rain.toLocaleString('it-IT')} mm${w.probability==null?'':` · prob. max ${Math.round(w.probability)}%`}`;node.appendChild(rain);
     const info=document.createElement('small');info.textContent=`${date.slice(8,10)}/${date.slice(5,7)} · ${w.partial?'Ore disponibili':'Previsione giornaliera'}${result.approximate?' · zona stimata':''}${result.stale?' · ultimo dato disponibile':''}`;node.appendChild(info);
     const button=document.createElement('button');button.type='button';button.className='weather-bands-button';button.textContent='Meteo e crescita erba ›';button.setAttribute('aria-label','Meteo per fascia oraria · '+(store.nome||'Punto vendita'));button.onclick=event=>{event.stopPropagation();openBands(store,date,result,options)};node.appendChild(button);
-    if(options.loadGrowth&&typeof OvergreenGrassGrowth!=='undefined'){const growth=document.createElement('div');node.insertBefore(growth,button);void OvergreenGrassGrowth.mount(growth,store,date,result,options,true)}
+    if(options.loadGrowth&&typeof OvergreenGrassGrowth!=='undefined'){const growth=document.createElement('div');growth.className='weather-growth';node.insertBefore(growth,button);void OvergreenGrassGrowth.mount(growth,store,date,result,options,true)}
     node.title='Condizione più significativa nelle ore previste. Temperature e precipitazioni aggregate da Overgreen; accumuli ripartiti tra le giornate. Aggiornamento: '+(w.updated?new Date(w.updated).toLocaleString('it-IT',{timeZone:'Europe/Rome'}):'non disponibile');
    }catch(e){node.className='store-weather is-unavailable';node.textContent=e?.message==='location'?'📍 Meteo: verifica la posizione della sede':'☁️ Meteo non disponibile';node.title='La programmazione rimane disponibile. Riapri la Dashboard per riprovare.'}
   };
@@ -98,3 +98,4 @@
  }
  const api={summarize,condition,mount,openBands,bands};if(typeof module==='object'&&module.exports)module.exports=api;else root.OvergreenWeather=api;
 })(typeof window!=='undefined'?window:globalThis);
+

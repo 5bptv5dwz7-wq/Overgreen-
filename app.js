@@ -1,4 +1,4 @@
-const APP_VERSION='V259';
+const APP_VERSION='V260';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -858,6 +858,7 @@ async function syncPhotoMetadata(id,status=null,error=null,notified=false){
   return r;
 }
 async function loadAll(){
+  if(pendingRefreshPromise)try{await pendingRefreshPromise}catch{}
   if(loadAllPromise)return loadAllPromise;
   loadAllPromise=(async()=>{
   const loadStarted=performance.now();
@@ -2575,22 +2576,35 @@ function openHistoryEdit(i){
   renderHistoryEditPhotoManager(i.id);openDialog('historyEditDialog');
 }
 async function workerNames(interventionId){const {data}=await sb.from('intervention_workers').select('profile_id').eq('intervention_id',interventionId);return (data||[]).map(x=>profiles.find(p=>p.id===x.profile_id)?.nome).filter(Boolean)}
+let pendingRefreshPromise=null;
 async function refreshPendingData(){
   if(!admin())return;
-  $('pendingList').innerHTML='<p class="muted">Aggiornamento interventi e foto…</p>';
-  const [ir,ar,er,ewr]=await Promise.all([
-    readAllRows('interventions',q=>q.order('created_at',{ascending:false})),
-    readAllRows('attachments',q=>q.order('created_at',{ascending:false})),
-    readAllRows('extras',q=>q.order('giorno_intervento')),
-    readAllRows('extra_workers',q=>q,['extra_id','profile_id'])
-  ]);
-  if(ir.error)throw ir.error;if(ar.error)throw ar.error;if(er.error)throw er.error;if(ewr.error)throw ewr.error;
-  interventions=ir.data||[];attachments=ar.data||[];extras=er.data||[];extraWorkers=ewr.data||[];
-  await renderPending();renderDashboard();renderSchedules();
+  if(loadAllPromise)return loadAllPromise;
+  if(pendingRefreshPromise)return pendingRefreshPromise;
+  const list=$('pendingList');
+  if(!list.children.length)list.innerHTML='<p class="muted">Aggiornamento interventi e foto…</p>';
+  list.setAttribute('aria-busy','true');
+  pendingRefreshPromise=(async()=>{
+    const [ir,ar,er,ewr,iwr]=await Promise.all([
+      readAllRows('interventions',q=>q.order('created_at',{ascending:false})),
+      readAllRows('attachments',q=>q.order('created_at',{ascending:false})),
+      readAllRows('extras',q=>q.order('giorno_intervento')),
+      readAllRows('extra_workers',q=>q,['extra_id','profile_id']),
+      readAllRows('intervention_workers',q=>q,['intervention_id','profile_id'])
+    ]);
+    for(const r of [ir,ar,er,ewr,iwr])if(r.error)throw r.error;
+    interventions=ir.data||[];attachments=ar.data||[];extras=er.data||[];extraWorkers=ewr.data||[];interventionWorkers=iwr.data||[];
+    renderPending();renderDashboard();renderSchedules();
+  })();
+  try{return await pendingRefreshPromise}finally{pendingRefreshPromise=null;list.removeAttribute('aria-busy')}
 }
 async function openPendingDialog(){
   openDialog('pendingDialog');
-  try{await refreshPendingData()}catch(err){console.error(err);$('pendingList').innerHTML=`<p class="muted">Impossibile aggiornare le convalide: ${esc(err.message||String(err))}</p>`}
+  try{await refreshPendingData()}catch(err){
+    console.error(err);
+    if(!$('pendingList').querySelector('.pending-review'))$('pendingList').innerHTML='<p class="muted">Impossibile aggiornare le convalide. Chiudi e riapri per riprovare.</p>';
+    toast('Aggiornamento convalide non riuscito: '+(err.message||String(err)));
+  }
 }
 
 async function recoverInterventionPhotosFromStorage(i,button=null){
@@ -2656,28 +2670,38 @@ async function recoverInterventionPhotosFromStorage(i,button=null){
   }
 }
 
-async function renderPending(){
+// Build every card synchronously; photo requests may only update their own slots.
+function hydratePendingPhotos(card,pics){
+  const box=card.querySelector('[data-pending-photos], [data-extra-photos]');
+  box.innerHTML='';
+  for(const a of pics){
+    const slot=document.createElement('button');
+    slot.type='button';slot.className='pending-review-photo';slot.disabled=true;
+    slot.textContent='Caricamento foto…';box.appendChild(slot);
+    signedAttachmentUrl(a).then(url=>{
+      if(!card.isConnected)return;
+      slot.innerHTML=`<img src="${url}" alt="${esc(a.nome_file||'Foto intervento')}" loading="lazy"><span>Apri</span>`;
+      slot.disabled=false;slot.onclick=()=>window.open(url,'_blank');
+    }).catch(()=>{if(card.isConnected)slot.textContent='Foto non disponibile'});
+  }
+}
+function renderPending(){
   const p=interventions.filter(i=>i.stato==='in_attesa'&&!i.multi_day_open),pendingExtras=extras.filter(e=>e.stato==='in_attesa'&&!isIntesaOrdinaryTicket(e));
   const total=p.length+pendingExtras.length;$('pendingBadge').textContent=total;$('pendingBadge').classList.toggle('hidden',!total);$('pendingList').innerHTML='';
   if(!total){$('pendingList').innerHTML='<p class="muted">Nessun lavoro da convalidare.</p>';return}
   for(const i of p){
-    const s=stores.find(x=>x.id===i.store_id),names=await workerNames(i.id),pics=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica'),expected=Math.max(0,Number(i.foto_attese)||0),syncPending=expected>pics.length;
+    const s=stores.find(x=>x.id===i.store_id),names=interventionWorkers.filter(w=>w.intervention_id===i.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean),pics=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica'),expected=Math.max(0,Number(i.foto_attese)||0),syncPending=expected>pics.length;
     const c=document.createElement('article');c.className='card pending pending-review';
     c.innerHTML=`<div class="pending-review-head"><div><h3>${esc(s?.nome||'Intervento')}</h3><p class="muted">${fmt(i.data_intervento)} · 🕒 ${esc(closureText(i))}</p></div><span class="badge-state">In attesa</span></div><div class="pending-review-section"><strong>Chi ha eseguito</strong><p>${names.length?names.map(esc).join(' · '):'Operatore non indicato'}</p></div><div class="pending-review-section"><strong>Note del dipendente</strong><div class="history-note ${i.note?'':'muted'}">${esc(i.note||'Nessuna nota inserita')}</div>${i.next_visit_note?`<div class="pending-next-visit"><strong>⚠️ Da riportare al prossimo passaggio</strong>${esc(i.next_visit_note)}</div>`:''}</div><div class="pending-review-section"><div class="pending-photo-head"><strong>Foto allegate</strong><span>${expected?`${pics.length}/${expected}`:pics.length}</span></div>${syncPending?`<div class="pending-next-visit"><strong>☁️ Foto mancanti</strong>Ricevute ${pics.length} di ${expected}.${i.photo_upload_error?' '+esc(i.photo_upload_error):Date.now()-new Date(i.closed_at||i.created_at).getTime()>600000?' L’invio è fermo da oltre 10 minuti: verifica la sincronizzazione sul telefono del dipendente.':' In attesa della conferma di ricezione.'} Puoi cercare le foto nello Storage oppure forzare la convalida indicando il motivo.</div>`:''}<div class="pending-review-photos" data-pending-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div><div class="actions">${syncPending?'<button type="button" class="secondary" data-recover-storage>🔎 Cerca foto nello Storage</button>':''}${syncPending&&admin()?'<button type="button" class="secondary" data-force-approve>Forza convalida · foto mancanti</button>':''}<button data-ok ${syncPending?'disabled':''}>${syncPending?'Attendo foto…':'Convalida'}</button><button class="danger-btn" data-no>Rifiuta</button></div>`;
     c.querySelector('[data-force-approve]')?.addEventListener('click',()=>forceApproveIntervention(i));
     c.querySelector('[data-recover-storage]')?.addEventListener('click',e=>recoverInterventionPhotosFromStorage(i,e.currentTarget));c.querySelector('[data-ok]').onclick=()=>approveIntervention(i);c.querySelector('[data-no]').onclick=()=>rejectIntervention(i);$('pendingList').appendChild(c);
-    if(pics.length){
-      const box=c.querySelector('[data-pending-photos]');box.innerHTML='';
-      const urls=await Promise.all(pics.map(async a=>{try{return {a,url:await signedAttachmentUrl(a)}}catch{return null}}));
-      for(const x of urls.filter(Boolean)){const b=document.createElement('button');b.type='button';b.className='pending-review-photo';b.innerHTML=`<img src="${x.url}" alt="${esc(x.a.nome_file||'Foto intervento')}" loading="lazy"><span>Apri</span>`;b.onclick=()=>window.open(x.url,'_blank');box.appendChild(b)}
-      if(!box.children.length)box.innerHTML='<p class="muted">Foto non disponibile. Premi Aggiorna e riprova.</p>';
-    }
+    if(pics.length)hydratePendingPhotos(c,pics);
   }
   for(const e of pendingExtras){
     const st=stores.find(x=>x.id===e.store_id),names=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean),pics=attachments.filter(a=>a.extra_id===e.id&&a.tipo==='foto_generica'),re=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),ro=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen');
     const c=document.createElement('article');c.className='card pending pending-review';
     c.innerHTML=`<div class="pending-review-head"><div><h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3><p class="muted">${fmt(e.giorno_intervento)} · ${esc(e.titolo)} · 🕒 ${esc(closureText(e))}</p></div><span class="badge-state">In attesa</span></div><div class="pending-review-section"><strong>Chi ha eseguito</strong><p>${names.length?names.map(esc).join(' · '):'Operatore non indicato'}</p></div><div class="pending-review-section"><strong>Note finali</strong><div class="history-note ${e.note_lorenzo?'':'muted'}">${esc(e.note_lorenzo||'Nessuna nota inserita')}</div></div><div class="pending-review-section"><div class="pending-photo-head"><strong>Foto allegate</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-extra-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div><div class="actions">${re?'<button class="secondary" data-re>File Eurospin</button>':'<span class="muted">File Eurospin mancante</span>'}${ro?'<button class="secondary" data-ro>File Overgreen</button>':'<span class="muted">File Overgreen mancante</span>'}<button data-ok>Convalida</button></div>`;
-    c.querySelector('[data-re]')?.addEventListener('click',()=>openAttachment(re));c.querySelector('[data-ro]')?.addEventListener('click',()=>openAttachment(ro));c.querySelector('[data-ok]').onclick=()=>approveExtra(e);$('pendingList').appendChild(c);if(pics.length)hydrateExtraPhotos(c,pics);
+    c.querySelector('[data-re]')?.addEventListener('click',()=>openAttachment(re));c.querySelector('[data-ro]')?.addEventListener('click',()=>openAttachment(ro));c.querySelector('[data-ok]').onclick=()=>approveExtra(e);$('pendingList').appendChild(c);if(pics.length)hydratePendingPhotos(c,pics);
   }
 }
 // V196: i cambi di stato collegati sono una sola transazione server.

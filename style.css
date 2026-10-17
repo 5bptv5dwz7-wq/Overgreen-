@@ -367,3 +367,25 @@
 #savedRouteWeatherDialog .route-weather-detail summary{padding:4px 0;font-size:.7rem}
 #savedRouteWeatherDialog .route-weather-footnote{font-size:.66rem}
 }
+
+
+/* v262 — ripristina il meteo su una sola riga come nella v254 */
+@media(max-width:700px){
+#savedRouteWeatherDialog .route-weather-day-main{
+ display:grid!important;
+ grid-template-columns:minmax(0,1.3fr) minmax(0,.85fr) minmax(0,.75fr) auto!important;
+ align-items:center;gap:5px;
+}
+#savedRouteWeatherDialog .route-weather-day-main>*{min-width:0;max-width:100%}
+#savedRouteWeatherDialog .route-weather-pick{
+ grid-column:4!important;grid-row:1!important;
+ display:inline-flex!important;align-items:center;justify-content:center;
+ width:auto!important;max-width:none!important;min-width:0!important;
+ margin:0!important;white-space:nowrap;padding:6px 8px!important;
+ font-size:.76rem!important;min-height:34px!important;
+}
+#savedRouteWeatherDialog .route-weather-date{grid-column:1;grid-row:1}
+#savedRouteWeatherDialog .route-weather-stats:nth-child(2){grid-column:2;grid-row:1}
+#savedRouteWeatherDialog .route-weather-stats:nth-child(3){grid-column:3;grid-row:1}
+#savedRouteWeatherDialog .route-weather-score{display:none}
+}

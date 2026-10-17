@@ -1,4 +1,6 @@
-const APP_VERSION='V247';
+const APP_VERSION='V248';
+// The badge always reflects the JavaScript actually loaded on this device.
+if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  validateExtraDateOperation(operation,payload);

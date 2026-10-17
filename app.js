@@ -2783,12 +2783,79 @@ function renderSavedRoutes(){
   for(const route of savedRoutes){
     const items=savedRouteItems.filter(i=>i.route_id===route.id).sort((a,b)=>(a.posizione||0)-(b.posizione||0)),names=(route.member_ids||[]).map(id=>profiles.find(p=>p.id===id)?.nome).filter(Boolean);
     const c=document.createElement('article');c.className='card saved-route-card';c.innerHTML=`<div class="schedule-history-head"><div><h3>${esc(route.nome)}</h3><p class="muted">${esc(names.join(' + ')||'Squadra da scegliere')}</p></div><strong>${items.length} sedi</strong></div>${route.nota?`<p class="muted">${esc(route.nota)}</p>`:''}<div class="schedule-history-stores">${items.slice(0,8).map(i=>stores.find(st=>st.id===i.store_id)).filter(Boolean).map(st=>`<span>${esc(st.nome)}</span>`).join('')}${items.length>8?`<span>+${items.length-8}</span>`:''}</div><div class="actions"><button data-use>Usa giro</button><button class="danger-btn" data-delete>Elimina</button></div>`;
-    c.querySelector('[data-use]').onclick=()=>openReuseScheduleDialog({type:'route',id:route.id});
+    c.querySelector('[data-use]').onclick=()=>openSavedRouteWeather(route);
     c.querySelector('[data-delete]').onclick=()=>deleteSavedRoute(route);
     root.appendChild(c);
   }
 }
 async function deleteSavedRoute(route){if(!admin()||!route||!confirm(`Eliminare il giro “${route.nome}”?`))return;const {error}=await sb.from('saved_routes').delete().eq('id',route.id);if(error)return alert(error.message);toast('Giro eliminato');await loadAll();renderSavedRoutes()}
+
+let savedRouteWeatherToken=0;
+function savedRouteNextDate(offset){
+  const date=new Date();date.setHours(12,0,0,0);date.setDate(date.getDate()+offset);
+  return [date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
+}
+function scoreRouteWeather(summary){
+  if(!summary)return null;
+  const rain=summary.rain,prob=summary.probability,rank=summary.condition?.rank??-1;
+  if(rank>=5||rank===7||rain>=8||prob>=85)return 0;
+  if(rank>=4||rain>=3||prob>=65)return 1;
+  if(rank>=3||rain>=0.7||prob>=40)return 2;
+  return 3;
+}
+async function openSavedRouteWeather(route){
+  if(!admin()||!route)return;
+  const token=++savedRouteWeatherToken;
+  const old=document.getElementById('savedRouteWeatherDialog');if(old)old.remove();
+  const dlg=document.createElement('dialog');dlg.id='savedRouteWeatherDialog';dlg.className='wide-dialog';
+  dlg.innerHTML='<div class="dialog-body"><div class="dialog-head"><div><span class="eyebrow">PREVISIONI · 7 GIORNI</span><h2></h2></div><button type="button" class="secondary" data-weather-close>×</button></div><p class="muted" data-weather-progress>Caricamento delle previsioni di tutte le sedi…</p><div class="route-weather-days" data-weather-days></div><p class="muted">Valutazione indicativa per lavori esterni dalle 06:00 alle 18:00, basata sulle previsioni MET Norway. Non considera portanza del terreno, irrigazione o vincoli operativi. Seleziona una data per scegliere la squadra e confermare la programmazione.</p><small class="muted">Fonte: MET Norway · CC BY 4.0</small></div>';
+  dlg.querySelector('h2').textContent=route.nome;
+  dlg.querySelector('[data-weather-close]').onclick=()=>dlg.close();
+  dlg.addEventListener('close',()=>{savedRouteWeatherToken++;dlg.remove()});
+  document.body.appendChild(dlg);dlg.showModal();
+  const ids=[...new Set(savedRouteItems.filter(i=>i.route_id===route.id).map(i=>i.store_id))];
+  const locations=ids.map(id=>stores.find(st=>st.id===id)).filter(Boolean);
+  const dates=Array.from({length:7},(_,i)=>savedRouteNextDate(i));
+  const forecastRows=new Map();
+  const progress=dlg.querySelector('[data-weather-progress]');
+  const days=dlg.querySelector('[data-weather-days]');
+  function render(){
+    if(token!==savedRouteWeatherToken||!dlg.isConnected)return;
+    days.innerHTML='';
+    for(const date of dates){
+      const known=locations.map(st=>({store:st,data:forecastRows.get(st.id)}));
+      const evaluated=known.map(row=>row.data?.forecast?scoreRouteWeather(OvergreenWeather.summarize(row.data.forecast,date,{from:6,to:18})):null);
+      const count=evaluated.filter(x=>x!==null).length;
+      const good=evaluated.filter(x=>x>=2).length;
+      const poor=evaluated.filter(x=>x<=1).length;
+      const label=!count?'Dati non disponibili':poor===0&&count===locations.length?'Favorevole':poor>=Math.ceil(count/2)?'Sconsigliata':'Da valutare';
+      const card=document.createElement('button');card.type='button';card.className='route-weather-day';
+      const d=new Date(date+'T12:00:00');
+      const title=d.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'short'});
+      const unknown=locations.length-count;
+      const details=known.map((row,i)=>{
+        const w=row.data?.forecast?OvergreenWeather.summarize(row.data.forecast,date,{from:6,to:18}):null;
+        return w?row.store.nome+': '+w.condition.icon+' '+(w.rain==null?'pioggia n/d':w.rain.toLocaleString('it-IT')+' mm'):(row.store.nome+': meteo n/d');
+      });
+      card.innerHTML='<strong></strong><span></span><small></small>';
+      card.querySelector('strong').textContent=title.charAt(0).toUpperCase()+title.slice(1);
+      card.querySelector('span').textContent=label;
+      card.querySelector('small').textContent=good+' sedi favorevoli · '+poor+' critiche'+(unknown?' · '+unknown+' senza dati':'');
+      card.title=details.join('\n');
+      card.onclick=()=>{if(token!==savedRouteWeatherToken)return;dlg.close();openReuseScheduleDialog({type:'route',id:route.id});$('reuseScheduleDate').value=date;};
+      days.appendChild(card);
+    }
+  }
+  render();
+  if(!locations.length){progress.textContent='Nessuna sede valida nel giro.';return}
+  let done=0;
+  await Promise.all(locations.map(async st=>{
+    try{forecastRows.set(st.id,await loadStoreWeather(st))}catch{forecastRows.set(st.id,{error:true})}
+    done++;
+    if(token===savedRouteWeatherToken){progress.textContent=done===locations.length?'Analisi completata · '+done+' sedi controllate':'Previsioni caricate: '+done+' / '+locations.length+' sedi';render()}
+  }));
+}
+
 let reuseScheduleSource=null,reuseScheduleSelected=new Set();
 function openReuseScheduleDialog(source){
   if(!admin())return;reuseScheduleSource=source;reuseScheduleSelected=new Set();$('reuseScheduleForm').reset();$('reuseScheduleDate').value=tomorrow();if($('reuseScheduleAutoRollover'))$('reuseScheduleAutoRollover').checked=true;

@@ -1,4 +1,4 @@
-const APP_VERSION='V250';
+const APP_VERSION='V254';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -2808,7 +2808,7 @@ async function openSavedRouteWeather(route){
   const token=++savedRouteWeatherToken;
   const old=document.getElementById('savedRouteWeatherDialog');if(old)old.remove();
   const dlg=document.createElement('dialog');dlg.id='savedRouteWeatherDialog';dlg.className='wide-dialog';
-  dlg.innerHTML='<div class="dialog-body"><div class="dialog-head"><div><span class="eyebrow">PREVISIONI · 7 GIORNI</span><h2></h2></div><button type="button" class="secondary" data-weather-close>×</button></div><p class="muted" data-weather-progress>Caricamento delle previsioni di tutte le sedi…</p><div class="route-weather-days" data-weather-days></div><p class="muted">Valutazione indicativa per lavori esterni dalle 06:00 alle 18:00, basata sulle previsioni MET Norway. Non considera portanza del terreno, irrigazione o vincoli operativi. Seleziona una data per scegliere la squadra e confermare la programmazione.</p><small class="muted">Fonte: MET Norway · CC BY 4.0</small></div>';
+  dlg.innerHTML='<div class="dialog-body"><div class="dialog-head"><div><span class="eyebrow">PREVISIONI · 7 GIORNI</span><h2></h2></div><button type="button" class="secondary" data-weather-close>×</button></div><p class="route-weather-progress" data-weather-progress>Caricamento meteo…</p><div class="route-weather-days" data-weather-days></div><p class="route-weather-footnote">Stima per lavori esterni, ore 06–18. Tocca una giornata per scegliere squadra e programmazione. Il meteo non valuta la portanza del terreno. Fonte: MET Norway · CC BY 4.0.</p></div>';
   dlg.querySelector('h2').textContent=route.nome;
   dlg.querySelector('[data-weather-close]').onclick=()=>dlg.close();
   dlg.addEventListener('close',()=>{savedRouteWeatherToken++;dlg.remove()});
@@ -2824,25 +2824,24 @@ async function openSavedRouteWeather(route){
     days.innerHTML='';
     for(const date of dates){
       const known=locations.map(st=>({store:st,data:forecastRows.get(st.id)}));
-      const evaluated=known.map(row=>row.data?.forecast?scoreRouteWeather(OvergreenWeather.summarize(row.data.forecast,date,{from:6,to:18})):null);
+      const summaries=known.map(row=>row.data?.forecast?OvergreenWeather.summarize(row.data.forecast,date,{from:6,to:18}):null);
+      const evaluated=summaries.map(scoreRouteWeather);
       const count=evaluated.filter(x=>x!==null).length;
       const good=evaluated.filter(x=>x>=2).length;
       const poor=evaluated.filter(x=>x<=1).length;
-      const label=!count?'Dati non disponibili':poor===0&&count===locations.length?'Favorevole':poor>=Math.ceil(count/2)?'Sconsigliata':'Da valutare';
-      const card=document.createElement('button');card.type='button';card.className='route-weather-day';
-      const d=new Date(date+'T12:00:00');
-      const title=d.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'short'});
       const unknown=locations.length-count;
-      const details=known.map((row,i)=>{
-        const w=row.data?.forecast?OvergreenWeather.summarize(row.data.forecast,date,{from:6,to:18}):null;
-        return w?row.store.nome+': '+w.condition.icon+' '+(w.rain==null?'pioggia n/d':w.rain.toLocaleString('it-IT')+' mm'):(row.store.nome+': meteo n/d');
-      });
-      card.innerHTML='<strong></strong><span></span><small></small>';
-      card.querySelector('strong').textContent=title.charAt(0).toUpperCase()+title.slice(1);
-      card.querySelector('span').textContent=label;
-      card.querySelector('small').textContent=good+' sedi favorevoli · '+poor+' critiche'+(unknown?' · '+unknown+' senza dati':'');
-      card.title=details.join('\n');
-      card.onclick=()=>{if(token!==savedRouteWeatherToken)return;dlg.close();openReuseScheduleDialog({type:'route',id:route.id});$('reuseScheduleDate').value=date;};
+      const label=!count?'Dati mancanti':poor===0&&count===locations.length?'Buona':poor>=Math.ceil(count/2)?'Critica':'Variabile';
+      const icon=!count?'❔':poor===0&&count===locations.length?'☀️':poor>=Math.ceil(count/2)?'🌧️':'🌦️';
+      const rain=summaries.map(w=>w?.rain).filter(v=>Number.isFinite(v));
+      const temp=summaries.map(w=>w?.max).filter(v=>Number.isFinite(v));
+      const meanRain=rain.length?(rain.reduce((a,b)=>a+b,0)/rain.length).toFixed(1).replace('.',',')+' mm':'n/d';
+      const temps=temp.length?Math.round(Math.min(...temp))+'–'+Math.round(Math.max(...temp))+'°':'n/d';
+      const card=document.createElement('div');card.className='route-weather-day'+(poor>=Math.ceil(Math.max(1,count))?' is-critical':good===locations.length?' is-good':'');
+      const d=new Date(date+'T12:00:00');
+      const title=d.toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'});
+      const detailRows=known.map((row,i)=>{const w=summaries[i];return '<li><span>'+esc(row.store.nome)+'</span><span>'+(w?esc(w.condition.icon+' '+(w.rain==null?'pioggia n/d':w.rain.toLocaleString('it-IT')+' mm')+' · '+w.min+'–'+w.max+'°'):'n/d')+'</span></li>'}).join('');
+      card.innerHTML='<div class="route-weather-day-main"><div class="route-weather-date"><strong>'+esc(title)+'</strong><span>'+icon+' '+label+'</span></div><div class="route-weather-stats"><strong>'+meanRain+'</strong><small>pioggia media</small></div><div class="route-weather-stats"><strong>'+temps+'</strong><small>max sedi</small></div><div class="route-weather-score">'+good+'/'+locations.length+' <small>favorevoli</small></div><button type="button" class="route-weather-pick">Scegli <span aria-hidden="true">›</span></button></div><details class="route-weather-detail"><summary>Dettaglio sedi · '+poor+' critiche'+(unknown?' · '+unknown+' senza dati':'')+'</summary><ul>'+detailRows+'</ul></details>';
+      card.querySelector('.route-weather-pick').onclick=()=>{if(token!==savedRouteWeatherToken)return;dlg.close();openReuseScheduleDialog({type:'route',id:route.id});$('reuseScheduleDate').value=date;};
       days.appendChild(card);
     }
   }

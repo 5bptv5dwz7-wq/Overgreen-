@@ -155,7 +155,12 @@ const ExtraHoursUi=(()=>{
       }else if(isImage){
         const img=document.createElement('img');s.image=img;img.alt='Rapportino Eurospin';
         img.onload=()=>{if(!current(s))return;el('extraHoursPreviewStatus').textContent='Rapportino Eurospin · usa i pulsanti per ingrandire';controls(s)};
-        img.onerror=()=>{if(current(s))el('extraHoursPreviewStatus').textContent='Immagine non visualizzabile. Usa Apri originale.'};
+        let retried=false;
+        img.onerror=async()=>{
+          if(!current(s))return;
+          if(!retried){retried=true;try{const fresh=await signedAttachmentUrl(s.report,{refresh:true});if(current(s))img.src=fresh;return}catch{}}
+          if(current(s))el('extraHoursPreviewStatus').textContent='Immagine non visualizzabile. Usa Apri originale.';
+        };
         img.src=url;el('extraHoursCanvas').replaceChildren(img);await render(s);
       }else throw new Error('Unsupported preview');
     }catch(error){if(current(s))el('extraHoursPreviewStatus').textContent='Anteprima non disponibile. Puoi usare Apri originale e inserire le ore manualmente.'}

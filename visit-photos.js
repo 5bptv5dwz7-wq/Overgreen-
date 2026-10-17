@@ -1,18 +1,5 @@
 let visitPhotoHydrationQueued=false;
-const visitPhotoUrls=new Map();
-async function visitPhotoUrl(path,refresh=false){
- if(!path)throw Error('Percorso foto non disponibile');
- const key=`${profile?.id||''}:${path}`;
- if(refresh)visitPhotoUrls.delete(key);
- let entry=visitPhotoUrls.get(key);
- if(!entry||entry.until<Date.now()){
-  entry={until:Date.now()+480000};
-  entry.promise=signedAttachmentUrl({storage_path:path}).catch(error=>{if(visitPhotoUrls.get(key)===entry)visitPhotoUrls.delete(key);throw error});
-  if(visitPhotoUrls.size>=150)visitPhotoUrls.delete(visitPhotoUrls.keys().next().value);
-  visitPhotoUrls.set(key,entry);
- }
- return entry.promise;
-}
+function visitPhotoUrl(path,refresh=false){return signedAttachmentUrl({storage_path:path},{refresh})}
 function loadVisitPhoto(img,path){
  const request=String(Number(img.dataset.photoRequest||0)+1);img.dataset.photoRequest=request;
  img.loading='eager';img.decoding='async';img.style.minHeight='115px';
@@ -29,7 +16,7 @@ function visitPhotosMarkup(item){
  if(!visitPhotoHydrationQueued){visitPhotoHydrationQueued=true;queueMicrotask(()=>{visitPhotoHydrationQueued=false;hydrateVisitPhotos()})}
  return `<section class="visit-photo-panel"><strong>📷 FOTO E INDICAZIONI PER QUESTO PASSAGGIO</strong><div class="visit-photo-previews">${photos.map(p=>`<button type="button" class="visit-photo-thumb" data-visit-photos="${esc(item.id)}"><img data-visit-photo-path="${esc(p.path)}" alt="${esc(p.caption||'Indicazione fotografica')}" loading="eager"><span>${esc(p.caption||'Foto annotata · apri')}</span></button>`).join('')}</div></section>`;
 }
-function hydrateVisitPhotos(){document.querySelectorAll('img[data-visit-photo-path]:not([src])').forEach(img=>{if(img.dataset.loading)return;img.dataset.loading='1';loadVisitPhoto(img,img.dataset.visitPhotoPath)})}
+function hydrateVisitPhotos(){document.querySelectorAll('img[data-visit-photo-path]:not([src])').forEach(img=>{if(img.dataset.loading)return;img.dataset.loading='1';attachmentVisibility.observe(img,()=>loadVisitPhoto(img,img.dataset.visitPhotoPath))})}
 async function openVisitPhotos(item){
  if(!item)return;let dialog=$('visitPhotosDialog');if(dialog)dialog.remove();
  dialog=document.createElement('dialog');dialog.id='visitPhotosDialog';dialog.className='visit-photos-dialog';

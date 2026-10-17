@@ -1,4 +1,4 @@
-const APP_VERSION='V269';
+const APP_VERSION='V270';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -1316,7 +1316,31 @@ async function storeArchiveFiles(storeId){
   return out;
 }
 function archiveKind(a){return a.tipo_archivio||((String(a.storage_path||'').includes('/planimetria/'))?'planimetria':String(a.storage_path||'').includes('/foto/')?'foto':'')}
-async function signedAttachmentUrl(a){const {data,error}=await sb.storage.from('documenti').createSignedUrl(a.storage_path,600);if(error)throw error;return data.signedUrl}
+function attachmentMediaScope(){return session?.user?.id&&profile?.id?`${session.user.id}:${profile.id}:${profile.ruolo}:${profile.attivo}`:''}
+const attachmentUrls=window.OvergreenMedia.createUrlCache({getScope:attachmentMediaScope,sign:async path=>{
+  const {data,error}=await sb.storage.from('documenti').createSignedUrl(path,600);
+  if(error)throw error;return data?.signedUrl;
+}});
+const attachmentVisibility=window.OvergreenMedia.createVisibilityLoader({IntersectionObserver:window.IntersectionObserver,MutationObserver:window.MutationObserver,document});
+function signedAttachmentUrl(a,options){return attachmentUrls.get(a.storage_path,options)}
+function mountAttachmentPhoto(button,a,caption='Apri'){
+  const actor=attachmentMediaScope();let request=0;
+  button.type='button';button.innerHTML='<span class="sheet-photo-placeholder">📷</span>';
+  const label=document.createElement('small');label.textContent=caption;button.append(label);
+  const valid=()=>button.isConnected&&attachmentMediaScope()===actor;
+  const load=async(refresh=false,retried=false)=>{
+    if(!valid())return;const token=++request;button.onclick=()=>openAttachment(a);
+    try{
+      const url=await signedAttachmentUrl(a,{refresh});if(!valid()||token!==request)return;
+      const img=document.createElement('img');img.alt=a.nome_file||'Foto';img.loading='eager';img.decoding='async';
+      img.onerror=()=>{if(!valid()||token!==request)return;if(!retried)void load(true,true);else failed()};
+      img.src=url;button.replaceChildren(img,label);
+    }catch{if(valid()&&token===request)failed();}
+  };
+  const failed=()=>{button.replaceChildren(document.createTextNode('Foto non disponibile · tocca per riprovare'),label);button.onclick=()=>load(true,true)};
+  button.onclick=()=>openAttachment(a);
+  attachmentVisibility.observe(button,()=>void load());
+}
 async function openArchiveAttachment(a){try{window.open(await signedAttachmentUrl(a),'_blank')}catch(err){alert(err.message)}}
 async function deleteArchiveAttachment(a,store){if(!admin()||!confirm(`Eliminare definitivamente “${a.nome_file||'questo file'}”?`))return;const r=await sb.storage.from('documenti').remove([a.storage_path]);if(r.error)return alert(r.error.message);toast('File eliminato');await showStoreDetail(stores.find(x=>x.id===store.id)||store)}
 async function uploadStoreArchiveFiles(store,kind,files){
@@ -1342,16 +1366,14 @@ async function showStoreDetail(s){
   try{
     const archive=await storeArchiveFiles(s.id);
     if(request!==storeDetailRequest||!dialog.open||profile?.id!==actor)return;
-    const active=body.querySelector('[data-sheet-tab].active')?.dataset.sheetTab;
-    const scroll=dialog.scrollTop;
-    renderStoreDetail(s,archive);
-    if(active)body.querySelector(`[data-sheet-tab="${active}"]`)?.click();
-    dialog.scrollTop=scroll;
+    // Update only archive slots; never replace tabs or already-loading photos.
+    renderStoreDetail(s,archive,true);
+    notice.remove();
   }catch(error){
     if(request===storeDetailRequest&&dialog.open)notice.textContent='Archivio non disponibile. Chiudi e riapri la scheda per riprovare.';
   }
 }
-function renderStoreDetail(s,archive){
+function renderStoreDetail(s,archive,archiveOnly=false){
   const rows=interventions.filter(i=>i.store_id===s.id&&!i.multi_day_open).sort((a,b)=>String(interventionEndDate(b)).localeCompare(String(interventionEndDate(a))));
   const ex=extras.filter(e=>e.store_id===s.id).sort((a,b)=>String(b.giorno_intervento).localeCompare(String(a.giorno_intervento)));
   const plans=archive.filter(a=>archiveKind(a)==='planimetria');
@@ -1383,6 +1405,7 @@ function renderStoreDetail(s,archive){
   const extraStatus=e=>e.stato==='completato'?'Completato':e.stato==='in_attesa'?'In attesa':e.stato==='rifiutato'?'Rifiutato':'Aperto';
   const attachmentLabel=a=>({pdf_richiesta:'Richiesta extra',rapportino_eurospin:'File Eurospin',rapportino_overgreen:'File Overgreen'}[a.tipo]||a.nome_file||'Documento');
 
+  if(!archiveOnly){
   $('storeDetailBody').innerHTML=`
     <div class="store-sheet-hero">
       <div><span class="store-state ${state}">${stateLabel}</span>${clientBadge(s)}<h3>${esc(s.nome)}</h3><p>${esc([s.indirizzo,s.citta].filter(Boolean).join(', ')||'Indirizzo non inserito')}</p></div>
@@ -1405,7 +1428,7 @@ function renderStoreDetail(s,archive){
     <section class="store-sheet-panel" data-sheet-panel="overview">
       <h3>Note permanenti</h3><div class="detail-note">${esc(s.note||'Nessuna nota permanente inserita.')}</div>
       <div class="sheet-two-columns">
-        <div><h3>Riepilogo attività</h3><div class="sheet-kpi-list"><p><strong>${rows.filter(x=>x.stato==='convalidato').length}</strong><span>interventi convalidati</span></p><p><strong>${ex.filter(x=>x.stato==='completato').length}</strong><span>extra completati</span></p><p><strong>${allPhotos.length}</strong><span>foto archiviate</span></p><p><strong>${documents.length+plans.length}</strong><span>documenti disponibili</span></p></div></div>
+        <div><h3>Riepilogo attività</h3><div class="sheet-kpi-list"><p><strong>${rows.filter(x=>x.stato==='convalidato').length}</strong><span>interventi convalidati</span></p><p><strong>${ex.filter(x=>x.stato==='completato').length}</strong><span>extra completati</span></p><p><strong data-sheet-photo-count>${allPhotos.length}</strong><span>foto archiviate</span></p><p><strong data-sheet-document-count>${documents.length+plans.length}</strong><span>documenti disponibili</span></p></div></div>
         <div><h3>Ultime attività</h3><div class="sheet-mini-list">${[
           ...rows.slice(0,3).map(i=>({date:i.data_intervento,title:'Intervento ordinario',sub:i.note||historyStatusLabel(i.stato)})),
           ...ex.slice(0,3).map(e=>({date:e.giorno_intervento,title:'Extra · '+e.titolo,sub:extraStatus(e)}))
@@ -1445,11 +1468,34 @@ function renderStoreDetail(s,archive){
   body.querySelector('[data-upload-photo]')?.addEventListener('change',e=>uploadStoreArchiveFiles(s,'foto',[...e.target.files]).catch(err=>alert(err.message)));
 
   body.querySelector('[data-annotate-new]')?.addEventListener('change',e=>{const file=e.target.files[0];if(file)void openPhotoAnnotator(s,file);e.target.value=''});
+  }
+  const body=$('storeDetailBody');
+  for(const el of body.querySelectorAll('[data-sheet-tab="photos"] span,[data-sheet-photo-count]'))el.textContent=allPhotos.length;
+  for(const el of body.querySelectorAll('[data-sheet-tab="documents"] span,[data-sheet-document-count]'))el.textContent=documents.length+plans.length;
   const photoBox=body.querySelector('[data-all-photos]');
-  if(allPhotos.length){photoBox.innerHTML='';for(const a of allPhotos){const card=document.createElement('button');card.type='button';card.className='sheet-photo-card';const source=String(a.nome_file||a.storage_path).includes('-ANNOTATA')?'📌 Foto annotata':a.intervention_id?'Intervento':a.extra_id?'Extra':'Archivio';card.innerHTML=`<span class="sheet-photo-placeholder">📷</span><small>${source}${a.created_at?' · '+new Date(a.created_at).toLocaleDateString('it-IT'):''}</small>`;const wrapper=document.createElement('div');wrapper.className='pa-photo-wrap';wrapper.appendChild(card);if(admin()){const annotate=document.createElement('button');annotate.type='button';annotate.className='secondary photo-annotate-action';annotate.textContent='✏️ Annota';annotate.onclick=()=>openPhotoAnnotator(s,a);wrapper.appendChild(annotate)}photoBox.appendChild(wrapper);signedAttachmentUrl(a).then(url=>{card.innerHTML=`<img src="${url}" alt="${esc(a.nome_file||'Foto')}" loading="lazy"><small>${source}${a.created_at?' · '+new Date(a.created_at).toLocaleDateString('it-IT'):''}</small>`;card.onclick=()=>window.open(url,'_blank')}).catch(()=>{card.onclick=()=>openArchiveAttachment(a)})}}
-
+  const existing=new Map([...photoBox.querySelectorAll('[data-photo-path]')].map(el=>[el.dataset.photoPath,el]));
+  if(allPhotos.length)photoBox.querySelectorAll(':scope > p').forEach(el=>el.remove());
+  for(const a of allPhotos){
+    if(existing.has(a.storage_path)){existing.delete(a.storage_path);continue;}
+    const wrapper=document.createElement('div');wrapper.className='pa-photo-wrap';wrapper.dataset.photoPath=a.storage_path;
+    const card=document.createElement('button');card.className='sheet-photo-card';wrapper.append(card);photoBox.append(wrapper);
+    const source=String(a.nome_file||a.storage_path).includes('-ANNOTATA')?'📌 Foto annotata':a.intervention_id?'Intervento':a.extra_id?'Extra':'Archivio';
+    mountAttachmentPhoto(card,a,source+(a.created_at?' · '+new Date(a.created_at).toLocaleDateString('it-IT'):''));
+    if(admin()){const annotate=document.createElement('button');annotate.type='button';annotate.className='secondary photo-annotate-action';annotate.textContent='✏️ Annota';annotate.onclick=()=>openPhotoAnnotator(s,a);wrapper.append(annotate);}
+  }
+  for(const el of existing.values())el.remove();
+  if(!allPhotos.length)photoBox.innerHTML='<p class="muted">Nessuna foto disponibile.</p>';
   const docBox=body.querySelector('[data-doc-list]');
-  for(const a of [...plans,...documents]){const row=document.createElement('div');row.className='sheet-document';row.innerHTML=`<button class="secondary" data-open>📄 <span>${esc(attachmentLabel(a))}</span><small>${esc(a.nome_file||'Documento')}</small></button>${admin()&&archiveKind(a)?'<button class="danger-btn compact-btn" data-delete>Elimina</button>':''}`;row.querySelector('[data-open]').onclick=()=>archiveKind(a)?openArchiveAttachment(a):openAttachment(a);row.querySelector('[data-delete]')?.addEventListener('click',()=>deleteArchiveAttachment(a,s));docBox.appendChild(row)}
+  const oldDocuments=new Map([...docBox.querySelectorAll('[data-document-path]')].map(el=>[el.dataset.documentPath,el]));
+  if(plans.length||documents.length)docBox.querySelectorAll(':scope > p').forEach(el=>el.remove());
+  for(const a of [...plans,...documents]){
+    if(oldDocuments.has(a.storage_path)){oldDocuments.delete(a.storage_path);continue;}
+    const row=document.createElement('div');row.className='sheet-document';row.dataset.documentPath=a.storage_path;
+    row.innerHTML=`<button class="secondary" data-open>📄 <span>${esc(attachmentLabel(a))}</span><small>${esc(a.nome_file||'Documento')}</small></button>${admin()&&archiveKind(a)?'<button class="danger-btn compact-btn" data-delete>Elimina</button>':''}`;
+    row.querySelector('[data-open]').onclick=()=>openAttachment(a);row.querySelector('[data-delete]')?.addEventListener('click',()=>deleteArchiveAttachment(a,s));docBox.appendChild(row);
+  }
+  for(const el of oldDocuments.values())el.remove();
+  if(!plans.length&&!documents.length)docBox.innerHTML='<p class="muted">Nessun documento disponibile.</p>';
 }
 
 function openDuplicateSchedule(s){openReuseScheduleDialog({type:'schedule',id:s.id,onlyOpen:true})}
@@ -2484,8 +2530,7 @@ async function showHistory(s,refreshOnly=false){
     timeline.appendChild(d);
     if(pics.length){
       const box=d.querySelector('[data-photos]');box.innerHTML='';
-      const urls=await Promise.all(pics.map(async a=>{const {data,error}=await sb.storage.from('documenti').createSignedUrl(a.storage_path,600);return error?null:{a,url:data.signedUrl}}));
-      for(const x of urls.filter(Boolean)){const wrap=document.createElement('button');wrap.type='button';wrap.className='history-photo';wrap.innerHTML=`<img src="${x.url}" alt="${esc(x.a.nome_file||'Foto intervento')}" loading="lazy"><span>Apri</span>`;wrap.onclick=()=>window.open(x.url,'_blank');box.appendChild(wrap)}
+      for(const a of pics){const wrap=document.createElement('button');wrap.className='history-photo';box.append(wrap);mountAttachmentPhoto(wrap,a);}
     }
   }
   updateSelectionUi();
@@ -2686,18 +2731,10 @@ async function recoverInterventionPhotosFromStorage(i,button=null){
 // Build every card synchronously; photo requests may only update their own slots.
 function hydratePendingPhotos(card,pics){
   const box=card.querySelector('[data-pending-photos], [data-extra-photos]');
-  box.innerHTML='';
-  for(const a of pics){
-    const slot=document.createElement('button');
-    slot.type='button';slot.className='pending-review-photo';slot.disabled=true;
-    slot.textContent='Caricamento foto…';box.appendChild(slot);
-    signedAttachmentUrl(a).then(url=>{
-      if(!card.isConnected)return;
-      slot.innerHTML=`<img src="${url}" alt="${esc(a.nome_file||'Foto intervento')}" loading="lazy"><span>Apri</span>`;
-      slot.disabled=false;slot.onclick=()=>window.open(url,'_blank');
-    }).catch(()=>{if(card.isConnected)slot.textContent='Foto non disponibile'});
-  }
+  if(!box)return;box.replaceChildren();
+  for(const a of pics){const slot=document.createElement('button');slot.className='pending-review-photo';box.append(slot);mountAttachmentPhoto(slot,a);}
 }
+
 function renderPending(){
   const p=interventions.filter(i=>i.stato==='in_attesa'&&!i.multi_day_open),pendingExtras=extras.filter(e=>e.stato==='in_attesa'&&!isIntesaOrdinaryTicket(e));
   const total=p.length+pendingExtras.length;$('pendingBadge').textContent=total;$('pendingBadge').classList.toggle('hidden',!total);$('pendingList').innerHTML='';
@@ -4147,12 +4184,7 @@ function extraCard(e){
   return c;
 }
 
-async function hydrateExtraPhotos(card,pics){
-  const box=card.querySelector('[data-extra-photos]');if(!box)return;box.innerHTML='';
-  const urls=await Promise.all(pics.map(async a=>{try{return {a,url:await signedAttachmentUrl(a)}}catch{return null}}));
-  for(const x of urls.filter(Boolean)){const b=document.createElement('button');b.type='button';b.className='pending-review-photo';b.innerHTML=`<img src="${x.url}" alt="${esc(x.a.nome_file||'Foto extra')}" loading="lazy"><span>Apri</span>`;b.onclick=()=>window.open(x.url,'_blank');box.appendChild(b)}
-  if(!box.children.length)box.innerHTML='<p class="muted">Foto non disponibile. Premi Aggiorna e riprova.</p>';
-}
+function hydrateExtraPhotos(card,pics){hydratePendingPhotos(card,pics)}
 
 async function renderExtraClosurePhotoManager(extraId){
   const box=$('editExtraClosurePhotoList');if(!box)return;box.innerHTML='<p class="muted">Caricamento foto…</p>';
@@ -4402,16 +4434,14 @@ async function openAttachment(a){
   }
 
   try{
-    const {data,error}=await sb.storage.from('documenti').createSignedUrl(a.storage_path,300);
-    if(error)throw error;
-    if(!data?.signedUrl)throw new Error('URL del documento non disponibile.');
+    const url=await signedAttachmentUrl(a);
 
     if(popup){
-      popup.location.href=data.signedUrl;
+      popup.location.href=url;
     }else{
       // Fallback: se il browser ha comunque bloccato la nuova scheda,
       // apriamo il PDF nella scheda corrente.
-      window.location.href=data.signedUrl;
+      window.location.href=url;
     }
   }catch(err){
     try{
@@ -5598,6 +5628,7 @@ const refreshReportAndPdfCache=()=>{renderDailyReport();prewarmDailyReportPdfs()
 
 sb.auth.onAuthStateChange((event,s)=>{
   const previousUser=session?.user?.id;
+  if(!s||previousUser!==s.user?.id)attachmentUrls.clear();
   session=s;
   if(!s){$('loginScreen').classList.remove('hidden');$('app').classList.add('hidden');return}
   $('loginScreen').classList.add('hidden');$('app').classList.remove('hidden');

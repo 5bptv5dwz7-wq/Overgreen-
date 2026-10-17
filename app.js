@@ -1,4 +1,4 @@
-const APP_VERSION='V245';
+const APP_VERSION='V246';
 // Request IDs survive uncertain network responses and page reloads in this tab.
 async function adminOperation(operation,payload){
  validateExtraDateOperation(operation,payload);

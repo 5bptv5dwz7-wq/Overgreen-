@@ -56,9 +56,15 @@
    const label=document.createElement('h3');label.textContent=`${band.label} · ${String(band.from).padStart(2,'0')}:00–${String(band.to).padStart(2,'0')}:00`;card.appendChild(label);
    const description=document.createElement('p');description.textContent=w?`${w.condition.icon} ${w.condition.label} · ${w.min}° / ${w.max}°C`:'Previsione non disponibile per questa fascia';card.appendChild(description);
    if(w){const details=document.createElement('small');details.textContent=`${w.rain==null?'Precipitazioni non disponibili':`Precipitazioni ≈ ${w.rain.toLocaleString('it-IT')} mm`}${w.probability==null?'':` · probabilità massima ${Math.round(w.probability)}%`}${w.partial?' · copertura parziale':''}${w.coarse?' · stima da intervalli di più ore':''}`;card.appendChild(details)}
+   if(w&&typeof OvergreenGrassWetness!=='undefined'){
+    const estimate=OvergreenGrassWetness.estimate(result.forecast,date,band),wet=document.createElement('div');wet.className='grass-wetness is-'+estimate.state;
+    const label=document.createElement('strong');label.textContent=estimate.label+(estimate.time?' · ore '+estimate.time:'');wet.appendChild(label);
+    const reason=document.createElement('small');reason.textContent=estimate.reason+' Stima '+estimate.confidence+'.';wet.appendChild(reason);card.appendChild(wet);
+   }
    list.appendChild(card);
   }
   const note=document.createElement('p');note.className='weather-bands-note';note.textContent='Orari italiani. Minima e massima nelle ore disponibili di ogni fascia. Le fasce già trascorse possono non essere disponibili. Per le previsioni a intervalli di più ore, gli accumuli sono ripartiti in proporzione: il momento esatto della pioggia può variare.';dialog.appendChild(note);
+  const grassNote=document.createElement('p');grassNote.className='weather-bands-note';grassNote.textContent='Erba: stima sperimentale basata sulle previsioni delle ore precedenti, non su pioggia misurata. Ombra, irrigazione e drenaggio della sede non sono considerati. Non valuta terreno zuppo o portanza per i mezzi.';dialog.appendChild(grassNote);
   const update=document.createElement('p');update.className='weather-bands-note';update.textContent=`MET Norway · elaborazione Overgreen${result.approximate?' · posizione stimata':''}${result.stale?' · ultimo dato disponibile':''} · aggiornamento ${result.forecast?.properties?.meta?.updated_at?new Date(result.forecast.properties.meta.updated_at).toLocaleString('it-IT',{timeZone:'Europe/Rome'}):'non disponibile'}`;dialog.appendChild(update);
   dialog.addEventListener('close',()=>dialog.remove());document.body.appendChild(dialog);dialog.showModal();
  }
@@ -78,7 +84,7 @@
     const temp=document.createElement('span');temp.className='weather-temperatures';temp.textContent=`${w.min}° / ${w.max}°C`;temp.title='Minima / massima previste nelle ore disponibili';node.appendChild(temp);
     const rain=document.createElement('span');rain.className='weather-rain';rain.textContent=w.rain==null?'':`Precipitazioni ≈ ${w.rain.toLocaleString('it-IT')} mm${w.probability==null?'':` · prob. max ${Math.round(w.probability)}%`}`;node.appendChild(rain);
     const info=document.createElement('small');info.textContent=`${date.slice(8,10)}/${date.slice(5,7)} · ${w.partial?'Ore disponibili':'Previsione giornaliera'}${result.approximate?' · zona stimata':''}${result.stale?' · ultimo dato disponibile':''}`;node.appendChild(info);
-    const button=document.createElement('button');button.type='button';button.className='weather-bands-button';button.textContent='Vedi fasce orarie ›';button.setAttribute('aria-label','Meteo per fascia oraria · '+(store.nome||'Punto vendita'));button.onclick=event=>{event.stopPropagation();openBands(store,date,result)};node.appendChild(button);
+    const button=document.createElement('button');button.type='button';button.className='weather-bands-button';button.textContent='Fasce orarie e stato erba ›';button.setAttribute('aria-label','Meteo per fascia oraria · '+(store.nome||'Punto vendita'));button.onclick=event=>{event.stopPropagation();openBands(store,date,result)};node.appendChild(button);
     node.title='Condizione più significativa nelle ore previste. Temperature e precipitazioni aggregate da Overgreen; accumuli ripartiti tra le giornate. Aggiornamento: '+(w.updated?new Date(w.updated).toLocaleString('it-IT',{timeZone:'Europe/Rome'}):'non disponibile');
    }catch(e){node.className='store-weather is-unavailable';node.textContent=e?.message==='location'?'📍 Meteo: verifica la posizione della sede':'☁️ Meteo non disponibile';node.title='La programmazione rimane disponibile. Riapri la Dashboard per riprovare.'}
   };

@@ -1,4 +1,4 @@
-const APP_VERSION='V265';
+const APP_VERSION='V266';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -3419,6 +3419,7 @@ async function createScheduleProgramPdf(from,to){
   const totalJobs=groups.reduce((n,g)=>n+g.jobs.length,0);
   drawLines(`${totalJobs} lavori programmati`,regular,9,M,CW,muted,12);
   drawLines('Meteo: ore 06-18 italiane del giorno programmato. Stima per lavori esterni; non misura lo stato del terreno. Fonte: MET Norway (CC BY 4.0).',regular,7.5,M,CW,muted,10);
+  drawLines('Come leggere i mm: 1 mm = 1 litro di acqua per metro quadrato. Scala indicativa sul totale 06-18: minima <0,5 mm; leggera 0,5-<3; moderata 3-<10; abbondante da 10 mm. Non indica l’intensita dei singoli rovesci.',regular,8,M,CW,muted,10);
   y-=10;
 
   let previousDay='';
@@ -3473,17 +3474,24 @@ async function createScheduleProgramPdf(from,to){
       const weatherStoreId=(job.item||job.extra||job.activity)?.store_id;
       const weather=OvergreenScheduleDateWeather.pdfSummary(weatherForecasts.get(weatherStoreId),day,OvergreenWeather.summarize,scoreRouteWeather);
       const weatherLines=linesFor(weather.text,regular,8,CW-20);
+      const rainLines=linesFor(weather.rainText||'',bold,9,CW-28);
       const weatherColor=weather.tone==='good'?green:weather.tone==='caution'?rgb(.48,.32,.02):weather.tone==='bad'?rgb(.65,.20,.12):muted;
       const titleLines=linesFor(title,bold,10.5,CW-20);
       const subLines=linesFor(sub,regular,8.5,CW-20);
       const detailLines=linesFor(detail,regular,8,CW-20);
-      const needed=titleLines.length*13+subLines.length*11+detailLines.length*10+weatherLines.length*10+21;
+      const needed=titleLines.length*13+subLines.length*11+detailLines.length*10+weatherLines.length*10+rainLines.length*12+(rainLines.length?10:0)+21;
       ensure(Math.max(needed,28));
 
       for(const ln of titleLines){ensure(15);page.drawText(pdfSafeText(ln),{x:M+8,y,size:10.5,font:bold,color:dark});y-=13}
       for(const ln of subLines){ensure(13);page.drawText(pdfSafeText(ln),{x:M+8,y,size:8.5,font:regular,color:muted});y-=11}
       for(const ln of detailLines){ensure(12);page.drawText(pdfSafeText(ln),{x:M+8,y,size:8,font:regular,color:dark});y-=10}
       y-=3;
+      if(rainLines.length){
+        const rainHeight=rainLines.length*12+8;ensure(rainHeight+12);
+        page.drawRectangle({x:M+5,y:y-rainHeight+11,width:CW-10,height:rainHeight,color:weather.tone==='good'?rgb(.92,.97,.93):weather.tone==='unknown'?rgb(.95,.95,.95):rgb(1,.95,.84)});
+        for(const ln of rainLines){page.drawText(pdfSafeText(ln),{x:M+10,y,size:9,font:bold,color:weatherColor});y-=12}
+        y-=8;
+      }
       for(const ln of weatherLines){ensure(12);page.drawText(pdfSafeText(ln),{x:M+8,y,size:8,font:regular,color:weatherColor});y-=10}
       y-=7;
     }

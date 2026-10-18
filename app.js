@@ -4159,7 +4159,7 @@ async function renderExtraClosurePhotoManager(extraId){
 }
 function openExtraClosureEdit(e){
   if(!admin()||!['completato','annullato'].includes(e.stato))return;
-  $('editExtraClosureId').value=e.id;$('editExtraClosureClosedAt').value=toDateTimeLocal(e.closed_at);$('editExtraClosureNotes').value=e.note_lorenzo||'';
+  $('editExtraClosureId').value=e.id;$('editExtraClosureClosedAt').value=toDateTimeLocal(e.closed_at);$('editExtraExecutionDate').value=e.giorno_intervento||(e.closed_at?new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(e.closed_at)):'');$('editExtraCorrectionReason').value='';$('editExtraClosureNotes').value=e.note_lorenzo||'';
   $('editExtraClosurePhotos').value='';$('editClosureRequest').value='';$('editClosureOvergreen').value='';$('editClosureEurospin').value='';
   renderExtraClosurePhotoManager(e.id);openDialog('editExtraClosureDialog');
 }
@@ -5233,7 +5233,15 @@ $('editExtraClosureForm').onsubmit=async e=>{
   const btn=e.submitter||$('editExtraClosureForm').querySelector('[type=submit]'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Salvataggio…';
   try{
     const id=$('editExtraClosureId').value,notes=$('editExtraClosureNotes').value.trim()||null;
-    let r=await sb.from('extras').update({note_lorenzo:notes,closed_at:$('editExtraClosureClosedAt').value?new Date($('editExtraClosureClosedAt').value).toISOString():null}).eq('id',id);if(r.error)throw r.error;
+    const executionDate=$('editExtraExecutionDate').value,reason=$('editExtraCorrectionReason').value.trim(),closedLocal=$('editExtraClosureClosedAt').value;
+    if(!executionDate||!closedLocal||!reason)throw new Error('Indica data esecuzione, chiusura e motivo della rettifica.');
+    const original=extras.find(x=>x.id===id);if(!original)throw new Error('Extra non trovato: aggiorna la pagina.');
+    const closedIso=new Date(closedLocal).toISOString();if(!Number.isFinite(new Date(closedIso).getTime()))throw new Error('Data di chiusura non valida.');
+    if(!confirm('Confermi la rettifica della data di esecuzione e della chiusura?'))return;
+    const audit='[Rettifica '+new Date().toISOString()+' · '+(profile?.nome||profile?.id||'admin')+'] '+reason+' | esecuzione '+(original.giorno_intervento||'—')+' → '+executionDate+' | chiusura '+(original.closed_at||'—')+' → '+closedIso;
+    const updatedNotes=[notes,audit].filter(Boolean).join('\n');
+    let r=await sb.from('extras').update({note_lorenzo:updatedNotes,giorno_intervento:executionDate,closed_at:closedIso}).eq('id',id).select('id,giorno_intervento,closed_at').single();if(r.error)throw r.error;
+    if(r.data.giorno_intervento!==executionDate)throw new Error('Verifica della data fallita.');
     const docs=[['pdf_richiesta',$('editClosureRequest').files[0]],['rapportino_overgreen',$('editClosureOvergreen').files[0]],['rapportino_eurospin',$('editClosureEurospin').files[0]]];
     for(const [tipo,file] of docs)if(file){btn.textContent=`Sostituisco ${attachmentLabel({tipo})}…`;await replaceExtraAttachment(id,tipo,file)}
     const photos=[...$('editExtraClosurePhotos').files];

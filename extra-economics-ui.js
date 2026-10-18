@@ -99,6 +99,7 @@ function addEconomicsWorksheet(workbook,rows){
   summary.eachRow(r=>r.alignment={wrapText:true,vertical:'top'});return ws;
 }
 async function exportExtraEconomics(){
+ await ensureLibraries('ExcelJS');
   if(!admin())return;if(!window.ExcelJS)return alert('Libreria Excel non disponibile. Aggiorna la pagina.');
   const b=$('extraEconomicsBookExport');if(b.disabled)return;b.disabled=true;
   try{

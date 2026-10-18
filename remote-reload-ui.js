@@ -12,6 +12,7 @@ async function remoteReloadBusy(){
   if([...remoteDirtyForms].some(form=>form.isConnected&&!form.closest('dialog')&&form.getClientRects().length))return true;
   if([...document.querySelectorAll('button[type=submit]')].some(button=>button.disabled&&button.getClientRects().length))return true;
   if(typeof photoDelivery!=='undefined'&&photoDelivery){const state=await photoDelivery.snapshot();if(state.running||state.jobs.length||state.submissions.some(s=>!s.result))return true}
+  if(typeof extraDrafts!=='undefined'&&extraDrafts.busy())return true;
   return false;
 }
 async function remoteReloadHttp(path,method='GET',body){

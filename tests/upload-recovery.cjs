@@ -2,7 +2,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),vm=requir
 const src=fs.readFileSync(__dirname+'/../app.js','utf8');
 function auth(){
  let callback,locked=false,loads=0,views=0;const tasks=[];
- const c={session:null,profile:null,console,localStorage:{getItem:()=> 'extras'},CURRENT_VIEW_KEY:'view',currentView:'dashboard',
+ const c={session:null,profile:null,attachmentUrls:{clear(){}},resetAppData(){},console,localStorage:{getItem:()=> 'extras'},CURRENT_VIEW_KEY:'view',currentView:'dashboard',
   $:()=>({classList:{add(){},remove(){}}}),setTimeout:fn=>tasks.push(fn),
   loadAll:async()=>{assert.equal(locked,false,'database calls must run after auth releases its lock');loads++},setView:()=>views++,
   sb:{auth:{onAuthStateChange:fn=>{callback=fn}}}};
@@ -14,7 +14,7 @@ test('returning from camera and refreshing tokens preserve the active form',()=>
 test('pending initial load is discarded after sign out',async()=>{const h=auth();h.emit('SIGNED_IN',{user:{id:'a'}});h.emit('SIGNED_OUT',null);await h.tasks.shift()();assert.equal(h.loads,0)});
 function upload(){
  const timers=new Map(),rows=new Map(),paths=[];let serial=0,hang='',lateResolve;
- const c={console,crypto:require('node:crypto'),window:{},attachments:[],profile:{id:'worker'},compressImage:async f=>f,
+ const c={extraDrafts:{fileId:()=>require('node:crypto').randomUUID()},console,crypto:require('node:crypto'),window:{},attachments:[],profile:{id:'worker'},compressImage:async f=>f,
   setTimeout:fn=>{timers.set(++serial,fn);return serial},clearTimeout:id=>timers.delete(id),
   addAttachment:async row=>{rows.set(row.id,row);return row},
   sb:{from:()=>{let id;const q={select(){return q},eq(k,v){id=v;return q},maybeSingle:()=>hang==='lookup'?new Promise(r=>{lateResolve=r}):Promise.resolve({data:rows.get(id)})};return q},

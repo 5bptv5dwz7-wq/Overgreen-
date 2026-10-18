@@ -1,4 +1,4 @@
-const APP_VERSION='V270';
+const APP_VERSION='V271';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -31,7 +31,8 @@ const authStorage={
   setItem(key,value){const target=localStorage.getItem(REMEMBER_ACCESS_KEY)==='1'?localStorage:sessionStorage;target.setItem(key,value);const other=target===localStorage?sessionStorage:localStorage;other.removeItem(key)},
   removeItem(key){localStorage.removeItem(key);sessionStorage.removeItem(key)}
 };
-const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, {auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:authStorage}});
+const dataSync=window.OvergreenDataSync.create({fetch:window.fetch.bind(window),getScope:()=>session?.user?.id||''});
+const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, {global:{fetch:dataSync.fetch},auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:authStorage}});
 const SEED_STORES=[{"name": "ABBIATEGRASSO", "lastDone": "2026-06-17"}, {"name": "ACQUI TERME", "lastDone": "2026-06-30"}, {"name": "ALBANO SAN ALESSANDRO", "lastDone": "2026-07-07"}, {"name": "ALESSANDRIA MOCCAGATTA", "lastDone": "2026-07-14"}, {"name": "ALESSANDRIA MOISA", "lastDone": "2026-07-14"}, {"name": "ARENZANO", "lastDone": "2026-06-15"}, {"name": "ASOLA", "lastDone": "2026-07-09"}, {"name": "ASTI", "lastDone": "2026-07-13"}, {"name": "BAGNOLO MELLA", "lastDone": "2026-07-08"}, {"name": "BEINASCO", "lastDone": "2026-07-03"}, {"name": "BELLINZAGO LOMBARDO", "lastDone": "2026-06-11"}, {"name": "BERGAMO", "lastDone": "2026-07-07"}, {"name": "BESANA IN BRIANZA", "lastDone": "2026-07-11"}, {"name": "BIELLA", "lastDone": "2026-06-30"}, {"name": "BOLLADELLO DI CAIRATE", "lastDone": "2026-07-01"}, {"name": "BORGARO TORINESE", "lastDone": "2026-07-01"}, {"name": "BOZZOLO", "lastDone": "2026-07-09"}, {"name": "BRONI", "lastDone": "2026-07-15"}, {"name": "BRUGHIERO", "lastDone": "2026-06-11"}, {"name": "BUSTO ARSIZIO", "lastDone": "2026-06-23"}, {"name": "CAIRO MONTENOTTE", "lastDone": "2026-07-07"}, {"name": "CANELLI", "lastDone": "2026-07-14"}, {"name": "CANTÙ", "lastDone": "2026-07-11"}, {"name": "CAPRIOLO", "lastDone": "2026-07-07"}, {"name": "CARPENEDOLO", "lastDone": "2026-07-09"}, {"name": "CASALE MONFERRATO", "lastDone": "2026-06-11"}, {"name": "CASALMAGGIORE", "lastDone": "2026-07-09"}, {"name": "CASARZA LIGURE", "lastDone": "2026-06-16"}, {"name": "CASTEL MELLA", "lastDone": "2026-07-08"}, {"name": "CASTELLETTO SOPRA TICINO", "lastDone": "2026-06-22"}, {"name": "CASTELMARTE", "lastDone": "2026-07-10"}, {"name": "CASTIGLIONE DELLE STIEVERE", "lastDone": "2026-07-09"}, {"name": "CERIALE", "lastDone": "2026-07-07"}, {"name": "CHIARI", "lastDone": "2026-07-07"}, {"name": "CHIVASSO", "lastDone": "2026-06-30"}, {"name": "COLLEGNO", "lastDone": "2026-07-02"}, {"name": "COMO", "lastDone": "2026-07-11"}, {"name": "CORBETTA", "lastDone": "2026-06-26"}, {"name": "COSTA VOLPINO", "lastDone": "2026-07-10"}, {"name": "COURGNE", "lastDone": "2026-07-01"}, {"name": "CREMONA", "lastDone": "2026-07-07"}, {"name": "CUVEGLIO", "lastDone": "2026-06-22"}, {"name": "DESENZANO DEL GARDA", "lastDone": "2026-07-08"}, {"name": "DOMODOSSOLA", "lastDone": "2026-06-21"}, {"name": "FINO MORNASCO", "lastDone": "2026-07-11"}, {"name": "FOLLO", "lastDone": "2026-06-16"}, {"name": "FOSSANO", "lastDone": "2026-06-03"}, {"name": "GALLARATE", "lastDone": "2026-07-16"}, {"name": "GENOVA PEGLI", "lastDone": "2026-06-15"}, {"name": "GREGGIO", "lastDone": "2026-06-22"}, {"name": "INVERUNO", "lastDone": "2026-07-15"}, {"name": "JERAGO CON ORAGO", "lastDone": "2026-07-16"}, {"name": "LA SPEZIA", "lastDone": "2026-06-16"}, {"name": "LAINATE", "lastDone": "2026-07-13"}, {"name": "LENO", "lastDone": "2026-07-08"}, {"name": "LENTATE SUL SEVESO", "lastDone": "2026-07-11"}, {"name": "LIMBIATE", "lastDone": "2026-06-24"}, {"name": "LOMAZZO", "lastDone": "2026-07-11"}, {"name": "LUINO", "lastDone": "2026-06-22"}, {"name": "MALNATE", "lastDone": "2026-06-30"}, {"name": "MANERBIO", "lastDone": "2026-07-08"}, {"name": "MANTOVA", "lastDone": "2026-07-09"}, {"name": "MANTOVA TRICERONE", "lastDone": "2026-07-10"}, {"name": "MAZZANO", "lastDone": "2026-07-08"}, {"name": "MILANO BAGAROTTI", "lastDone": "2026-07-13"}, {"name": "MILANO BISCEGLIE", "lastDone": "2026-07-13"}, {"name": "MILANO DE ANDRE", "lastDone": "2026-06-17"}, {"name": "MILANO SARCA", "lastDone": "2026-06-10"}, {"name": "MILANO ZANTE", "lastDone": "2026-06-16"}, {"name": "MODIGNANI", "lastDone": "2026-06-10"}, {"name": "MONTALDO DORA", "lastDone": "2026-06-30"}, {"name": "MONTICHIARI", "lastDone": "2026-07-09"}, {"name": "MORTARA", "lastDone": "2026-06-12"}, {"name": "NICHELINO", "lastDone": "2026-06-03"}, {"name": "NOVARA", "lastDone": "2026-06-23"}, {"name": "NOVI LIGURE", "lastDone": "2026-07-14"}, {"name": "OGGIONO", "lastDone": "2026-07-10"}, {"name": "OLEGGIO", "lastDone": "2026-06-22"}, {"name": "OLGIATE OLONA", "lastDone": "2026-07-15"}, {"name": "ORBASSANO", "lastDone": "2026-07-03"}, {"name": "ORZINUOVI", "lastDone": "2026-07-07"}, {"name": "PALAZZOLO SULL’OGLIO", "lastDone": "2026-07-07"}, {"name": "PIEVE EMANUELE", "lastDone": "2026-06-17"}, {"name": "PIOLTELLO", "lastDone": "2026-06-11"}, {"name": "PIOSSASCO", "lastDone": "2026-07-02"}, {"name": "POGGIO RUSCO", "lastDone": "2026-07-10"}, {"name": "PONTEVICO", "lastDone": "2026-07-08"}, {"name": "QUINZANO D’OGLIO", "lastDone": "2026-07-07"}, {"name": "RIVAROLO CANAVESE", "lastDone": "2026-07-01"}, {"name": "RIVOLI", "lastDone": "2026-07-02"}, {"name": "ROBECCHETTO CON INDUNO", "lastDone": "2026-06-23"}, {"name": "ROMENTINO CEDI", "lastDone": "2026-07-04"}, {"name": "ROZZANO", "lastDone": "2026-06-30"}, {"name": "SAINT CHRISTOPHE", "lastDone": "2026-06-30"}, {"name": "SAN GIORGIO SU LEGNANO", "lastDone": "2026-07-15"}, {"name": "SAN GIULIANO MILANESE PARCO", "lastDone": "2026-07-06"}, {"name": "SAN GIULIANO MILANESE PV", "lastDone": "2026-07-06"}, {"name": "SAN MAURIZIO CANAVESE", "lastDone": "2026-07-01"}, {"name": "SANTHIA", "lastDone": "2026-06-22"}, {"name": "SARONNO", "lastDone": "2026-07-06"}, {"name": "SARZANA", "lastDone": "2026-06-16"}, {"name": "SAVIGLIANO", "lastDone": "2026-06-03"}, {"name": "SEGRATE", "lastDone": "2026-06-11"}, {"name": "SERIATE", "lastDone": "2026-07-07"}, {"name": "SETTIMO TORINESE", "lastDone": "2026-06-30"}, {"name": "TIRINO GROSSETO", "lastDone": "2026-07-02"}, {"name": "TORINO CIGNA", "lastDone": "2026-07-02"}, {"name": "TORINO GARRONE", "lastDone": "2026-07-03"}, {"name": "TORINO PIRANO", "lastDone": "2026-07-02"}, {"name": "TORINO VERCELLI", "lastDone": "2026-07-02"}, {"name": "TORTONA", "lastDone": "2026-07-15"}, {"name": "TREZZANO SUL NAVIGLIO", "lastDone": "2026-05-31"}, {"name": "VADO LIGURE", "lastDone": "2026-07-07"}, {"name": "VALENZA", "lastDone": "2026-07-14"}, {"name": "VERCELLI BORMIDA", "lastDone": "2026-06-25"}, {"name": "VERCELLI TRATTATO DI ROMA", "lastDone": "2026-06-25"}, {"name": "VERGIATE", "lastDone": "2026-06-22"}, {"name": "VIGEVANO", "lastDone": "2026-06-12"}, {"name": "VILLA DI TIRANO", "lastDone": "2026-07-10"}, {"name": "VILLA GUARDIA", "lastDone": "2026-07-11"}, {"name": "VILLADOSSOLA", "lastDone": "2026-06-22"}, {"name": "VOGHERA", "lastDone": "2026-07-15"}, {"name": "RHO", "lastDone": "2026-06-10"}];
 const $=id=>document.getElementById(id);
 let session=null,profile=null,realProfile=null,profiles=[],managedUsers=[],stores=[],interventions=[],schedules=[],scheduleMembers=[],scheduleItems=[],extras=[],extraWorkers=[],interventionWorkers=[],attachments=[],extraWorkItems=[],extraWorkItemPhotos=[],extraWorkItemNotes=[],savedRoutes=[],savedRouteItems=[],signatureSheets=[],auditLogs=[],auditPage=0,auditHasMore=false,companyDocuments=[],companyDocumentReads=[],archiveCategory='modulistica',workContacts=[],contactStores=[],scheduleActivities=[],scheduleActivityPhotos=[];
@@ -138,8 +139,8 @@ function ensureCloudSettingsUi(){
   const sync=document.createElement('section');sync.className='settings-card';sync.innerHTML=`<h3>☁️ Sincronizzazione</h3><p id="backgroundSyncStatus">Controllo…</p><button id="retryUploadsBtn" type="button" class="secondary">Riprova caricamenti</button>`;wrap.appendChild(sync);
   const badge=document.createElement('button');badge.id='syncFloatingBadge';badge.type='button';badge.className='sync-floating hidden';badge.onclick=()=>{setView?.('settings');};document.body.appendChild(badge);
   $('selfPasswordForm').onsubmit=async e=>{e.preventDefault();const pw=$('selfNewPassword').value;const {error}=await sb.auth.updateUser({password:pw});if(error)return alert(error.message);e.target.reset();toast('Password aggiornata')};
-  $('cloudAddEmployeeForm').onsubmit=async e=>{e.preventDefault();const payload={action:'create',nome:$('cloudEmployeeName').value.trim(),email:$('cloudEmployeeEmail').value.trim(),password:$('cloudEmployeePassword').value};const {data,error}=await sb.functions.invoke('manage-user',{body:payload});if(error||data?.error)return alert(data?.error||error.message);e.target.reset();toast('Dipendente creato');await loadAll()};
-  $('retryUploadsBtn').onclick=retryUploads;const repairBtn=$('repairPhotoSyncBtn');if(repairBtn)repairBtn.onclick=()=>repairEmployeePhotoSync(repairBtn);$('refreshUsageBtn').onclick=loadSupabaseUsage;$('analyzeStorageBtn').onclick=analyzeStorageImages;$('optimizeStorageBtn').onclick=optimizeStorageImages;renderCloudEmployeeList();updateSyncUi();if(admin())loadSupabaseUsage();
+  $('cloudAddEmployeeForm').onsubmit=async e=>{e.preventDefault();const payload={action:'create',nome:$('cloudEmployeeName').value.trim(),email:$('cloudEmployeeEmail').value.trim(),password:$('cloudEmployeePassword').value};const {data,error}=await sb.functions.invoke('manage-user',{body:payload});if(error||data?.error)return alert(data?.error||error.message);e.target.reset();toast('Dipendente creato');cloudUsersLoadedAt=0;await loadAll()};
+  $('retryUploadsBtn').onclick=retryUploads;const repairBtn=$('repairPhotoSyncBtn');if(repairBtn)repairBtn.onclick=()=>repairEmployeePhotoSync(repairBtn);$('refreshUsageBtn').onclick=loadSupabaseUsage;$('analyzeStorageBtn').onclick=analyzeStorageImages;$('optimizeStorageBtn').onclick=optimizeStorageImages;
 }
 function formatBytes(value){
   const n=Number(value)||0;if(n<1024)return `${n} B`;const units=['KB','MB','GB','TB'];let v=n/1024,u=0;while(v>=1024&&u<units.length-1){v/=1024;u++}return `${v>=100?v.toFixed(0):v>=10?v.toFixed(1):v.toFixed(2)} ${units[u]}`
@@ -259,12 +260,21 @@ async function optimizeStorageImages(){
   if(btn){btn.disabled=false;btn.classList.add('hidden')}if(analyze)analyze.disabled=false;
   await loadAll();if(admin())loadSupabaseUsage();
 }
-async function renderCloudEmployeeList(){
+let cloudUsersRequest=null,cloudUsersScope='',cloudUsersLoadedAt=0;
+async function renderCloudEmployeeList(force=false){
+ if(!admin())return;
+ const actor=attachmentMediaScope();
+ if(cloudUsersRequest)return cloudUsersRequest;
+ if(!force&&cloudUsersScope===actor&&Date.now()-cloudUsersLoadedAt<60000)return;
+ cloudUsersRequest=loadCloudEmployeeList(actor);try{return await cloudUsersRequest}finally{cloudUsersRequest=null}
+}
+async function loadCloudEmployeeList(actor){
   const box=$('cloudEmployeeList');if(!box)return;
   box.innerHTML='<p class="muted">Caricamento utenti…</p>';
   const {data,error}=await sb.functions.invoke('manage-user',{body:{action:'list'}});
   if(error||data?.error){box.innerHTML=`<p class="error">${esc(data?.error||error.message)}</p>`;return}
-  managedUsers=data.users||[];box.innerHTML='';
+  if(attachmentMediaScope()!==actor||!admin())return;
+  cloudUsersScope=actor;cloudUsersLoadedAt=Date.now();managedUsers=data.users||[];box.innerHTML='';
   for(const u of managedUsers){
     const row=document.createElement('div');row.className='employee-row user-management-row';
     row.innerHTML=`<div class="employee-main"><strong>${esc(u.nome||u.email||'Utente')}</strong><small>${esc(u.email||'Email non disponibile')} · ${u.ruolo==='admin'?'Amministratore':'Dipendente'} · ${u.attivo?'Attivo':'Disattivato'}</small></div><div class="employee-actions"><button type="button" class="secondary compact" data-edit-user>Modifica</button><button type="button" class="secondary compact" data-password-user>Password</button></div>`;
@@ -342,11 +352,15 @@ function completedToday(){return OvergreenCounters.completed({date:today(),inter
 
 const CURRENT_VIEW_KEY='overgreen_current_view';
 let currentView=localStorage.getItem(CURRENT_VIEW_KEY)||'dashboard';
-function setView(name){
+const renderedViews=new Map();let viewDataVersion=0;
+function viewRevision(){return viewDataVersion+':'+dataSync.revision()+':'+attachmentMediaScope()}
+function setView(name,options={}){
+  const shouldRender=!options.reuse||renderedViews.get(name)!==viewRevision();
+  renderedViews.set(name,viewRevision());
   if(!$(name+'View')||(name==='operations'&&!admin()))name='dashboard';
   currentView=name;localStorage.setItem(CURRENT_VIEW_KEY,name);
   document.querySelectorAll('header [data-view]').forEach(b=>{const active=b.dataset.view===name;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
-  document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');document.querySelectorAll('[data-bottom-view]').forEach(b=>b.classList.toggle('active',b.dataset.bottomView===name));$('pageTitle').textContent={dashboard:'Dashboard',operations:'Da gestire',stores:'Sedi e clienti',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'}[name];if(name==='operations'&&typeof renderOperations==='function')renderOperations();if(name==='dashboard')renderDashboard();if(name==='stores')renderStores();if(name==='schedule')renderSchedules();if(name==='extras')renderExtras();if(name==='reports')renderDailyReport();if(name==='stats')renderStats();if(name==='signatures')openSignatureSheetsView();if(name==='archive')openCompanyArchive();if(name==='contacts')renderWorkContacts();if(name==='audit'&&admin())openAuditView();if(name!=='audit')auditViewOpen(name);if(name==='settings'){void renderRemoteReloadPanel();ensureCloudSettingsUi();refreshPhotoDeliveryStatus().catch(()=>{});ensurePushSettingsUi();refreshPushSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin()){loadSupabaseUsage();renderHealthCenter();}}}
+  document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');document.querySelectorAll('[data-bottom-view]').forEach(b=>b.classList.toggle('active',b.dataset.bottomView===name));$('pageTitle').textContent={dashboard:'Dashboard',operations:'Da gestire',stores:'Sedi e clienti',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'}[name];if(name==='operations'&&shouldRender&&typeof renderOperations==='function')renderOperations();if(name==='dashboard'&&shouldRender)renderDashboard();if(name==='stores'&&shouldRender)renderStores();if(name==='schedule'&&shouldRender)renderSchedules();if(name==='extras'&&shouldRender)renderExtras();if(name==='reports'&&shouldRender)renderDailyReport();if(name==='stats'&&shouldRender)renderStats();if(name==='signatures')openSignatureSheetsView();if(name==='archive')openCompanyArchive();if(name==='contacts'&&shouldRender)renderWorkContacts();if(name==='audit'&&admin())openAuditView();if(name!=='audit')auditViewOpen(name);if(name==='settings'){void renderRemoteReloadPanel();ensureCloudSettingsUi();refreshPhotoDeliveryStatus().catch(()=>{});ensurePushSettingsUi();refreshPushSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin()){loadSupabaseUsage();renderHealthCenter();}}}
 
 
 function syncImpersonationUi(){
@@ -421,11 +435,7 @@ function companyArchiveFiltered(){
   const q=($('archiveSearch')?.value||'').trim().toLowerCase();
   return companyDocuments.filter(d=>d.category===archiveCategory&&(!q||`${d.title||''} ${d.description||''} ${d.file_name||''}`.toLowerCase().includes(q)));
 }
-async function companyDocumentUrl(doc,ttl=900){
-  const {data,error}=await sb.storage.from('documenti').createSignedUrl(doc.storage_path,ttl);
-  if(error)throw error;
-  return data.signedUrl;
-}
+async function companyDocumentUrl(doc){return attachmentUrls.get(doc.storage_path,{priority:1})}
 async function markCompanyDocumentRead(doc){
   try{
     if(archiveIsRead(doc))return;
@@ -793,7 +803,7 @@ async function loadSignatureSheets(){
 }
 async function openSignatureSheetsView(){if($('signatureMonth')&&!$('signatureMonth').value)$('signatureMonth').value=signatureMonthDefault();if($('signatureFilterMonth')&&!$('signatureFilterMonth').value)$('signatureFilterMonth').value=signatureMonthDefault();await loadSignatureSheets()}
 function filteredSignatureSheets(){const monthValue=$('signatureFilterMonth')?.value||'',round=$('signatureFilterRound')?.value||'all';let rows=[...signatureSheets];if(monthValue){const [y,m]=monthValue.split('-').map(Number);rows=rows.filter(r=>Number(r.year)===y&&Number(r.month)===m)}if(round!=='all')rows=rows.filter(r=>Number(r.round)===Number(round));return rows}
-async function signatureSignedUrl(row,ttl=600){const {data,error}=await sb.storage.from('documenti').createSignedUrl(row.storage_path,ttl);if(error)throw error;return data.signedUrl}
+async function signatureSignedUrl(row){return attachmentUrls.get(row.storage_path,{priority:1})}
 async function previewSignatureSheet(row){try{window.open(await signatureSignedUrl(row,900),'_blank','noopener')}catch(err){alert('Impossibile aprire il foglio: '+err.message)}}
 async function downloadSignatureSheet(row){
   if(!admin())return;
@@ -834,13 +844,25 @@ async function signIn(email,password){const {error}=await sb.auth.signInWithPass
 async function signOut(){await window.OvergreenVoice?.close();photoDelivery?.stop();await writeClientAudit('LOGOUT','auth','Uscita dall’app');sessionStorage.removeItem(IMPERSONATE_PROFILE_KEY);await sb.auth.signOut();location.reload()}
 // V197: non assumere che una risposta contenga tutte le righe o che il limite API sia 1000.
 async function readAllRows(table,configure=q=>q,keys=['id']){
-  const rows=[],seen=new Set();let offset=0;
+  if(SNAPSHOT_TABLES.includes(table)){
+   try{
+    const result=await dataSync.fresh(()=>sb.rpc('overgreen_read_data_v271',{p_sections:[table]}));
+    if(result.error)return {data:null,error:result.error};const section=result.data?.[table];if(section?.error)throw new Error(section.error);
+    const filters=[],orders=[],query={eq(key,value){filters.push(row=>row[key]===value);return query},order(key,options={}){orders.push([key,options]);return query}};
+    configure(query);keys.forEach(key=>orders.push([key,{ascending:true}]));
+    const rows=(section?.data||[]).filter(row=>filters.every(fn=>fn(row)));
+    rows.sort((a,b)=>{for(const [key,options] of orders){const x=a[key],y=b[key];if(x===y)continue;if(x==null)return options.nullsFirst?-1:1;if(y==null)return options.nullsFirst?1:-1;const cmp=typeof x==='number'?x-y:String(x).localeCompare(String(y));if(cmp)return options.ascending===false?-cmp:cmp}return 0});return {data:rows,error:null};
+   }catch(error){return {data:null,error}}
+  }
+  const rows=[],seen=new Set();let offset=0,total=null;
   try{
     for(;;){
-      let q=configure(sb.from(table).select('*'));
+      let q=configure(sb.from(table).select('*',{count:'exact'}));
       for(const key of keys)q=q.order(key,{ascending:true});
       const r=await q.range(offset,offset+499);
       if(r.error)return {data:null,error:r.error};
+      if(total!==null&&r.count!==null&&r.count!==undefined&&r.count!==total)throw new Error('I dati sono cambiati durante il caricamento. Aggiorna e riprova.');
+      total=r.count??null;
       const page=r.data||[];
       if(!page.length)return {data:rows,error:null};
       for(const row of page){
@@ -848,7 +870,7 @@ async function readAllRows(table,configure=q=>q,keys=['id']){
         if(seen.has(key))return {data:null,error:new Error('I dati di '+table+' sono cambiati durante il caricamento. Aggiorna e riprova.')};
         seen.add(key);rows.push(row);
       }
-      offset+=page.length;
+      offset+=page.length;if(total!==null&&offset>=total)return {data:rows,error:null};
     }
   }catch(error){return {data:null,error}}
 }
@@ -857,91 +879,55 @@ async function syncPhotoMetadata(id,status=null,error=null,notified=false){
   if(!r.error&&r.data){const local=interventions.find(i=>i.id===id);if(local)Object.assign(local,r.data)}
   return r;
 }
-async function loadAll(){
-  if(pendingRefreshPromise)try{await pendingRefreshPromise}catch{}
-  if(loadAllPromise)return loadAllPromise;
-  loadAllPromise=(async()=>{
+const DATA_SECTIONS=['profiles','stores','interventions','schedules','schedule_members','schedule_items','extras','extra_workers','intervention_workers','attachments','extra_work_items','extra_work_item_photos','extra_work_item_notes','saved_routes','saved_route_items','work_contacts','contact_stores','schedule_activities','schedule_activity_photos','store_reminders','extra_labor_hours'];
+const SNAPSHOT_TABLES=[...DATA_SECTIONS,'company_documents','company_document_reads','signature_sheets'];
+const scheduleDeletePending=new Set();
+let loadedScope='';
+function renderLoadedView(){
+ renderWorkers();renderSchedulePicker();renderReportFilters();renderScheduleFilters();
+ const renderers={dashboard:renderDashboard,stores:renderStores,schedule:renderSchedules,extras:renderExtras,reports:renderDailyReport,stats:renderStats,contacts:renderWorkContacts,operations:()=>typeof renderOperations==='function'&&renderOperations()};
+ renderers[currentView]?.();renderedViews.set(currentView,viewRevision());if($('pendingDialog')?.open)renderPending();
+ if(currentView==='settings'){ensureCloudSettingsUi();renderCloudEmployeeList()}
+}
+async function loadAll(options={}){
+ // A caller arriving after a write must never share an older snapshot.
+ const wanted=options.sections||DATA_SECTIONS;
+ if(loadAllPromise){await loadAllPromise;if(wanted.every(k=>lastLoadedSections.has(k))&&lastLoadedRevision===dataSync.revision())return;return loadAll(options)}
+ const task=(async()=>{
   const loadStarted=performance.now();
-  startupPerf={auth:0,rollover:0,supabase:0,render:0,total:0};
-  // V112-25: il rollover NON blocca più l'avvio. La dashboard viene mostrata
-  // appena terminato il caricamento dati; il riporto parte subito dopo in background.
-  const supabaseStarted=performance.now();
-
-  // V112-23 PERFORMANCE: prima c'erano tre blocchi di lettura Supabase consecutivi
-  // (dati principali -> lavorazioni -> giri salvati). Ora tutte le letture partono
-  // contemporaneamente: l'avvio paga un solo round-trip di rete invece di tre.
-  const [p,s,i,sch,sm,si,e,ew,iw,a,wi,wp,wn,sr,sri,wc,cs,sa,sap,reminders]=await Promise.all([
-    readAllRows('profiles',q=>q.order('nome')),
-    readAllRows('stores',q=>q.eq('attivo',true)),
-    readAllRows('interventions',q=>q.order('created_at',{ascending:false})),
-    readAllRows('schedules',q=>q.order('giorno')),
-    readAllRows('schedule_members',q=>q,['schedule_id','profile_id']),
-    readAllRows('schedule_items',q=>q.order('posizione')),
-    readAllRows('extras',q=>q.order('giorno_intervento')),
-    readAllRows('extra_workers',q=>q,['extra_id','profile_id']),
-    readAllRows('intervention_workers',q=>q,['intervention_id','profile_id']),
-    readAllRows('attachments',q=>q.order('created_at',{ascending:false})),
-    readAllRows('extra_work_items',q=>q.order('posizione')),
-    readAllRows('extra_work_item_photos',q=>q.order('created_at')),
-    readAllRows('extra_work_item_notes',q=>q.order('created_at')),
-    readAllRows('saved_routes',q=>q.order('nome')),
-    readAllRows('saved_route_items',q=>q.order('posizione')),
-    readAllRows('work_contacts',q=>q.order('nome')),
-    readAllRows('contact_stores',q=>q,['contact_id','store_id']),
-    readAllRows('schedule_activities',q=>q.order('posizione')),
-    readAllRows('schedule_activity_photos',q=>q.order('created_at')),
-    readAllRows('store_reminders',q=>q,['store_id'])
-  ]);
-  startupPerf.supabase=performance.now()-supabaseStarted;
-  for(const r of [p,s,i,sch,sm,si,e,ew,iw,a,wi,wp,wn,sr,sri,wc,cs,sa,sap,reminders])if(r.error)throw r.error;
-  storeReminders=reminders.data||[];
-  profiles=p.data||[];stores=s.data||[];interventions=i.data||[];schedules=sch.data||[];scheduleMembers=sm.data||[];scheduleItems=si.data||[];extras=e.data||[];extraWorkers=ew.data||[];interventionWorkers=iw.data||[];attachments=a.data||[];
-
-  if(!wi.error&&!wp.error&&!wn.error){
-    extraWorkItems=wi.data||[];extraWorkItemPhotos=wp.data||[];extraWorkItemNotes=wn.data||[];
-  }else{
-    extraWorkItems=[];extraWorkItemPhotos=[];extraWorkItemNotes=[];
-    console.warn('Lavorazioni multiple non disponibili:',wi.error?.message||wp.error?.message||wn.error?.message||'errore sconosciuto');
-  }
-  if(!sr.error)savedRoutes=sr.data||[];else{savedRoutes=[];console.warn('Giri salvati non disponibili:',sr.error.message)}
-  if(!sri.error)savedRouteItems=sri.data||[];else{savedRouteItems=[];console.warn('Elementi giri salvati non disponibili:',sri.error.message)}
-  if(!wc.error)workContacts=wc.data||[];else{workContacts=[];console.warn('Rubrica lavoro non disponibile: esegui MIGRAZIONE-V112-28.sql',wc.error.message)}
-  if(!cs.error)contactStores=cs.data||[];else{contactStores=[];console.warn('Collegamenti rubrica-sedi non disponibili:',cs.error.message)}
-  if(!sa.error)scheduleActivities=sa.data||[];else{scheduleActivities=[];console.warn('Attività agenda non disponibili: esegui MIGRAZIONE-V112-28.sql',sa.error.message)}
-  if(!sap.error)scheduleActivityPhotos=sap.data||[];else{scheduleActivityPhotos=[];console.warn('Foto attività agenda non disponibili: esegui MIGRAZIONE-V112-30.sql',sap.error.message)}
-
+  const r=await dataSync.fresh(()=>sb.rpc('overgreen_read_data_v271',{p_sections:wanted}));
+  if(r.error)throw r.error;
+  const d=r.data||{},core=new Set(DATA_SECTIONS.slice(0,10));
+  for(const key of wanted)if(d[key]?.error&&core.has(key))throw new Error('Aggiornamento '+key+': '+d[key].error);
+  const keep=(key,rows)=>Array.isArray(d[key]?.data)?d[key].data:rows;
+  profiles=keep('profiles',profiles);stores=keep('stores',stores).filter(x=>x.attivo);interventions=keep('interventions',interventions);
+  schedules=keep('schedules',schedules);scheduleMembers=keep('schedule_members',scheduleMembers);scheduleItems=keep('schedule_items',scheduleItems).filter(x=>!scheduleDeletePending.has(x.id));
+  extras=keep('extras',extras);extraWorkers=keep('extra_workers',extraWorkers);interventionWorkers=keep('intervention_workers',interventionWorkers);attachments=keep('attachments',attachments);
+  extraWorkItems=keep('extra_work_items',extraWorkItems);extraWorkItemPhotos=keep('extra_work_item_photos',extraWorkItemPhotos);extraWorkItemNotes=keep('extra_work_item_notes',extraWorkItemNotes);
+  savedRoutes=keep('saved_routes',savedRoutes);savedRouteItems=keep('saved_route_items',savedRouteItems);workContacts=keep('work_contacts',workContacts);contactStores=keep('contact_stores',contactStores);
+  scheduleActivities=keep('schedule_activities',scheduleActivities);scheduleActivityPhotos=keep('schedule_activity_photos',scheduleActivityPhotos);storeReminders=keep('store_reminders',storeReminders);
   realProfile=profiles.find(x=>x.id===session.user.id);if(!realProfile)throw new Error('Profilo non trovato');
   const impersonatedId=sessionStorage.getItem(IMPERSONATE_PROFILE_KEY);
   const impersonatedTarget=realProfile.ruolo==='admin'&&impersonatedId?profiles.find(x=>x.id===impersonatedId&&x.attivo!==false&&x.ruolo!=='admin'):null;
   if(impersonatedId&&!impersonatedTarget)sessionStorage.removeItem(IMPERSONATE_PROFILE_KEY);
   profile=impersonatedTarget||realProfile;
-  if(typeof loadExtraEconomics==='function')await loadExtraEconomics();
-  syncImpersonationUi();
 
-  if(typeof operationsDataUpdatedAt!=='undefined')operationsDataUpdatedAt=new Date();
-  const renderStarted=performance.now();
-  // Prima mostriamo l'interfaccia. Le manutenzioni correttive non devono più
-  // tenere l'utente davanti a uno schermo vuoto/nero.
-  renderStores();renderWorkers();renderSchedulePicker();renderReportFilters();renderPending();renderScheduleFilters();renderSchedules();renderExtras();renderWorkContacts();renderDashboard();if($('statsView'))renderStats();ensureCloudSettingsUi();renderCloudEmployeeList();cleanupPhotoRecoveryRows().catch(()=>{});updateSyncUi();processUploadQueue();handleNotificationDeepLink();
+  if(typeof extraEconomicsRecords!=='undefined'){
+   extraEconomicsRecords=admin()?keep('extra_labor_hours',extraEconomicsRecords):[];
+   extraEconomicsError=admin()&&d.extra_labor_hours?.error?'Dati economici non aggiornati. Premi Aggiorna.':'';
+  }
+  const warnings=wanted.filter(k=>d[k]?.error);if(warnings.length)toast('Alcuni dati non sono aggiornati. Premi Aggiorna per riprovare.');
+  ensureCloudSettingsUi();syncImpersonationUi();if(typeof operationsDataUpdatedAt!=='undefined')operationsDataUpdatedAt=new Date();
+  startupPerf.supabase=performance.now()-loadStarted;const renderStarted=performance.now();
+  viewDataVersion++;renderLoadedView();updateSyncUi();handleNotificationDeepLink();
+  const first=loadedScope!==attachmentMediaScope();loadedScope=attachmentMediaScope();if(first){extraDrafts.list().then(rows=>{if(rows.length)toast('Hai '+rows.length+' bozze extra da riprendere: riapri la chiusura del relativo lavoro.')}).catch(()=>{});cleanupPhotoRecoveryRows().catch(()=>{});processUploadQueue();setTimeout(()=>void runScheduleRollover(),50)}
   const lastUpdate=$('syncStatus');if(lastUpdate)lastUpdate.textContent='Ultimo aggiornamento dati: '+new Date().toLocaleTimeString('it-IT');
-  startupPerf.render=performance.now()-renderStarted;
-  startupPerf.total=performance.now()-loadStarted;
-  renderStartupPerf();
-  console.info('Overgreen diagnostica avvio',startupPerf);
-
-  // V188: rollover e riconciliazioni partono DOPO il primo rendering.
-  // Il controllo non viene più bloccato per tutta la giornata: può essere rieseguito
-  // quando l'app viene riaperta/ripresa, così le filiali rimaste indietro compaiono subito.
-  setTimeout(async()=>{
-    await runScheduleRollover();
-    try{
-      await reconcileProgrammingConsistency();
-      renderSchedules();renderDashboard();
-    }catch(err){console.warn('Manutenzione programmazione in background non riuscita:',err?.message||err)}
-  },50);
-  })();
-  try{return await loadAllPromise}finally{loadAllPromise=null}
+  startupPerf.render=performance.now()-renderStarted;startupPerf.total=performance.now()-loadStarted;renderStartupPerf();
+  lastLoadedSections=new Set(wanted);lastLoadedRevision=dataSync.revision();
+ })();loadAllPromise=task;
+ try{return await task}finally{if(loadAllPromise===task)loadAllPromise=null}
 }
+let lastLoadedSections=new Set(),lastLoadedRevision=-1;
 
 
 
@@ -963,24 +949,7 @@ async function runScheduleRollover(force=false){
         console.warn('Riporto automatico non riuscito:',roll.error.message);toast('Riporto automatico non riuscito: '+roll.error.message);
         return;
       }
-      // Il rollover può spostare programmazioni, filiali, extra collegati e attività:
-      // riallineiamo tutte le sorgenti usate da dashboard e Programmazione prima del render.
-      const [sch2,sm2,si2,e2,ew2,sa2]=await Promise.all([
-        readAllRows('schedules',q=>q.order('giorno')),
-        readAllRows('schedule_members',q=>q,['schedule_id','profile_id']),
-        readAllRows('schedule_items',q=>q.order('posizione')),
-        readAllRows('extras',q=>q.order('giorno_intervento')),
-        readAllRows('extra_workers',q=>q,['extra_id','profile_id']),
-        readAllRows('schedule_activities',q=>q.order('posizione'))
-      ]);
-      for(const result of [sch2,sm2,si2,e2,ew2,sa2])if(result.error)throw result.error;
-      if(!sch2.error)schedules=sch2.data||[];
-      if(!sm2.error)scheduleMembers=sm2.data||[];
-      if(!si2.error)scheduleItems=si2.data||[];
-      if(!e2.error)extras=e2.data||[];
-      if(!ew2.error)extraWorkers=ew2.data||[];
-      if(!sa2.error)scheduleActivities=sa2.data||[];
-      renderSchedules();renderExtras();renderDashboard();
+      if(Number(roll.data)>0)await loadAll({sections:['schedules','schedule_members','schedule_items','extras','extra_workers','schedule_activities']});
     }catch(rollErr){
       startupPerf.rollover=performance.now()-rolloverStarted;renderStartupPerf();
       console.warn('Riporto automatico non disponibile:',rollErr);
@@ -1317,9 +1286,11 @@ async function storeArchiveFiles(storeId){
 }
 function archiveKind(a){return a.tipo_archivio||((String(a.storage_path||'').includes('/planimetria/'))?'planimetria':String(a.storage_path||'').includes('/foto/')?'foto':'')}
 function attachmentMediaScope(){return session?.user?.id&&profile?.id?`${session.user.id}:${profile.id}:${profile.ruolo}:${profile.attivo}`:''}
-const attachmentUrls=window.OvergreenMedia.createUrlCache({getScope:attachmentMediaScope,sign:async path=>{
-  const {data,error}=await sb.storage.from('documenti').createSignedUrl(path,600);
-  if(error)throw error;return data?.signedUrl;
+const attachmentUrls=window.OvergreenMedia.createUrlCache({getScope:attachmentMediaScope,sign:async (path,{signal})=>{
+  const {data:auth,error:authError}=await sb.auth.getSession();if(authError)throw authError;
+  const response=await fetch(cfg.supabaseUrl+'/storage/v1/object/sign/documenti/'+path.split('/').map(encodeURIComponent).join('/'),{method:'POST',headers:{apikey:cfg.supabaseKey,Authorization:'Bearer '+auth.session.access_token,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:600}),signal});
+  const data=await response.json();if(!response.ok)throw new Error(data.message||data.error||'File non disponibile');
+  const url=data.signedURL||data.signedUrl;return url?.startsWith('http')?url:cfg.supabaseUrl+'/storage/v1'+url;
 }});
 const attachmentVisibility=window.OvergreenMedia.createVisibilityLoader({IntersectionObserver:window.IntersectionObserver,MutationObserver:window.MutationObserver,document});
 function signedAttachmentUrl(a,options){return attachmentUrls.get(a.storage_path,options)}
@@ -1341,7 +1312,7 @@ function mountAttachmentPhoto(button,a,caption='Apri'){
   button.onclick=()=>openAttachment(a);
   attachmentVisibility.observe(button,()=>void load());
 }
-async function openArchiveAttachment(a){try{window.open(await signedAttachmentUrl(a),'_blank')}catch(err){alert(err.message)}}
+async function openArchiveAttachment(a){return openAttachment(a)}
 async function deleteArchiveAttachment(a,store){if(!admin()||!confirm(`Eliminare definitivamente “${a.nome_file||'questo file'}”?`))return;const r=await sb.storage.from('documenti').remove([a.storage_path]);if(r.error)return alert(r.error.message);toast('File eliminato');await showStoreDetail(stores.find(x=>x.id===store.id)||store)}
 async function uploadStoreArchiveFiles(store,kind,files){
   if(!admin()||!files.length)return;
@@ -1920,8 +1891,15 @@ function pdfSafeText(value){
     .replace(/[^\x20-\x7E\xA0-\xFF\n]/g,' ')
     .replace(/[ \t]+/g,' ').trim();
 }
+const pdfPhotoCache=new Map();
 async function compressedPhotoForPdf(url,maxSide=1000,quality=.58){
-  const res=await fetch(url);if(!res.ok)throw new Error('Foto non disponibile');
+ const key=attachmentMediaScope()+':'+url+':'+maxSide+':'+quality;
+ if(pdfPhotoCache.has(key))return pdfPhotoCache.get(key);
+ const pending=buildCompressedPhotoForPdf(url,maxSide,quality).catch(error=>{pdfPhotoCache.delete(key);throw error});
+ pdfPhotoCache.set(key,pending);while(pdfPhotoCache.size>12)pdfPhotoCache.delete(pdfPhotoCache.keys().next().value);return pending;
+}
+async function buildCompressedPhotoForPdf(url,maxSide=1000,quality=.58){
+  const res=await fetch(url,{signal:AbortSignal.timeout(30000)});if(!res.ok)throw new Error('Foto non disponibile');
   const blob=await res.blob(),bitmap=await createImageBitmap(blob),scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));
   const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
   const ctx=canvas.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();
@@ -1956,7 +1934,15 @@ function addPdfGeneratedAtFooter(doc,font,color){
     p.drawText(text,{x:Math.max(24,p.getWidth()-42-w),y:20,size,font,color});
   }
 }
-async function createSingleClientReportFile(kind,row){
+const singleReportCache=new Map();
+function createSingleClientReportFile(kind,row){
+ const key=JSON.stringify(reportRevisionData({ordinary:kind==='ordinary'?[row]:[],extra:kind==='extra'?[row]:[]}));
+ if(singleReportCache.has(key))return singleReportCache.get(key);
+ const promise=buildSingleClientReportFile(kind,row).catch(error=>{singleReportCache.delete(key);throw error});
+ singleReportCache.set(key,promise);while(singleReportCache.size>6)singleReportCache.delete(singleReportCache.keys().next().value);return promise;
+}
+async function buildSingleClientReportFile(kind,row){
+  await ensureLibraries('PDFLib');
   if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
   const {PDFDocument,StandardFonts,rgb}=PDFLib,isOrd=kind==='ordinary',st=stores.find(s=>s.id===row.store_id),names=reportWorkerNames(kind,row.id),pics=attachments.filter(a=>a.tipo==='foto_generica'&&(isOrd?a.intervention_id===row.id:a.extra_id===row.id)),linkedOrdinaryExtras=isOrd?ordinaryIncludedExtrasForReport(row):[];
   const title=isOrd?(st?.nome||'Intervento ordinario'):(row.titolo||'Lavoro extra');
@@ -2012,7 +1998,7 @@ async function createSingleClientReportFile(kind,row){
 
   if(pics.length){
     page.drawText('Documentazione fotografica',{x:margin,y,size:12,font:bold,color:green});y-=16;
-    const urls=await Promise.all(pics.map(async a=>{try{return await signedAttachmentUrl(a)}catch{return ''}}));
+    const urls=await Promise.all(pics.map(a=>signedAttachmentUrl(a,{priority:5})));
     const valid=urls.filter(Boolean),gap=10,contentW=pageW-margin*2;
     if(!valid.length){
       page.drawText('Nessuna documentazione fotografica allegata',{x:margin,y:y-8,size:10,font:regular,color:muted});
@@ -2024,7 +2010,7 @@ async function createSingleClientReportFile(kind,row){
       // 4 foto = griglia 2x2
       // 5+ foto = griglia 2 colonne, con nuove pagine automatiche.
       const drawPhoto=async(url,x,top,boxW,boxH)=>{
-        let photo;try{photo=await compressedPhotoForPdf(url)}catch{return false}
+        const photo=await compressedPhotoForPdf(url);
         const img=await pdf.embedJpg(photo.bytes),scale=Math.min(boxW/photo.width,boxH/photo.height),dw=photo.width*scale,dh=photo.height*scale;
         page.drawRectangle({x,y:top-boxH,width:boxW,height:boxH,borderColor:border,borderWidth:.7});
         page.drawImage(img,{x:x+(boxW-dw)/2,y:top-boxH+(boxH-dh)/2,width:dw,height:dh});
@@ -2115,6 +2101,7 @@ async function previewSingleClientReport(kind,row){
 }
 
 async function createStoreInterventionsReportFile(store,rows){
+  await ensureLibraries('PDFLib');
   if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
   const selected=[...(rows||[])].filter(Boolean).sort((a,b)=>String(a.data_intervento||'').localeCompare(String(b.data_intervento||'')));
   if(!selected.length)throw new Error('Seleziona almeno un intervento.');
@@ -2146,6 +2133,7 @@ async function downloadStoreInterventionsReport(store,rows){
 }
 
 async function createIntesaFullReportAsSingles(data=dailyReportData()){
+  await ensureLibraries('PDFLib');
   if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
   // I ticket Intesa inclusi nell'ordinario sono già mostrati dentro il report
   // del passaggio ordinario: non vanno aggiunti una seconda volta come report extra.
@@ -2171,6 +2159,7 @@ async function createIntesaFullReportAsSingles(data=dailyReportData()){
 }
 
 async function createDailyReportFile(mode='compact'){
+  await ensureLibraries('PDFLib');
   if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
   const data=dailyReportData();
   if(mode==='full'&&($('reportClient')?.value||'all')==='intesa')return createIntesaFullReportAsSingles(data);
@@ -2218,8 +2207,8 @@ async function createDailyReportFile(mode='compact'){
       if(pics.length){
         page.drawText(`Foto (${pics.length})`,{x:margin+2,y,size:9,font:bold,color:green});y-=12;
         const gap=6,cols=3,imgW=(contentW-gap*2)/3,imgH=92;
-        for(let i=0;i<pics.length;i+=cols){ensure(imgH+16);const rowPics=pics.slice(i,i+cols);for(let j=0;j<rowPics.length;j++){
-          try{const url=await signedAttachmentUrl(rowPics[j]),photo=await compressedPhotoForPdf(url,850,.52),img=await pdf.embedJpg(photo.bytes),ratio=Math.min(imgW/photo.width,imgH/photo.height),dw=photo.width*ratio,dh=photo.height*ratio,x=margin+j*(imgW+gap);page.drawRectangle({x,y:y-imgH,width:imgW,height:imgH,borderColor:border,borderWidth:.6});page.drawImage(img,{x:x+(imgW-dw)/2,y:y-imgH+(imgH-dh)/2,width:dw,height:dh});}catch(e){}
+        for(let i=0;i<pics.length;i+=cols){ensure(imgH+16);const rowPics=pics.slice(i,i+cols),prepared=await Promise.all(rowPics.map(async a=>{try{return await compressedPhotoForPdf(await signedAttachmentUrl(a,{priority:5}),850,.52)}catch(error){throw new Error('Foto '+(a.nome_file||a.id)+' non inclusa: '+error.message)}}));for(let j=0;j<rowPics.length;j++){
+          try{const photo=prepared[j],img=await pdf.embedJpg(photo.bytes),ratio=Math.min(imgW/photo.width,imgH/photo.height),dw=photo.width*ratio,dh=photo.height*ratio,x=margin+j*(imgW+gap);page.drawRectangle({x,y:y-imgH,width:imgW,height:imgH,borderColor:border,borderWidth:.6});page.drawImage(img,{x:x+(imgW-dw)/2,y:y-imgH+(imgH-dh)/2,width:dw,height:dh});}catch(e){throw new Error('Foto '+(rowPics[j].nome_file||rowPics[j].id||'allegata')+' non inclusa: '+(e.message||String(e))+'. Riprova prima di inviare il report.')}
         }y-=imgH+8;}
       }else{page.drawText('Nessuna foto allegata',{x:margin+2,y,size:8,font:regular,color:muted});y-=15;}
     }
@@ -2238,21 +2227,15 @@ async function createDailyReportFile(mode='compact'){
 }
 const dailyReportPdfCache=new Map();
 const dailyReportPdfPending=new Map();
+function reportRevisionData(d){
+ const linkedItems=new Set(d.ordinary.flatMap(r=>[r.schedule_item_id,...(r.schedule_item_ids||[])].filter(Boolean)));
+ const linkedExtras=extras.filter(e=>linkedItems.has(e.schedule_item_id)&&isOrdinaryIncludedExtra(e));
+ const ordinary=new Set(d.ordinary.map(r=>r.id)),extra=new Set([...d.extra,...linkedExtras].map(r=>r.id)),storeIds=new Set([...d.ordinary,...d.extra].map(r=>r.store_id));
+ const work=extraWorkItems.filter(r=>extra.has(r.extra_id)),workIds=new Set(work.map(r=>r.id));
+ return [attachmentMediaScope(),d,linkedExtras,attachments.filter(a=>ordinary.has(a.intervention_id)||extra.has(a.extra_id)),stores.filter(s=>storeIds.has(s.id)),profiles,interventionWorkers.filter(w=>ordinary.has(w.intervention_id)),extraWorkers.filter(w=>extra.has(w.extra_id)),work,extraWorkItemPhotos.filter(p=>workIds.has(p.work_item_id)),extraWorkItemNotes.filter(n=>workIds.has(n.work_item_id))];
+}
 function dailyReportPdfKey(mode='compact'){
-  const d=dailyReportData();
-  const ids=[
-    ...d.ordinary.map(r=>`o:${r.id}:${r.closed_at||''}:${r.stato||''}`),
-    ...d.extra.map(r=>`e:${r.id}:${r.closed_at||''}:${r.stato||''}`)
-  ].join('|');
-  return [
-    mode,
-    d.period?.short||d.date||'',
-    $('reportType')?.value||'all',
-    $('reportWorker')?.value||'all',
-    $('reportClient')?.value||'all',
-    ids,
-    JSON.stringify([d.ordinary,d.extra,attachments,profiles,stores,extraWorkItems,extraWorkItemPhotos,extraWorkItemNotes,scheduleActivities,scheduleActivityPhotos])
-  ].join('::');
+ return mode+'::'+JSON.stringify(reportRevisionData(dailyReportData()));
 }
 async function getDailyReportPdf(mode='compact'){
   const key=dailyReportPdfKey(mode);
@@ -2260,6 +2243,7 @@ async function getDailyReportPdf(mode='compact'){
   if(dailyReportPdfPending.has(key))return dailyReportPdfPending.get(key);
   const promise=createDailyReportFile(mode).then(data=>{
     dailyReportPdfCache.set(key,data);
+    while(dailyReportPdfCache.size>4)dailyReportPdfCache.delete(dailyReportPdfCache.keys().next().value);
     dailyReportPdfPending.delete(key);
     return data;
   }).catch(err=>{
@@ -2270,12 +2254,7 @@ async function getDailyReportPdf(mode='compact'){
   return promise;
 }
 function prewarmDailyReportPdfs(){
-  // Generiamo i PDF in anticipo mentre l'utente guarda il report.
-  // In questo modo, quando preme il pulsante, navigator.share viene chiamato
-  // immediatamente dal tap e iOS apre lo stesso foglio di condivisione
-  // già usato dal report del singolo intervento.
-  setTimeout(()=>{getDailyReportPdf('compact').catch(()=>{})},150);
-  setTimeout(()=>{getDailyReportPdf('full').catch(()=>{})},700);
+ // PDF generation is on demand; browsing filters must not download all photos.
 }
 async function exportDailyReportPdf(mode='compact'){
   try{
@@ -2384,7 +2363,7 @@ function renderDailyReport(){
     c.querySelector('[data-client-download]')?.addEventListener('click',()=>downloadSingleClientReport(item.kind,r));
     c.querySelector('[data-store]')?.addEventListener('click',()=>showStoreDetail(st));
     c.querySelectorAll('[data-doc]').forEach(b=>b.onclick=()=>openAttachment(attachments.find(a=>a.id===b.dataset.doc)));
-    const gallery=c.querySelector('.report-photo-grid');for(const a of pics){const b=document.createElement('button');b.type='button';b.className='report-photo';b.innerHTML='<span>📷</span>';gallery.appendChild(b);signedAttachmentUrl(a).then(url=>{b.innerHTML=`<img src="${url}" alt="${esc(a.nome_file||'Foto')}" loading="lazy">`;b.onclick=()=>window.open(url,'_blank')}).catch(()=>b.onclick=()=>openArchiveAttachment(a))}
+    const gallery=c.querySelector('.report-photo-grid');for(const a of pics){const b=document.createElement('button');b.className='report-photo';gallery.appendChild(b);mountAttachmentPhoto(b,a)}
     if(!pics.length)gallery.remove();list.appendChild(c);
   }
 }
@@ -2490,6 +2469,7 @@ async function uploadFile(path,file){const {error}=await sb.storage.from('docume
 async function addAttachment(data){const {data:row,error}=await sb.from('attachments').insert(data).select().single();if(error)throw error;return row}
 async function showHistory(s,refreshOnly=false){
   currentHistoryStoreId=s.id;
+  if(!refreshOnly&&!$('historyDialog').open)openDialog('historyDialog');
   const rows=interventions.filter(i=>i.store_id===s.id&&!i.multi_day_open).sort((a,b)=>String(interventionEndDate(b)).localeCompare(String(interventionEndDate(a))));
   $('historyTitle').textContent=s.nome;
   const photoCount=attachments.filter(a=>rows.some(r=>r.id===a.intervention_id)&&a.tipo==='foto_generica').length;
@@ -2518,7 +2498,7 @@ async function showHistory(s,refreshOnly=false){
 
   const timeline=document.createElement('div');timeline.className='history-timeline';$('historyList').appendChild(timeline);
   for(const i of rows){
-    const names=await workerNames(i.id),pics=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica');
+    const names=reportWorkerNames('ordinary',i.id),pics=attachments.filter(a=>a.intervention_id===i.id&&a.tipo==='foto_generica');
     const d=document.createElement('article');d.className=`history-card history-${i.stato}`;
     const statusText=historyStatusLabel(i.stato);
     d.innerHTML=`<div class="history-dot"></div><div class="history-card-top"><div class="history-date"><span>${interventionDateLabel(i)}</span><small>${i.data_fine&&i.data_fine!==i.data_intervento?'Intervento ordinario · più giorni':'Intervento ordinario'}</small></div><span class="history-status">${esc(statusText)}</span></div><label class="history-report-select"><input type="checkbox" data-history-select value="${i.id}"><span>Includi nel report multiplo</span></label>${forcedPhotoApprovalLabel(i)}${i.note?`<div class="history-note">${esc(i.note)}</div>`:'<div class="history-note muted">Nessuna nota inserita</div>'}${i.next_visit_note?`<div class="history-next-visit"><strong>Promemoria lasciato per il passaggio successivo:</strong> ${esc(i.next_visit_note)}</div>`:''}<div class="history-meta"><div class="history-workers">${names.length?names.map(n=>`<span>👤 ${esc(n)}</span>`).join(''):'<span>👤 Operatori non indicati</span>'}</div>${pics.length?`<span class="history-photo-count">📷 ${pics.length}</span>`:''}</div><div class="closure-stamp">🕒 Chiuso: ${esc(closureText(i))}</div><div class="history-photos" data-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':''}</div><div class="history-report-actions"><button type="button" data-single-report>📄 Report singolo</button>${admin()?`<button type="button" class="secondary" data-add-retro-ticket>${clientType(s)==='intesa'?'🎫 Aggiungi ticket già compreso':'🎯 Aggiungi target già compreso'}</button>`:''}</div>${admin()?'<div class="history-admin-actions"><button class="history-edit-btn" data-edit-history>Modifica</button><button class="history-delete-btn" data-delete-history>Elimina</button></div>':''}`;
@@ -2636,25 +2616,10 @@ function openHistoryEdit(i){
 async function workerNames(interventionId){const {data}=await sb.from('intervention_workers').select('profile_id').eq('intervention_id',interventionId);return (data||[]).map(x=>profiles.find(p=>p.id===x.profile_id)?.nome).filter(Boolean)}
 let pendingRefreshPromise=null;
 async function refreshPendingData(){
-  if(!admin())return;
-  if(loadAllPromise)return loadAllPromise;
-  if(pendingRefreshPromise)return pendingRefreshPromise;
-  const list=$('pendingList');
-  if(!list.children.length)list.innerHTML='<p class="muted">Aggiornamento interventi e foto…</p>';
-  list.setAttribute('aria-busy','true');
-  pendingRefreshPromise=(async()=>{
-    const [ir,ar,er,ewr,iwr]=await Promise.all([
-      readAllRows('interventions',q=>q.order('created_at',{ascending:false})),
-      readAllRows('attachments',q=>q.order('created_at',{ascending:false})),
-      readAllRows('extras',q=>q.order('giorno_intervento')),
-      readAllRows('extra_workers',q=>q,['extra_id','profile_id']),
-      readAllRows('intervention_workers',q=>q,['intervention_id','profile_id'])
-    ]);
-    for(const r of [ir,ar,er,ewr,iwr])if(r.error)throw r.error;
-    interventions=ir.data||[];attachments=ar.data||[];extras=er.data||[];extraWorkers=ewr.data||[];interventionWorkers=iwr.data||[];
-    renderPending();renderDashboard();renderSchedules();
-  })();
-  try{return await pendingRefreshPromise}finally{pendingRefreshPromise=null;list.removeAttribute('aria-busy')}
+ if(!admin())return;
+ const list=$('pendingList');list?.setAttribute('aria-busy','true');
+ try{await loadAll({sections:['interventions','attachments','extras','extra_workers','intervention_workers']});renderPending()}
+ finally{list?.removeAttribute('aria-busy')}
 }
 async function openPendingDialog(){
   openDialog('pendingDialog');
@@ -2971,39 +2936,26 @@ const helpPages={
   settings:{title:'Come usare le Impostazioni',html:`<p>Da questa schermata puoi gestire l’app e il tuo account.</p><ul><li><strong>Aggiorna dati</strong> scarica manualmente le informazioni più recenti.</li><li>Lorenzo può creare, modificare o disattivare gli utenti.</li><li><strong>Esci</strong> termina l’accesso sul dispositivo.</li></ul>`}
 };
 function openHelp(){const h=helpPages[currentView]||helpPages.dashboard;$('helpTitle').textContent=h.title;$('helpBody').innerHTML=h.html;openDialog('helpDialog')}
+async function scheduleOperation(scheduleId,operation,payload){
+ const key='overgreen-schedule-v271:'+scheduleId+':'+operation+':'+JSON.stringify(payload);
+ let id=sessionStorage.getItem(key);if(!id){id=crypto.randomUUID();sessionStorage.setItem(key,id)}
+ const r=await sb.rpc('overgreen_schedule_v271',{p_request_id:id,p_schedule_id:scheduleId,p_operation:operation,p_payload:payload});
+ if(r.error)throw r.error;sessionStorage.removeItem(key);return r.data;
+}
+function renderScheduleChange(){if(currentView==='schedule')renderSchedules();if(currentView==='dashboard')renderDashboard();if(currentView==='stores')renderStores()}
 async function deleteScheduleItem(item,store){
-  if(!admin())return;
-  if(effectiveScheduleState(item)!=='da_fare')return alert('Questo intervento non può essere eliminato perché risulta già chiuso o in attesa.');
-  if(!confirm(`Rimuovere “${store?.nome||'questo punto vendita'}” dalla programmazione?`))return;
-  const linked=extras.filter(e=>e.schedule_item_id===item.id&&!['completato','annullato'].includes(e.stato));
-  for(const e of linked){
-    const r=await sb.from('extras').update({schedule_item_id:null}).eq('id',e.id);
-    if(r.error)return alert('Impossibile scollegare un extra associato: '+r.error.message);
-    e.schedule_item_id=null;
-  }
-  const {data:deleted,error}=await sb.from('schedule_items').delete().eq('id',item.id).select('id');
-  if(error)return alert('Eliminazione non riuscita: '+error.message);
-  if(!deleted?.length){
-    await loadAll();
-    return alert('Il record non è stato eliminato. Controlla i permessi Supabase della tabella schedule_items.');
-  }
-  scheduleItems=scheduleItems.filter(x=>x.id!==item.id);
-  const remaining=scheduleItems.filter(x=>x.schedule_id===item.schedule_id);
-  if(remaining.length){
-    const ordered=remaining.filter(x=>effectiveScheduleState(x)!=='completato').sort((a,b)=>(a.posizione||0)-(b.posizione||0));
-    for(let index=0;index<ordered.length;index++){
-      const wanted=index+1,current=ordered[index];
-      if(current.posizione===wanted)continue;
-      const r=await sb.from('schedule_items').update({posizione:wanted}).eq('id',current.id);
-      if(r.error)return alert('Punto eliminato, ma non riesco a rinumerare il giro: '+r.error.message);
-      current.posizione=wanted;
-    }
-  }
-  // Conservare la giornata e la squadra: può contenere attività o extra,
-  // anche aggiunti nel frattempo da un altro dispositivo.
-  toast(linked.length?'Punto vendita rimosso · extra scollegati':'Punto vendita rimosso dalla programmazione');
-  renderSchedules();renderDashboard();renderStores();
-  await loadAll();
+ if(!admin()||scheduleDeletePending.has(item.id))return;
+ if(effectiveScheduleState(item)!=='da_fare')return alert('Questo intervento risulta già chiuso o in attesa.');
+ if(!confirm(`Rimuovere “${store?.nome||'questo punto vendita'}” dalla programmazione?`))return;
+ scheduleDeletePending.add(item.id);scheduleItems=scheduleItems.filter(x=>x.id!==item.id);renderScheduleChange();
+ try{
+  await dataSync.enqueue(item.schedule_id,()=>scheduleOperation(item.schedule_id,'delete',{item_id:item.id}));
+  extras.filter(x=>x.schedule_item_id===item.id&&!['completato','annullato'].includes(x.stato)).forEach(x=>x.schedule_item_id=null);
+  toast('Punto vendita rimosso dalla programmazione');
+ }catch(error){
+  if(!scheduleItems.some(x=>x.id===item.id))scheduleItems.push(item);
+  alert('Rimozione non confermata: '+(error.message||String(error))+'. Puoi riprovare.');
+ }finally{scheduleDeletePending.delete(item.id);renderScheduleChange()}
 }
 
 async function moveScheduleItem(item,direction){
@@ -3013,20 +2965,10 @@ async function moveScheduleItem(item,direction){
 }
 
 async function persistScheduleOrder(scheduleId,orderedJobs){
-  if(!admin()||!scheduleId||!Array.isArray(orderedJobs)||!orderedJobs.length)return;
-  for(let index=0;index<orderedJobs.length;index++){
-    const job=orderedJobs[index],wanted=index+1;
-    if(job.kind==='ordinary'){
-      if(Number(job.row.posizione)===wanted)continue;
-      const {error}=await sb.from('schedule_items').update({posizione:wanted}).eq('id',job.row.id).eq('schedule_id',scheduleId);if(error)throw error;job.row.posizione=wanted;
-    }else if(job.kind==='extra'){
-      if(Number(job.row.posizione_giro)===wanted)continue;
-      const {error}=await sb.from('extras').update({posizione_giro:wanted}).eq('id',job.row.id).eq('schedule_id',scheduleId);if(error)throw error;job.row.posizione_giro=wanted;
-    }else{
-      if(Number(job.row.posizione)===wanted)continue;
-      const {error}=await sb.from('schedule_activities').update({posizione:wanted}).eq('id',job.row.id).eq('schedule_id',scheduleId);if(error)throw error;job.row.posizione=wanted;
-    }
-  }
+ if(!admin()||!scheduleId||!orderedJobs?.length)return;
+ const jobs=orderedJobs.map(job=>({kind:job.kind,id:job.row.id,position:job.kind==='extra'?job.row.posizione_giro:job.row.posizione,state:job.row.stato}));
+ await dataSync.enqueue(scheduleId,()=>scheduleOperation(scheduleId,'order',{jobs}));
+ orderedJobs.forEach((job,index)=>{job.row[job.kind==='extra'?'posizione_giro':'posizione']=index+1});
 }
 let scheduleOrderBusy=false;
 function enableScheduleOrder(container,schedule){
@@ -3293,7 +3235,7 @@ async function saveActivityCompletion(){
 async function reopenScheduleActivity(a){if(!a||!confirm(`Riaprire “${a.titolo||'questa attività'}”? Tornerà tra le attività da fare.`))return;const r=await sb.from('schedule_activities').update({stato:'da_fare',completed_at:null,completed_by:null}).eq('id',a.id);if(r.error)return alert(r.error.message);toast('Attività riaperta');$('activityHistoryDialog')?.close();await loadAll()}
 function openActivityConsuntivoDialog(a){if(!a)return;$('activityConsuntivoId').value=a.id;$('activityConsuntivoTitle').textContent=a.titolo||activityTypeMeta(a.tipo).label;$('activityConsuntivoMinutes').value=a.consuntivo_minutes??'';$('activityConsuntivoKm').value=a.consuntivo_km??'';$('activityConsuntivoSpese').value=a.consuntivo_spese??'';$('activityConsuntivoOutcome').value=a.consuntivo_esito||'';$('activityConsuntivoNotes').value=a.consuntivo_note||'';openDialog('activityConsuntivoDialog')}
 async function saveActivityConsuntivo(){const id=$('activityConsuntivoId').value,a=scheduleActivities.find(x=>x.id===id);if(!a)return;const payload={consuntivo_minutes:$('activityConsuntivoMinutes').value?Number($('activityConsuntivoMinutes').value):null,consuntivo_km:$('activityConsuntivoKm').value?Number($('activityConsuntivoKm').value):null,consuntivo_spese:$('activityConsuntivoSpese').value?Number($('activityConsuntivoSpese').value):null,consuntivo_esito:$('activityConsuntivoOutcome').value.trim()||null,consuntivo_note:$('activityConsuntivoNotes').value.trim()||null,consuntivato_at:new Date().toISOString(),consuntivato_da:profile.id};const r=await sb.from('schedule_activities').update(payload).eq('id',id);if(r.error)return alert(r.error.message);$('activityConsuntivoDialog').close();toast('Consuntivo salvato');await loadAll();renderActivityHistory()}
-async function signedActivityPhotoUrl(p){const {data,error}=await sb.storage.from('documenti').createSignedUrl(p.storage_path,900);if(error)throw error;return data.signedUrl}
+async function signedActivityPhotoUrl(p){return attachmentUrls.get(p.storage_path,{priority:1})}
 function openActivityHistory(){renderActivityHistory();openDialog('activityHistoryDialog')}
 function renderActivityHistory(){const box=$('activityHistoryList');if(!box)return;const q=String($('activityHistorySearch')?.value||'').trim().toLowerCase(),filter=$('activityHistoryFilter')?.value||'all';let rows=scheduleActivities.filter(a=>a.stato==='completato').sort((a,b)=>String(b.completed_at||'').localeCompare(String(a.completed_at||'')));if(filter==='pending')rows=rows.filter(a=>!a.consuntivato_at);if(filter==='done')rows=rows.filter(a=>!!a.consuntivato_at);if(q)rows=rows.filter(a=>{const st=stores.find(x=>x.id===a.store_id),ct=workContacts.find(x=>x.id===a.contact_id);return [a.titolo,a.indirizzo,a.completion_notes,a.consuntivo_esito,a.consuntivo_note,st?.nome,st?.citta,ct?.nome,ct?.azienda].filter(Boolean).join(' ').toLowerCase().includes(q)});box.innerHTML='';if(!rows.length){box.innerHTML='<div class="card report-empty"><strong>Nessuna attività trovata</strong><p class="muted">Non ci sono attività concluse con questi filtri.</p></div>';return}for(const a of rows){const st=stores.find(x=>x.id===a.store_id),type=activityTypeMeta(a.tipo),photos=activityPhotosFor(a.id),c=document.createElement('article');c.className='card';c.innerHTML=`<div class="card-top"><div><span class="activity-pill">${type.icon} ${esc(type.label)}</span><h3>${esc(a.titolo||type.label)}</h3><p class="muted">${a.completed_at?new Date(a.completed_at).toLocaleString('it-IT'):'Data non disponibile'}${st?' · '+esc(st.nome):a.indirizzo?' · '+esc(a.indirizzo):''}</p></div><span class="${a.consuntivato_at?'status-ok':'pending'}">${a.consuntivato_at?'✓ Consuntivata':'Da consuntivare'}</span></div>${a.completion_notes?`<div class="schedule-next-visit"><strong>Note esecuzione</strong><p>${esc(a.completion_notes)}</p></div>`:''}${a.consuntivo_esito||a.consuntivo_note?`<div class="schedule-next-visit"><strong>Consuntivo</strong>${a.consuntivo_esito?`<p><b>Esito:</b> ${esc(a.consuntivo_esito)}</p>`:''}${a.consuntivo_note?`<p>${esc(a.consuntivo_note)}</p>`:''}</div>`:''}<p class="muted">📷 ${photos.length} foto${a.consuntivo_minutes!=null?' · ⏱ '+a.consuntivo_minutes+' min':''}${a.consuntivo_km!=null?' · 🚐 '+a.consuntivo_km+' km':''}${a.consuntivo_spese!=null?' · € '+Number(a.consuntivo_spese).toFixed(2):''}</p><div class="pending-review-photos" data-activity-photos></div><div class="actions"><button data-consuntiva>${a.consuntivato_at?'Modifica consuntivo':'Consuntiva'}</button><button class="secondary" data-reopen-activity>↩ Riapri</button></div>`;c.querySelector('[data-consuntiva]').onclick=()=>openActivityConsuntivoDialog(a);c.querySelector('[data-reopen-activity]').onclick=()=>reopenScheduleActivity(a);const gallery=c.querySelector('[data-activity-photos]');for(const p of photos){const b=document.createElement('button');b.type='button';b.className='pending-review-photo';b.innerHTML='<span>📷</span>';signedActivityPhotoUrl(p).then(url=>{b.innerHTML=`<img src="${url}" alt="${esc(p.nome_file||'Foto attività')}" loading="lazy"><span>Apri</span>`;b.onclick=()=>window.open(url,'_blank')}).catch(()=>{});gallery.appendChild(b)}box.appendChild(c)}}
 async function completeScheduleActivity(a){openActivityCompleteDialog(a)}
@@ -3423,6 +3365,7 @@ function schedulePdfGroups(from,to){
   return groups.sort((a,b)=>String(a.schedule.giorno).localeCompare(String(b.schedule.giorno))||String(a.members.join(' ')).localeCompare(String(b.members.join(' ')),'it'));
 }
 async function createScheduleProgramPdf(from,to){
+  await ensureLibraries('PDFLib');
   if(!window.PDFLib?.PDFDocument)throw new Error('Motore PDF non caricato. Chiudi e riapri l’app e riprova.');
   const groups=schedulePdfGroups(from,to);
   if(!groups.length)throw new Error('Non risultano lavori programmati nel periodo selezionato.');
@@ -3767,6 +3710,7 @@ async function embedUprightImage(targetDoc,bytes,mime='image/jpeg'){
   return targetDoc.embedJpg(normalized);
 }
 async function appendAttachmentAsFullPage(targetDoc,a){
+  await ensureLibraries('PDFLib');
   const bytes=await fetchAttachmentBytes(a),mime=String(a.mime_type||'').toLowerCase(),name=String(a.nome_file||'').toLowerCase();
   if(mime.includes('pdf')||name.endsWith('.pdf')){const source=await PDFLib.PDFDocument.load(bytes);if(!source.getPageCount())throw new Error(`${attachmentLabel(a)} è vuoto`);const [page]=await targetDoc.copyPages(source,[0]);targetDoc.addPage(page);return}
   let image;try{image=await embedUprightImage(targetDoc,bytes,mime)}catch{throw new Error(`${attachmentLabel(a)} deve essere PDF, JPG o PNG`)}
@@ -3774,6 +3718,7 @@ async function appendAttachmentAsFullPage(targetDoc,a){
 }
 
 async function generateComplexExtraReportPdf(e,button){
+  await ensureLibraries('PDFLib');
  const items=workItemsForExtra(e.id);if(!items.length)return alert('Questo extra non ha lavorazioni strutturate.');if(!window.PDFLib)return alert('La libreria PDF non è ancora caricata.');const old=button?.textContent;if(button){button.disabled=true;button.textContent='Genero report…'}
  try{const {PDFDocument,StandardFonts,rgb}=PDFLib,doc=await PDFDocument.create(),bold=await doc.embedFont(StandardFonts.HelveticaBold),regular=await doc.embedFont(StandardFonts.Helvetica),green=rgb(.03,.36,.19),muted=rgb(.35,.43,.39),st=stores.find(s=>s.id===e.store_id),margin=42,pageW=595.28,pageH=841.89,w=pageW-margin*2;let page=doc.addPage([pageW,pageH]),y=790;
  page.drawText('OVERGREEN',{x:margin,y,size:22,font:bold,color:green});page.drawText('REPORT LAVORAZIONI E DOCUMENTAZIONE FOTOGRAFICA',{x:margin,y:y-28,size:10.5,font:bold,color:muted});y-=62;
@@ -3798,6 +3743,7 @@ async function normalizeImageForPackagePdf(bytes,mime='image/jpeg',quality=.68,m
   }finally{URL.revokeObjectURL(url)}
 }
 async function appendAttachmentForPackage(targetDoc,a,quality=.68,maxSide=1500){
+  await ensureLibraries('PDFLib');
   const bytes=await fetchAttachmentBytes(a),mime=String(a.mime_type||'').toLowerCase(),name=String(a.nome_file||'').toLowerCase();
   if(mime.includes('pdf')||name.endsWith('.pdf')){
     // Preserve PDF text/vector quality. Only the first page is required by the existing closure format.
@@ -3810,6 +3756,7 @@ async function appendAttachmentForPackage(targetDoc,a,quality=.68,maxSide=1500){
 }
 
 async function buildExtraClosurePdfBlob(e,packageQuality=.68,packageMaxSide=1500){
+  await ensureLibraries('PDFLib');
   const reportEurospin=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),reportOvergreen=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen'),requestFile=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');
   if(!requestFile||!reportOvergreen||!reportEurospin)throw new Error('Per generare la chiusura servono richiesta, file Overgreen e file Eurospin.');
   if(!window.PDFLib)throw new Error('Libreria PDF non disponibile.');
@@ -3864,6 +3811,7 @@ async function buildExtraClosurePdfBlob(e,packageQuality=.68,packageMaxSide=1500
 
 
 async function generateExtraClosurePdf(e,button){
+  await ensureLibraries('PDFLib');
   const reportEurospin=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),reportOvergreen=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen'),requestFile=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');
   if(!requestFile||!reportOvergreen||!reportEurospin)return alert('Per generare la chiusura servono il file richiesta, il file Overgreen e il file Eurospin.');
   if(!window.PDFLib)return alert('La libreria PDF non è ancora caricata. Aggiorna la pagina e riprova.');
@@ -3992,6 +3940,7 @@ function extractClosureNumberFromText(text){
   return null
 }
 async function pdfTextFromAttachment(a){
+  await ensureLibraries('pdfjsLib');
   const url=await signedAttachmentUrl(a),loading=pdfjsLib.getDocument({url});
   const pdf=await loading.promise;let text='';
   for(let i=1;i<=Math.min(pdf.numPages,4);i++){const page=await pdf.getPage(i),content=await page.getTextContent();text+=' '+content.items.map(x=>x.str).join(' ')}
@@ -3999,6 +3948,7 @@ async function pdfTextFromAttachment(a){
   return text
 }
 async function attachmentImageBlob(a){
+  await ensureLibraries('pdfjsLib');
   const url=await signedAttachmentUrl(a),res=await fetch(url,{cache:'no-store'});if(!res.ok)throw new Error('Impossibile leggere il file Eurospin');
   const original=await res.blob(),mime=String(a.mime_type||original.type||'').toLowerCase(),name=String(a.nome_file||'').toLowerCase();
   if(mime.includes('pdf')||name.endsWith('.pdf')){
@@ -4011,6 +3961,7 @@ async function attachmentImageBlob(a){
   return original
 }
 async function getEurospinOcrWorker(){
+  await ensureLibraries('Tesseract');
   if(eurospinOcrWorker)return eurospinOcrWorker;
   if(!window.Tesseract)throw new Error('OCR non disponibile. Aggiorna la pagina e riprova.');
   eurospinOcrWorker=await Tesseract.createWorker('ita+eng',1,{logger:m=>{const s=$('eurospinExcelStatus');if(s&&m.status==='recognizing text')s.textContent=`OCR documento… ${Math.round((m.progress||0)*100)}%`}});
@@ -4062,6 +4013,7 @@ function excelDateValue(dateString){
   if(!dateString)return null;const [y,m,d]=String(dateString).slice(0,10).split('-').map(Number);return y&&m&&d?new Date(y,m-1,d):null
 }
 async function generateEurospinExcel(){
+  await ensureLibraries('ExcelJS');
   if(!window.ExcelJS)return alert('Libreria Excel non disponibile. Aggiorna la pagina e riprova.');
   if(!eurospinExcelState.analyzed||eurospinExcelState.month!==$('eurospinPackageMonth').value||eurospinExcelState.category!==$('eurospinPackageCategory').value)return alert('Mese o categoria cambiati: ripeti la lettura dei numeri chiusura.');
   const rows=eurospinExcelState.rows||[];if(!rows.length||rows.some(r=>!r.closureNumber))return alert('Prima completa la lettura dei numeri chiusura.');
@@ -4087,6 +4039,7 @@ async function generateEurospinExcel(){
 }
 
 async function buildEurospinCategoryZip(cat,rows,monthLabel,quality,maxSide,button,root){
+  await ensureLibraries('JSZip');
   const zip=new JSZip();
   for(let i=0;i<rows.length;i++){
     const e=rows[i].e;
@@ -4101,6 +4054,7 @@ async function buildEurospinCategoryZip(cat,rows,monthLabel,quality,maxSide,butt
   return zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:9}})
 }
 async function generateEurospinMonthlyPackages(){
+  await ensureLibraries('JSZip');
   const btn=$('eurospinPackageGenerate'),root=$('eurospinPackageSummary'),downloads=$('eurospinPackageDownloads');
   if(!btn||!window.JSZip)return alert('La libreria ZIP non è ancora disponibile. Aggiorna la pagina e riprova.');
   const categories=eurospinPackageSelectedCategories(),month=$('eurospinPackageMonth').value;
@@ -4434,7 +4388,7 @@ async function openAttachment(a){
   }
 
   try{
-    const url=await signedAttachmentUrl(a);
+    const url=await signedAttachmentUrl(a,{priority:10});
 
     if(popup){
       popup.location.href=url;
@@ -4498,8 +4452,8 @@ $('archiveUploadForm')?.addEventListener('submit',async e=>{
 });
 
 if(typeof bindOperationsUi==='function')bindOperationsUi();
-document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeDialog(b));$('helpBtn').onclick=openHelp;document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));document.querySelectorAll('[data-client-filter]').forEach(b=>b.onclick=()=>{storeClientFilter=b.dataset.clientFilter;document.querySelectorAll('[data-client-filter]').forEach(x=>x.classList.toggle('active',x===b));renderStores()});document.querySelectorAll('[data-extra-client]').forEach(b=>b.onclick=()=>{extraClientFilter=b.dataset.extraClient;document.querySelectorAll('[data-extra-client]').forEach(x=>x.classList.toggle('active',x===b));renderExtras()});document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{storeFilter=b.dataset.filter;renderStores()});
-$("globalSearchBtn")?.addEventListener("click",()=>{$("globalSearchDialog").showModal();setTimeout(()=>$("globalSearchEverywhere").focus(),50)});$("globalSearchEverywhere")?.addEventListener("input",renderGlobalSearchEverywhere);$("healthRefreshBtn")?.addEventListener("click",renderHealthCenter);document.querySelectorAll("[data-bottom-view]").forEach(b=>b.onclick=()=>{setView(b.dataset.bottomView);$("bottomMoreMenu").classList.add("hidden")});$("bottomMoreBtn")?.addEventListener("click",()=>$("bottomMoreMenu").classList.toggle("hidden"));document.querySelectorAll("[data-more-view]").forEach(b=>b.onclick=()=>{setView(b.dataset.moreView);$("bottomMoreMenu").classList.add("hidden")});document.querySelector("[data-more-search]")?.addEventListener("click",()=>{$("bottomMoreMenu").classList.add("hidden");$("globalSearchDialog").showModal()});
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeDialog(b));$('helpBtn').onclick=openHelp;document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view,{reuse:true}));document.querySelectorAll('[data-client-filter]').forEach(b=>b.onclick=()=>{storeClientFilter=b.dataset.clientFilter;document.querySelectorAll('[data-client-filter]').forEach(x=>x.classList.toggle('active',x===b));renderStores()});document.querySelectorAll('[data-extra-client]').forEach(b=>b.onclick=()=>{extraClientFilter=b.dataset.extraClient;document.querySelectorAll('[data-extra-client]').forEach(x=>x.classList.toggle('active',x===b));renderExtras()});document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{storeFilter=b.dataset.filter;renderStores()});
+$("globalSearchBtn")?.addEventListener("click",()=>{$("globalSearchDialog").showModal();setTimeout(()=>$("globalSearchEverywhere").focus(),50)});$("globalSearchEverywhere")?.addEventListener("input",renderGlobalSearchEverywhere);$("healthRefreshBtn")?.addEventListener("click",renderHealthCenter);document.querySelectorAll("[data-bottom-view]").forEach(b=>b.onclick=()=>{setView(b.dataset.bottomView,{reuse:true});$("bottomMoreMenu").classList.add("hidden")});$("bottomMoreBtn")?.addEventListener("click",()=>$("bottomMoreMenu").classList.toggle("hidden"));document.querySelectorAll("[data-more-view]").forEach(b=>b.onclick=()=>{setView(b.dataset.moreView,{reuse:true});$("bottomMoreMenu").classList.add("hidden")});document.querySelector("[data-more-search]")?.addEventListener("click",()=>{$("bottomMoreMenu").classList.add("hidden");$("globalSearchDialog").showModal()});
 $('impersonationSelect')?.addEventListener('change',async e=>{await setImpersonatedProfile(e.target.value);$('impersonationBar')?.removeAttribute('open')});$('exitImpersonationBtn')?.addEventListener('click',async()=>{await setImpersonatedProfile('admin');$('impersonationBar')?.removeAttribute('open')});$('globalSearch')?.addEventListener('input',renderGlobalSearch);$('dashboardRefresh').onclick=loadAll;if($('storeAddressLookupBtn'))$('storeAddressLookupBtn').onclick=lookupStoreAddressOnline;document.querySelectorAll('[data-dash]').forEach(b=>b.onclick=()=>{scheduleExactDate=null;if(b.dataset.dash==='pending')openPendingDialog();else if(b.dataset.dash==='due'){storeFilter='due';setView('stores')}else if(b.dataset.dash==='urgent'){storeFilter='urgent';setView('stores')}else if(b.dataset.dash==='scheduled'){storeFilter='scheduled';storeClientFilter='all';$('searchInput').value='';setView('stores')}else if(b.dataset.dash==='done'){showCompletedToday()}else if(b.dataset.dash==='today'){$('dashboardNext').scrollIntoView({behavior:'smooth'})}else if(b.dataset.dash==='openextras')setView('extras');else if(b.dataset.dash==='todayextras'){$('extraSearchInput').value=today();setView('extras');renderExtras()}else setView('stores')});$('scheduleClientFilter').onchange=e=>{scheduleClientFilter=e.target.value;renderSchedules()};$('scheduleWorkerFilter').onchange=e=>{scheduleWorkerFilter=e.target.value;renderSchedules()};$('scheduleDateFilter').onchange=e=>{scheduleExactDate=null;scheduleDateFilter=e.target.value;renderSchedules()};$('searchInput').oninput=renderStores;$('sortSelect').onchange=renderStores;$('addStoreBtn').onclick=()=>openStore();$('bulkIntervalBtn').onclick=openBulkIntervalDialog;$('bulkIntervalClient').onchange=updateBulkIntervalPreview;$('bulkIntervalSiteType').onchange=updateBulkIntervalPreview;$('bulkIntervalDays').oninput=updateBulkIntervalPreview;$('pendingBtn').onclick=openPendingDialog;$('logoutBtn').onclick=signOut;$('refreshBtn').onclick=loadAll;$('seedBtn').onclick=seedStores;$('scheduleSearch').oninput=renderSchedulePicker;$('schedulePickerClient').onchange=renderSchedulePicker;$('scheduleDate').onchange=renderSchedulePicker;document.querySelectorAll('[data-quick-date]').forEach(b=>b.onclick=()=>{$('scheduleDate').value=b.dataset.quickDate==='today'?today():tomorrow();renderSchedulePicker()});$('addScheduleSearch').oninput=renderAddSchedulePicker;$('addScheduleNewExtra')?.addEventListener('click',()=>{const sch=schedules.find(x=>x.id===$('addScheduleId').value);if(sch)openNewExtraForSchedule(sch)});$('addScheduleNewActivity')?.addEventListener('click',()=>{const sch=schedules.find(x=>x.id===$('addScheduleId').value);if(sch){$('addScheduleItemsDialog').close();openScheduleActivityDialog(sch)}});$('activityForm')&&( $('activityForm').onsubmit=async e=>{e.preventDefault();await saveScheduleActivity()} );$('programExtraForm')&&( $('programExtraForm').onsubmit=async e=>{e.preventDefault();await saveProgramExtra()} );$('contactsSearch')?.addEventListener('input',renderWorkContacts);$('newContactBtn')?.addEventListener('click',()=>openWorkContactDialog());$('contactForm')&&( $('contactForm').onsubmit=async e=>{e.preventDefault();await saveWorkContact()} );$('newExtraBtn').onclick=()=>{retroExtraCreateContext=null;$('extraForm').reset();fillExtraDateRuleForm('extra');$('extraRequestDate').value=today();$('extraDate').value='';$('extraDeadline').value='';$('extraClient').value='eurospin';syncExtraClosureOptions($('extraClosureProfile'),'eurospin','eurospin');syncExtraNumberLabel();if($('extraIntesaOrdinaryMode'))$('extraIntesaOrdinaryMode').checked=false;if($('extraEurospinOrdinaryMode'))$('extraEurospinOrdinaryMode').checked=false;if($('extraPdfAutoReadStatus')){$('extraPdfAutoReadStatus').textContent='';$('extraPdfAutoReadStatus').classList.add('hidden')}clearDuplicateTargetWarning();if($('extraStoreSearch'))$('extraStoreSearch').value='';if($('extraStructured'))$('extraStructured').checked=false;if($('extraWorkItemsEditor'))$('extraWorkItemsEditor').innerHTML='';syncStructuredCreateUi();syncOrdinaryIncludedCreateUi();renderExtraStoreOptions();syncExtraDestinationUi();const title=$('extraDialog')?.querySelector('h2');if(title)title.textContent='Nuovo extra';const submit=$('extraForm')?.querySelector('button[type="submit"]');if(submit)submit.textContent='Crea extra';openDialog('extraDialog')};
 function syncOrdinaryIncludedCreateUi(){
   const client=$('extraClient')?.value||'eurospin';
@@ -4719,7 +4673,7 @@ $('doneForm').onsubmit=async e=>{e.preventDefault();await saveOrdinaryInterventi
 $('doneContinueBtn').onclick=async e=>{await saveOrdinaryIntervention(true,e.currentTarget)};
 $('retroTicketForm')&&( $('retroTicketForm').onsubmit=async e=>{e.preventDefault();const btn=e.submitter||$('retroTicketForm').querySelector('[type=submit]'),old=btn.textContent;btn.disabled=true;btn.textContent='Salvataggio…';try{await saveRetroOrdinaryTicket()}catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=old}} );
 $('historyEditForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const btn=e.submitter||$('historyEditForm').querySelector('[type=submit]'),oldText=btn.textContent;btn.disabled=true;btn.textContent='Salvataggio…';try{const id=$('historyEditId').value,workers=[...$('historyEditWorkers').querySelectorAll('input:checked')].map(x=>x.value),newPhotos=[...historyEditPhotoFiles];if(!workers.length)throw new Error('Seleziona almeno un operatore.');const {error}=await sb.rpc('overgreen_edit_history_v196',{p_id:id,p_day:$('historyEditDate').value,p_closed_at:$('historyEditClosedAt').value?new Date($('historyEditClosedAt').value).toISOString():null,p_note:$('historyEditNotes').value.trim()||null,p_workers:workers});if(error)throw error;for(let n=0;n<newPhotos.length;n++){btn.textContent=`Caricamento foto ${n+1}/${newPhotos.length}…`;const file=await compressImage(newPhotos[n]),safe=(file.name||`foto-${n+1}.jpg`).replace(/[^a-zA-Z0-9._-]/g,'-'),path=`interventi/${id}/${Date.now()}-${n}-${safe}`;await uploadFile(path,file);const added=await addAttachment({tipo:'foto_generica',intervention_id:id,storage_path:path,nome_file:file.name||safe,mime_type:file.type||'image/jpeg',dimensione_bytes:file.size,caricato_da:profile.id});if(!added){await sb.storage.from('documenti').remove([path]);throw new Error('Registrazione della nuova foto non riuscita.')}attachments.push(added)}const intervention=interventions.find(x=>x.id===id);historyEditPhotoFiles=[];$('historyEditDialog').close();toast(newPhotos.length?`Intervento aggiornato · ${newPhotos.length} foto aggiunte`:'Storico aggiornato');await refreshAfterSave();const st=stores.find(x=>x.id===intervention?.store_id);if(st)showHistory(st)}catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=oldText}};
-$('userEditForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const payload={action:'update',user_id:$('userEditId').value,nome:$('userEditName').value.trim(),email:$('userEditEmail').value.trim(),ruolo:$('userEditRole').value,attivo:$('userEditActive').checked};if(!payload.nome||!payload.email)return alert('Nome ed email sono obbligatori.');const btn=e.submitter;btn.disabled=true;const old=btn.textContent;btn.textContent='Salvataggio…';try{const {data,error}=await sb.functions.invoke('manage-user',{body:payload});if(error||data?.error)throw new Error(data?.error||error.message);$('userEditDialog').close();toast('Utente aggiornato');await loadAll();await renderCloudEmployeeList()}catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=old}};
+$('userEditForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const payload={action:'update',user_id:$('userEditId').value,nome:$('userEditName').value.trim(),email:$('userEditEmail').value.trim(),ruolo:$('userEditRole').value,attivo:$('userEditActive').checked};if(!payload.nome||!payload.email)return alert('Nome ed email sono obbligatori.');const btn=e.submitter;btn.disabled=true;const old=btn.textContent;btn.textContent='Salvataggio…';try{const {data,error}=await sb.functions.invoke('manage-user',{body:payload});if(error||data?.error)throw new Error(data?.error||error.message);$('userEditDialog').close();toast('Utente aggiornato');await loadAll();await renderCloudEmployeeList(true)}catch(err){alert(err.message)}finally{btn.disabled=false;btn.textContent=old}};
 $('addScheduleItemsForm').onsubmit=async e=>{
   e.preventDefault();if(!admin())return;
   const scheduleId=$('addScheduleId').value,selected=[...$('addScheduleStores').querySelectorAll('input:checked')].map(x=>x.value);
@@ -4841,6 +4795,7 @@ function normalizePdfTextItems(items){
   return (items||[]).map(x=>String(x?.str||'').trim()).filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
 }
 async function readPdfText(file){
+  await ensureLibraries('pdfjsLib');
   if(!file)throw new Error('PDF non selezionato');
   if(!window.pdfjsLib)throw new Error('Lettore PDF non disponibile');
   const bytes=new Uint8Array(await file.arrayBuffer());
@@ -5200,7 +5155,7 @@ async function saveIndependentWorkProgress(){
 }
 $('extraWorkProgressForm')?.addEventListener('submit',e=>{e.preventDefault();saveIndependentWorkProgress()});
 
-async function signedWorkPhotoUrl(p){const {data,error}=await sb.storage.from('documenti').createSignedUrl(p.storage_path,900);if(error)throw error;return data.signedUrl}
+async function signedWorkPhotoUrl(p){return attachmentUrls.get(p.storage_path,{priority:1})}
 async function fetchWorkPhotoBytes(p){const url=await signedWorkPhotoUrl(p),res=await fetch(url);if(!res.ok)throw new Error('Foto non disponibile');return new Uint8Array(await res.arrayBuffer())}
 
 $('extraForm').onsubmit=async e=>{
@@ -5384,7 +5339,8 @@ function openExtraClosureDialog(extra,fromOrdinary=false){
     info.classList.remove('hidden');
     info.innerHTML=fromOrdinary?`<strong>Extra collegato al passaggio ordinario</strong><span>${esc(st?.nome||extra.nome_esterno||'')} · ${esc(extra.titolo)}</span><small>Se oggi non è concluso puoi salvarlo come parziale: resterà aperto e potrai proseguirlo in seguito.</small>`:'<strong>Solo extra</strong><small>Questa chiusura non aggiorna l’ultimo ordinario e non azzera i giorni del taglio erba.</small>';
   }
-  openDialog('closeExtraDialog');
+  recoveredGenericFile=null;$('recoveredExtraDocument')?.remove();openDialog('closeExtraDialog');
+  void restoreExtraDraft(extra);
   window.AppleDocumentScanner?.refresh();
 }
 
@@ -5402,7 +5358,7 @@ function addCloseExtraPhotos(fileList){
     const duplicate=closeExtraPhotoFiles.some(x=>x.name===file.name&&x.size===file.size&&x.lastModified===file.lastModified);
     if(!duplicate)closeExtraPhotoFiles.push(file);
   }
-  renderCloseExtraPhotoSelection();
+  renderCloseExtraPhotoSelection();queueExtraDraft();
 }
 function renderCloseExtraPhotoSelection(){
   const label=$('closeExtraPhotoLabel'),preview=$('closeExtraPhotoPreview'),clear=$('clearCloseExtraPhotos');
@@ -5415,14 +5371,15 @@ function renderCloseExtraPhotoSelection(){
     const url=URL.createObjectURL(file);
     card.innerHTML=`<img src="${url}" alt="Foto ${index+1}"><button type="button" aria-label="Rimuovi foto">×</button>`;
     card.querySelector('img').onload=()=>URL.revokeObjectURL(url);
-    card.querySelector('button').onclick=()=>{closeExtraPhotoFiles.splice(index,1);renderCloseExtraPhotoSelection()};
+    card.querySelector('button').onclick=()=>{closeExtraPhotoFiles.splice(index,1);renderCloseExtraPhotoSelection();queueExtraDraft()};
     preview.appendChild(card);
   });
 }
 $('closeExtraPhotos').onchange=e=>{addCloseExtraPhotos(e.target.files);e.target.value=''};
 $('closeExtraCameraPhoto').onchange=e=>{addCloseExtraPhotos(e.target.files);e.target.value=''};
-$('clearCloseExtraPhotos').onclick=()=>{closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection()};
+$('clearCloseExtraPhotos').onclick=()=>{closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();queueExtraDraft()};
 window.ExtraClosureDocuments.init({
+  changed:queueExtraDraft,
   existing:target=>attachments.find(a=>a.extra_id===$('closeExtraId').value&&a.tipo==='rapportino_'+target),
   openExisting:openAttachment,
   error:message=>alert(message)
@@ -5435,19 +5392,66 @@ window.AppleDocumentScanner?.init({
   documents:window.ExtraClosureDocuments
 });
 
+const extraDrafts=window.OvergreenExtraDrafts.create({store:window.OvergreenPhotoSync.storage(indexedDB,'overgreen-extra-drafts-v271'),scope:attachmentMediaScope});
+let extraDraftRestoring=false,recoveredGenericFile=null,extraDraftTimer=null;
+function extraDraftFields(){return {notes:$('closeExtraNotes').value,ticket:$('closeExtraTicket').value,closedAt:$('closeExtraClosedAt').value,nightEnabled:$('closeExtraNightEnabled').checked,nightHours:$('closeExtraNightHours')?.value,workers:[...$('closeExtraWorkers').querySelectorAll('input:checked')].map(x=>x.value)}}
+function captureExtraDraft(){
+ if(extraDraftRestoring||!$('closeExtraDialog').open)return null;
+ const id=$('closeExtraId').value;if(!id)return null;
+ const files=[...closeExtraPhotoFiles.map(file=>({tipo:'foto_generica',file})),{tipo:'rapportino_eurospin',file:window.ExtraClosureDocuments.get('eurospin')},{tipo:'rapportino_overgreen',file:window.ExtraClosureDocuments.get('overgreen')},{tipo:'verbale_cliente',file:$('closeExtraGenericDoc').files[0]||recoveredGenericFile}].filter(x=>x.file);
+ files.forEach(x=>{const scan=window.AppleDocumentScanner?.metadata(x.file,id,x.tipo);x.id=extraDrafts.fileId(x.file,JSON.stringify([id,x.tipo]),scan?.id)});
+ return {id,fields:extraDraftFields(),files};
+}
+async function saveCurrentExtraDraft(draft=captureExtraDraft()){
+ clearTimeout(extraDraftTimer);if(!draft)return;
+ return extraDrafts.save(draft.id,draft.fields,draft.files);
+}
+function queueExtraDraft(event){
+ if(extraDraftRestoring||extraSaveBusy)return;
+ const draft=captureExtraDraft();if(!draft)return;
+ clearTimeout(extraDraftTimer);
+ const save=()=>saveCurrentExtraDraft(draft).catch(error=>toast('Bozza non salvata sul telefono: '+error.message));
+ if(event?.type==='input')extraDraftTimer=setTimeout(save,150);else void save();
+}
+async function restoreExtraDraft(extra){
+ const owner=attachmentMediaScope();extraDraftRestoring=true;setExtraSaveBusy(true);
+ const inputs=[...$('closeExtraForm').querySelectorAll('input,textarea,select')],disabled=inputs.map(x=>x.disabled);inputs.forEach(x=>x.disabled=true);
+ try{
+  const draft=await extraDrafts.load(extra.id);
+  if(!$('closeExtraDialog').open||$('closeExtraId').value!==extra.id||attachmentMediaScope()!==owner)return;
+  if(!draft)return;
+  const f=draft.fields;$('closeExtraNotes').value=f.notes||'';$('closeExtraTicket').value=f.ticket||'';
+  if(f.closedAt)$('closeExtraClosedAt').value=f.closedAt;
+  $('closeExtraNightEnabled').checked=!!f.nightEnabled;if($('closeExtraNightHours'))$('closeExtraNightHours').value=f.nightHours||'';
+  $('closeExtraWorkers').querySelectorAll('input').forEach(x=>x.checked=f.workers?.includes(x.value));
+  closeExtraPhotoFiles=[];
+  window.ExtraClosureDocuments.setBusy(false);
+  for(const entry of draft.files){
+   extraDrafts.fileId(entry.file,JSON.stringify([extra.id,entry.tipo]),entry.id);
+   if(entry.tipo==='foto_generica')closeExtraPhotoFiles.push(entry.file);
+   else if(entry.tipo==='verbale_cliente'){recoveredGenericFile=entry.file;const label=document.createElement('small');label.id='recoveredExtraDocument';label.textContent='Documento recuperato: '+entry.file.name;$('closeExtraGenericDoc').after(label);}
+   else window.ExtraClosureDocuments.select(entry.tipo.replace('rapportino_',''),entry.file,'recovered');
+  }
+  renderCloseExtraPhotoSelection();toast('Bozza recuperata: documenti e foto pronti per riprendere il salvataggio.');
+ }catch(error){toast('Recupero bozza non riuscito: '+error.message)}
+ finally{inputs.forEach((x,i)=>x.disabled=disabled[i]);extraDraftRestoring=false;setExtraSaveBusy(false)}
+}
+$('closeExtraForm').addEventListener('input',queueExtraDraft);
+$('closeExtraForm').addEventListener('change',queueExtraDraft);
+$('closeExtraGenericDoc').addEventListener('change',()=>{recoveredGenericFile=null;$('recoveredExtraDocument')?.remove();queueExtraDraft()});
 let extraSaveBusy=false;
 const extraUploadKeys=new WeakMap();
 async function extraUploadStep(task,label,timeoutMs=60000){
   let timer;
   try{
     return await Promise.race([Promise.resolve(task),new Promise((_,reject)=>{
-      timer=setTimeout(()=>reject(new Error(label+': attesa troppo lunga. I file selezionati restano in questa finestra. Controlla la connessione e riprova; gli allegati già registrati verranno riutilizzati.')),timeoutMs);
+      timer=setTimeout(()=>reject(new Error(label+': attesa troppo lunga. I file sono conservati nella bozza sul telefono. Controlla la connessione e riprova; gli allegati già registrati verranno riutilizzati.')),timeoutMs);
     })]);
   }finally{clearTimeout(timer)}
 }
 async function saveExtraUpload(extraId,tipo,originalFile,uploadedPaths,progress=()=>{}){
   let keys=extraUploadKeys.get(originalFile);if(!keys){keys=new Map();extraUploadKeys.set(originalFile,keys)}
-  const key=JSON.stringify([extraId,tipo]);if(!keys.has(key))keys.set(key,crypto.randomUUID());
+  const key=JSON.stringify([extraId,tipo]);if(!keys.has(key))keys.set(key,extraDrafts.fileId(originalFile,key));
   const scan=window.AppleDocumentScanner?.metadata(originalFile,extraId,tipo);
   const id=scan?.id||keys.get(key);
   progress('Verifico documento…');
@@ -5495,7 +5499,7 @@ async function saveExtraPartial(){
   if(!canWorkOnExtra(extras.find(e=>e.id===$('closeExtraId').value)))return;
   if(!confirmExtraDateExecution([extras.find(e=>e.id===$('closeExtraId').value)],today()))return;
   const btn=$('closeExtraPartialBtn');if(!btn)return;
-  const oldText=btn.textContent;if(extraSaveBusy)return;extraSaveBusy=true;setExtraSaveBusy(true);
+  const oldText=btn.textContent;if(extraSaveBusy||extraDraftRestoring)return;extraSaveBusy=true;setExtraSaveBusy(true);
   btn.disabled=true;btn.textContent='Salvo parziale…';
   const uploadedPaths=[],replacedAttachments=[];
   try{
@@ -5506,6 +5510,7 @@ async function saveExtraPartial(){
     const overgreenFile=profileMode==='eurospin'?window.ExtraClosureDocuments.get('overgreen'):null;
     if(profileMode==='eurospin'&&window.ExtraClosureDocuments.get('eurospin'))throw new Error('Nel parziale non caricare il rapportino Eurospin: va inserito solo alla chiusura definitiva.');
 
+    await saveCurrentExtraDraft();
     if(overgreenFile){
       btn.textContent='Carico file Overgreen…';
       const added=await saveExtraUpload(id,'rapportino_overgreen',overgreenFile,uploadedPaths,text=>{btn.textContent=text});
@@ -5516,11 +5521,12 @@ async function saveExtraPartial(){
       await saveExtraUpload(id,'foto_generica',photos[n],uploadedPaths);
     }
 
-    
-    const {error}=await sb.from('extras').update({stato:'da_integrare',note_lorenzo:notes,closed_by:null,closed_at:null,...nightWork}).eq('id',id).select('id').single();
+
+    const {error}=await sb.rpc('overgreen_close_extra_v271',{p_extra_id:id,p_payload:{stato:'da_integrare',note_lorenzo:notes,...nightWork},p_workers:null});
     if(error)throw error;
     // Un parziale non è una chiusura: nessuna falsa notifica di completamento.
     await cleanupReplacedAttachments(replacedAttachments);
+    await extraDrafts.remove(id);
     $('closeExtraDialog').close();$('closeExtraForm').reset();window.ExtraClosureDocuments.reset();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
     toast(`Parziale salvato · extra ancora aperto${photos.length?' · '+photos.length+' foto':''}${overgreenFile?' · file Overgreen':''}`);
     await refreshAfterSave();
@@ -5537,7 +5543,7 @@ $('closeExtraForm').onsubmit=async e=>{
   e.preventDefault();
   if(!canWorkOnExtra(extras.find(x=>x.id===$('closeExtraId').value)))return;
   const btn=e.submitter||$('closeExtraFinalBtn'),oldText=btn.textContent;
-  if(extraSaveBusy)return;extraSaveBusy=true;setExtraSaveBusy(true);
+  if(extraSaveBusy||extraDraftRestoring)return;extraSaveBusy=true;setExtraSaveBusy(true);
   btn.disabled=true;btn.textContent='Preparazione…';
   const uploadedPaths=[],replacedAttachments=[];
   try{
@@ -5558,7 +5564,7 @@ $('closeExtraForm').onsubmit=async e=>{
     const existingOvergreen=attachments.some(a=>a.extra_id===id&&a.tipo==='rapportino_overgreen');
     const newEurospin=profileMode==='eurospin'?window.ExtraClosureDocuments.get('eurospin'):null;
     const newOvergreen=profileMode==='eurospin'?window.ExtraClosureDocuments.get('overgreen'):null;
-    const reports=profileMode==='eurospin'?[['rapportino_eurospin',newEurospin],['rapportino_overgreen',newOvergreen]].filter(([,file])=>!!file):profileMode==='intesa'&&$('closeExtraGenericDoc').files[0]?[['verbale_cliente',$('closeExtraGenericDoc').files[0]]]:[];
+    const reports=profileMode==='eurospin'?[['rapportino_eurospin',newEurospin],['rapportino_overgreen',newOvergreen]].filter(([,file])=>!!file):profileMode==='intesa'&&($('closeExtraGenericDoc').files[0]||recoveredGenericFile)?[['verbale_cliente',$('closeExtraGenericDoc').files[0]||recoveredGenericFile]]:[];
     if(profileMode==='eurospin'&&!newEurospin&&!existingEurospin)throw new Error('Per la chiusura definitiva serve il rapportino Eurospin.');
     if(profileMode==='eurospin'&&!newOvergreen&&!existingOvergreen)throw new Error('Per la chiusura definitiva serve anche il file Overgreen. Se lo hai già caricato in un parziale non devi ricaricarlo.');
     if(profileMode==='intesa'&&!ticket)throw new Error('Inserisci il numero ticket o ordine.');
@@ -5566,7 +5572,8 @@ $('closeExtraForm').onsubmit=async e=>{
     const existingGenericPhotos=attachments.some(a=>a.extra_id===id&&a.tipo==='foto_generica');
     if(profileMode==='intesa'&&!photos.length&&!structuredHasPhotos&&!existingGenericPhotos)throw new Error('Per Intesa serve almeno una foto, generica oppure collegata a una lavorazione.');
 
-    // Identificativi stabili: un retry nella stessa finestra riusa gli allegati.
+    await saveCurrentExtraDraft();
+    // Identificativi e file persistono anche dopo un riavvio del telefono.
     for(const [tipo,originalFile] of reports){
       btn.textContent='Carico documento…';
       const added=await saveExtraUpload(id,tipo,originalFile,uploadedPaths,text=>{btn.textContent=text});
@@ -5577,13 +5584,13 @@ $('closeExtraForm').onsubmit=async e=>{
       await saveExtraUpload(id,'foto_generica',photos[n],uploadedPaths);
     }
 
-    
+
 
     btn.textContent='Invio a Lorenzo…';
-    await saveExtraClosureWorkers(id,closure.workers);
-    const {error}=await sb.from('extras').update({stato:'in_attesa',giorno_intervento:closure.day,note_lorenzo:notes,closed_by:profile.id,closed_at:closure.closedAt,...nightWork}).eq('id',id).select('id').single();
+    const {error}=await sb.rpc('overgreen_close_extra_v271',{p_extra_id:id,p_payload:{stato:'in_attesa',giorno_intervento:closure.day,note_lorenzo:notes,closed_by:profile.id,closed_at:closure.closedAt,...nightWork},p_workers:closure.workers});
     if(error)throw error;
     await cleanupReplacedAttachments(replacedAttachments);
+    await extraDrafts.remove(id);
     void notifyAdminClosure('extra',id,photos.length);
     $('closeExtraDialog').close();$('closeExtraForm').reset();window.ExtraClosureDocuments.reset();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
     toast(`Extra inviato a Lorenzo${photos.length?' · '+photos.length+' foto':''}`);
@@ -5626,9 +5633,15 @@ async function resetBrokenSession(){try{await sb.auth.signOut({scope:'local'})}c
 document.querySelectorAll('[data-stats-days]').forEach(b=>b.addEventListener('click',()=>setStatsDays(b.dataset.statsDays)));$('statsClient')?.addEventListener('change',renderStats);$('statsType')?.addEventListener('change',renderStats);$('statsSiteType')?.addEventListener('change',renderStats);$('statsStartDate')?.addEventListener('change',renderStats);$('statsEndDate')?.addEventListener('change',renderStats);$('statsRefresh')?.addEventListener('click',async()=>{await loadAll();renderStats();toast('Statistiche aggiornate')});
 const refreshReportAndPdfCache=()=>{renderDailyReport();prewarmDailyReportPdfs()};$('reportDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportStartDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportEndDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportMonth')?.addEventListener('change',refreshReportAndPdfCache);document.querySelectorAll('[data-report-mode]').forEach(b=>b.addEventListener('click',()=>{setReportMode(b.dataset.reportMode);prewarmDailyReportPdfs()}));$('reportClient')?.addEventListener('change',refreshReportAndPdfCache);$('reportType')?.addEventListener('change',refreshReportAndPdfCache);$('reportWorker')?.addEventListener('change',refreshReportAndPdfCache);$('reportRefresh')?.addEventListener('click',async()=>{await loadAll();dailyReportPdfCache.clear();dailyReportPdfPending.clear();renderDailyReport();prewarmDailyReportPdfs();toast('Report aggiornato')});$('shareDailyReport')?.addEventListener('click',shareDailyReport);$('exportDailyReportCompact')?.addEventListener('click',()=>exportDailyReportPdf('compact'));$('exportDailyReportFull')?.addEventListener('click',()=>exportDailyReportPdf('full'));
 
+function resetAppData(){
+ dataSync.changed();loadedScope='';renderedViews.clear();
+ profiles=[];managedUsers=[];stores=[];interventions=[];schedules=[];scheduleMembers=[];scheduleItems=[];extras=[];extraWorkers=[];interventionWorkers=[];attachments=[];
+ extraWorkItems=[];extraWorkItemPhotos=[];extraWorkItemNotes=[];savedRoutes=[];savedRouteItems=[];signatureSheets=[];auditLogs=[];companyDocuments=[];companyDocumentReads=[];workContacts=[];contactStores=[];scheduleActivities=[];scheduleActivityPhotos=[];storeReminders=[];
+ profile=null;realProfile=null;extraEconomicsRecords=[];extraEconomicsError='';dailyReportPdfCache.clear();dailyReportPdfPending.clear();singleReportCache.clear();pdfPhotoCache.clear();
+}
 sb.auth.onAuthStateChange((event,s)=>{
   const previousUser=session?.user?.id;
-  if(!s||previousUser!==s.user?.id)attachmentUrls.clear();
+  if(!s||previousUser!==s.user?.id){attachmentUrls.clear();resetAppData()}
   session=s;
   if(!s){$('loginScreen').classList.remove('hidden');$('app').classList.add('hidden');return}
   $('loginScreen').classList.add('hidden');$('app').classList.remove('hidden');
@@ -5667,7 +5680,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=232').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=271').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);
@@ -5720,10 +5733,7 @@ window.OvergreenVoice?.init({
  context:()=>({today:today(),profiles,stores,extras,schedules,items:scheduleItems}),
  async refresh(){
   if(!admin())throw Error('Accesso riservato');
-  const tables=['profiles','stores','extras','schedules','schedule_items','schedule_members','store_reminders'];
-  const rows=await Promise.all(tables.map(t=>readAllRows(t)));
-  if(rows.some(r=>r.error))throw Error('Non riesco ad aggiornare i dati. Nessuna modifica effettuata.');
-  [profiles,stores,extras,schedules,scheduleItems,scheduleMembers,storeReminders]=rows.map(r=>r.data||[]);
+  await loadAll({sections:['profiles','stores','extras','schedules','schedule_items','schedule_members','store_reminders']});
  },
  snapshot(){
   const pick=(row,keys)=>Object.fromEntries(keys.map(k=>[k,row[k]??null]));

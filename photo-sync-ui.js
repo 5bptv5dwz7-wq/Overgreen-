@@ -9,7 +9,7 @@ async function photoHttp(path,body,method='POST',blob=null){
   const who=photoActor(),token=session?.access_token;if(!who||!token)throw Object.assign(new Error('Accedi per riprendere l’invio delle foto.'),{status:401});
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);
   try{
-    const response=await fetch(cfg.supabaseUrl+path,{method,signal:controller.signal,headers:{apikey:cfg.supabaseKey,Authorization:'Bearer '+token,'Content-Type':blob?(blob.type||'image/jpeg'):'application/json',...(blob?{'x-upsert':'true','cache-control':'max-age=3600'}:{})},body:method==='GET'?undefined:blob||JSON.stringify(body)});
+    const response=await (typeof dataSync==='undefined'?fetch:dataSync.fetch)(cfg.supabaseUrl+path,{method,signal:controller.signal,headers:{apikey:cfg.supabaseKey,Authorization:'Bearer '+token,'Content-Type':blob?(blob.type||'image/jpeg'):'application/json',...(blob?{'x-upsert':'true','cache-control':'max-age=3600'}:{})},body:method==='GET'?undefined:blob||JSON.stringify(body)});
     const data=await response.json().catch(()=>({}));
     if(!response.ok)throw Object.assign(new Error(data.message||data.error_description||data.error||'Invio non riuscito'),{status:response.status,code:data.code});
     return data;

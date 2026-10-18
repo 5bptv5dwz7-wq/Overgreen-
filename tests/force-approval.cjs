@@ -3,8 +3,8 @@ const src=fs.readFileSync(__dirname+'/../app.js','utf8');
 function setup(){
  const {document}=parseHTML('<div id="pendingBadge"></div><div id="pendingList"></div>');
  const item={id:'i',store_id:'s',stato:'in_attesa',foto_attese:2},calls=[],errors=[];
- const c={document,$:id=>document.getElementById(id),console,admin:()=>true,interventions:[item],extras:[],stores:[{id:'s',nome:'Mantova prova'}],attachments:[],workerNames:async()=>['Operatore prova'],fmt:()=>'',closureText:()=>'',esc:s=>String(s??'').replaceAll('<','&lt;').replaceAll('>','&gt;'),prompt:()=> 'Foto bloccate da ore',alert:s=>errors.push(s),toast(){},refreshAfterSave:async()=>{},loadAll:async()=>{},transitionIntervention:async(...args)=>calls.push(args),recoverInterventionPhotosFromStorage(){},fmtClosedAt:s=>s};vm.createContext(c);
- vm.runInContext(src.slice(src.indexOf('async function renderPending'),src.indexOf('async function refreshStoreLastVisit')),c);
+ const c={mountAttachmentPhoto(){},hydratePendingPhotos(){},interventionWorkers:[],profiles:[],document,$:id=>document.getElementById(id),console,admin:()=>true,interventions:[item],extras:[],stores:[{id:'s',nome:'Mantova prova'}],attachments:[],workerNames:async()=>['Operatore prova'],fmt:()=>'',closureText:()=>'',esc:s=>String(s??'').replaceAll('<','&lt;').replaceAll('>','&gt;'),prompt:()=> 'Foto bloccate da ore',alert:s=>errors.push(s),toast(){},refreshAfterSave:async()=>{},loadAll:async()=>{},transitionIntervention:async(...args)=>calls.push(args),recoverInterventionPhotosFromStorage(){},fmtClosedAt:s=>s};vm.createContext(c);
+ vm.runInContext(src.slice(src.indexOf('function renderPending'),src.indexOf('async function refreshStoreLastVisit')),c);
  vm.runInContext(src.slice(src.indexOf('const interventionTransitions='),src.indexOf('async function reopenOrdinaryIntervention')),c);
  return {c,item,calls,errors,document};
 }

@@ -28,7 +28,7 @@ window.ExtraClosureDocuments=(()=>{
         open.setAttribute('aria-label',`Apri documento ${target}`);actions.appendChild(open);
         const remove=document.createElement('button');remove.type='button';remove.className='secondary';remove.textContent='Rimuovi';
         remove.setAttribute('aria-label',`Rimuovi documento ${target} selezionato`);remove.disabled=busy;
-        remove.onclick=()=>{if(busy)return;window.AppleDocumentScanner?.forget(target);files[target]=null;input(target).value='';node(target,'camera').value='';render(target);};
+        remove.onclick=()=>{if(busy)return;window.AppleDocumentScanner?.forget(target);files[target]=null;input(target).value='';node(target,'camera').value='';render(target);options.changed?.();};
         actions.appendChild(remove);preview.appendChild(actions);
         if(saved){const hint=document.createElement('small');hint.textContent='Sostituirà il documento già caricato quando salvi.';preview.appendChild(hint);}
       }else{
@@ -43,7 +43,7 @@ window.ExtraClosureDocuments=(()=>{
     const image=file.type?.startsWith('image/'),pdf=file.type==='application/pdf'||(!file.type&&/\.pdf$/i.test(file.name||''));
     if((!image&&!pdf)||!file.size){options.error?.('Scegli una foto o un PDF valido.');return;}
     if(source!=='apple')window.AppleDocumentScanner?.forget(target);
-    files[target]=file;render(target);return true;
+    files[target]=file;render(target);options.changed?.();return true;
   }
   function reset(){for(const target of targets){files[target]=null;input(target).value='';node(target,'camera').value='';render(target);}}
   function setBusy(value){

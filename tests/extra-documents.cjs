@@ -20,7 +20,13 @@ function saving(options={}){
  $('closeExtraForm').dataset.profile='eurospin';$('closeExtraId').value='extra1';$('closeExtraForm').reset=()=>{};$('closeExtraDialog').close=()=>{};
  const workerRows=options.workerRows||[],workerWrites=[];
  // Document tests assume an authorized assignment; permission rules are tested in extra-readonly.cjs.
- const c=h.context;Object.assign(c,{confirmExtraDateExecution:()=>true,canWorkOnExtra:()=>true,$,crypto:require('node:crypto'),attachments:[],extras:[{id:'extra1'}],extraWorkers:workerRows.map(w=>({...w})),profiles:[{id:'worker1',nome:'Mario',attivo:true},{id:'worker2',nome:'Gianni',attivo:true},{id:'inactive',nome:'Ex operatore',attivo:false}],profile:{id:'worker1'},admin:()=>!!options.admin,esc:s=>s,today:()=> '2026-10-03',closeExtraPhotoFiles:[],combinedExtraClosureQueue:[],workItemsForExtra:()=>[],structuredCloseRows:()=>[],renderCloseExtraPhotoSelection(){},toast(){},alert:m=>h.errors.push(m),refreshAfterSave:async()=>{},notifyAdminClosure:(...v)=>notifications.push(v),sb:{from:table=>{
+ const c=h.context;Object.assign(c,{extraDraftRestoring:false,recoveredGenericFile:null,saveCurrentExtraDraft:async()=>{},extraDrafts:{remove:async()=>{}},confirmExtraDateExecution:()=>true,canWorkOnExtra:()=>true,$,crypto:require('node:crypto'),attachments:[],extras:[{id:'extra1'}],extraWorkers:workerRows.map(w=>({...w})),profiles:[{id:'worker1',nome:'Mario',attivo:true},{id:'worker2',nome:'Gianni',attivo:true},{id:'inactive',nome:'Ex operatore',attivo:false}],profile:{id:'worker1'},admin:()=>!!options.admin,esc:s=>s,today:()=> '2026-10-03',closeExtraPhotoFiles:[],combinedExtraClosureQueue:[],workItemsForExtra:()=>[],structuredCloseRows:()=>[],renderCloseExtraPhotoSelection(){},toast(){},alert:m=>h.errors.push(m),refreshAfterSave:async()=>{},notifyAdminClosure:(...v)=>notifications.push(v),sb:{async rpc(name,args){
+   assert.equal(name,'overgreen_close_extra_v271');
+   if(options.failWorkers&&args.p_workers)return {error:new Error('Squadra non salvata')};
+   if(options.failClose)return {error:new Error('Chiusura non salvata')};
+   if(args.p_workers){const old=workerRows.map(w=>w.profile_id),wanted=Array.from(args.p_workers);if(wanted.some(id=>!old.includes(id)))workerWrites.push('insert');if(old.some(id=>!wanted.includes(id)))workerWrites.push('delete');workerRows.splice(0,workerRows.length,...wanted.map(profile_id=>({extra_id:args.p_extra_id,profile_id})));}
+   updates.push({closed_at:null,closed_by:null,...args.p_payload});return {data:updates.at(-1)};
+  },from:table=>{
   let action='select',rows=[];const filters={};const q={
    update(data){updates.push(data);return q},select(){return q},single:async()=>options.failClose?{error:new Error('Chiusura non salvata')}:{},
    eq(key,value){filters[key]=value;return q},in(key,values){filters[key]=values;return q},
@@ -83,9 +89,9 @@ test('employee does not edit team/date and a partial does not persist closure de
  const h=saving({admin:true});h.pick('reportOvergreen',pdf);await h.context.saveExtraPartial();assert.deepEqual(h.errors,[]);
  assert.equal(h.updates[0].stato,'da_integrare');assert.equal(h.updates[0].closed_at,null);assert.equal(h.workerWrites.length,0);
 });
-test('retry after final update failure reuses saved operators without duplicates',async()=>{
+test('failed atomic closure rolls back its team and retry commits without duplicates',async()=>{
  const h=saving({admin:true,failClose:true});chooseClosure(h);await h.submit();assert.match(h.errors[0],/Chiusura non salvata/);
- assert.equal(h.notifications.length,0);assert.equal(h.workerRows.length,2);
+ assert.equal(h.notifications.length,0);assert.equal(h.workerRows.length,0);
  h.options.failClose=false;await h.submit();assert.equal(h.notifications.length,1);assert.deepEqual(h.workerWrites,['insert']);assert.equal(h.workerRows.length,2);
 });
 

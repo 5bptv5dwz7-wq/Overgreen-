@@ -147,6 +147,7 @@ const ExtraHoursUi=(()=>{
       const isPdf=s.report.mime_type?.includes('pdf')||/\.pdf$/i.test(s.report.nome_file||s.report.storage_path||'');
       const isImage=s.report.mime_type?.startsWith('image/')||/\.(png|jpe?g|webp|gif|bmp)$/i.test(s.report.nome_file||s.report.storage_path||'');
       if(isPdf){
+        await window.ensureLibraries?.('pdfjsLib');if(s!==state||s.closed)return;
         if(!window.pdfjsLib)throw new Error('PDF viewer unavailable');
         s.loadingTask=window.pdfjsLib.getDocument({url,isEvalSupported:false});
         const pdf=await s.loadingTask.promise;

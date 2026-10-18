@@ -7,7 +7,7 @@
   }
   function versionReached(loaded,required){return /^V\d+$/.test(loaded)&&/^V\d+$/.test(required)&&Number(loaded.slice(1))>=Number(required.slice(1))}
   function create(o){
-    const win=o.window,doc=o.document,storage=o.storage,deviceStorage=o.deviceStorage||storage;let polling=false,reloading=false,registered='',id='',actor='',timer;
+    const win=o.window,doc=o.document,storage=o.storage,deviceStorage=o.deviceStorage||storage;let polling=false,reloading=false,registered='',id='',actor='',timer,lastHeartbeat=0,lastBusy=null;
     const prefix='overgreen-remote-v230:',boot=o.uuid();
     async function busyState(){let timer;try{return await Promise.race([o.busy(),new Promise(resolve=>{timer=win.setTimeout(()=>resolve(true),2000)})])}catch{return true}finally{win.clearTimeout(timer)}}
     function identity(user){
@@ -20,8 +20,8 @@
       const user=o.user();if(!user)return;polling=true;
       try{
         identity(user);const busy=await busyState();if(o.user()!==user)return;
-        if(registered!==id){await o.register({id,user_id:user,label:o.label(),version:o.version,busy});registered=id}
-        else await o.heartbeat(id,{version:o.version,busy});
+        if(registered!==id){await o.register({id,user_id:user,label:o.label(),version:o.version,busy});registered=id;lastHeartbeat=Date.now();lastBusy=busy}
+        else if(Date.now()-lastHeartbeat>=120000||busy!==lastBusy){await o.heartbeat(id,{version:o.version,busy});lastHeartbeat=Date.now();lastBusy=busy}
         const key=prefix+'ack:'+user,marker=JSON.parse(storage.getItem(key)||'null');
         if(marker&&marker.device===id&&marker.boot!==boot&&marker.phase==='reloading'){
           await o.ack(marker.command,{status:versionReached(o.version,marker.version)?'completed':'failed',loaded_version:o.version});storage.removeItem(key);
@@ -46,7 +46,7 @@
         await o.updateWorker();o.reload();
       }catch(error){o.error?.(error)}finally{polling=false}
     }
-    function start(){if(timer)return;timer=win.setInterval(()=>void tick(),20000);doc.addEventListener('visibilitychange',()=>void tick());win.addEventListener('online',()=>void tick());void tick()}
+    function start(){if(timer)return;timer=win.setInterval(()=>void tick(),60000);doc.addEventListener('visibilitychange',()=>void tick());win.addEventListener('online',()=>void tick());void tick()}
     return {start,tick,deviceId:()=>id};
   }
   return {create,action,versionReached,statuses};

@@ -27,7 +27,7 @@ function setup(options={}){
   vm.createContext(c);vm.runInContext(code,c);
   const $=id=>document.getElementById(id);
   const extra={id:'e1',client_type:'eurospin',titolo:'<img src=x onerror=alert(1)>'};
-  const open=()=>c.openExtraHours(extra),save=()=>vm.runInContext('ExtraHoursUi.save()',c);
+  const open=async()=>{await c.openExtraHours(extra);if(options.category==='pulizie'&&!options.row?.cleaning_scope)document.getElementById('extraEconomicsCleaningScope').value='esterni';await tick()},save=()=>vm.runInContext('ExtraHoursUi.save()',c);
   return {c,$,document,calls,db,open,save,extra};
 }
 test('manual input distinguishes blank and zero, accepts comma/dot, rejects ambiguous or invalid hours',()=>{
@@ -39,7 +39,7 @@ test('save and reopen preserve total operator hours without multiplying, and all
   const h=setup();await h.open();assert(h.$('extraHoursDialog').hasAttribute('open'));
   assert.equal(h.$('extraHoursContext').querySelectorAll('img').length,0);
   h.$('extraHoursInput').value='6,5';await h.save();assert.equal(h.db.row.total_hours,6.5);
-  assert.match(h.$('extraHoursFeedback').textContent,/Bozza salvata|Dati economici salvati/);h.$('extraHoursClose').click();await h.open();
+  assert(!h.$('extraHoursDialog').hasAttribute('open'),'successful save closes the editor');h.$('extraHoursClose').click();await h.open();
   assert.equal(h.$('extraHoursInput').value,'6,5');h.$('extraHoursInput').value='';await h.save();assert.equal(h.db.row.total_hours,null);
 });
 test('failed and concurrent saves keep the input; double submit is suppressed',async()=>{
@@ -89,7 +89,7 @@ test('pricing controls calculate actual crew hours and equipment; quote replaces
  const h=setup({category:'pulizie'});await h.open();
  h.$('extraEconomicsMode').value='consuntivo';h.$('extraEconomicsTrip').value='yes';h.$('extraEconomicsOperators').value='2';h.$('extraHoursInput').value='6';h.$('extraEconomicsEquipment').checked=true;
  await h.save();assert.equal(h.db.row.hourly_rate,23);assert.equal(model.calculate(h.db.row).total,23800);
- h.$('extraEconomicsMode').value='preventivo';h.$('extraEconomicsQuoteAmount').value='1000';h.$('extraEconomicsIncluded').checked=true;h.$('extraEconomicsQuoteStatus').value='accettato';await h.save();
+ await h.open();h.$('extraEconomicsMode').value='preventivo';h.$('extraEconomicsQuoteAmount').value='1000';h.$('extraEconomicsIncluded').checked=true;h.$('extraEconomicsQuoteStatus').value='accettato';await h.save();
  assert.equal(model.calculate(h.db.row).total,100000);assert.match(h.$('extraEconomicsSummary').textContent,/1[.]?000,00/);
 });
 test('expense edits count as unsaved changes and a partial expense cannot be submitted',async()=>{
@@ -133,7 +133,7 @@ test('V223 Economia loads night hours from closure, calculates the split and sav
  const h=setup({category:'pulizie',nightHours:2.5});await h.c.openExtraHours({id:'e1',client_type:'eurospin',categoria_target:'pulizie'});
  const $=id=>h.c.document.getElementById(id);
  assert.equal($('extraEconomicsNightHours').value,'2,5');assert.equal($('extraEconomicsNightWrap').hidden,false);
- $('extraEconomicsMode').value='tariffa';$('extraEconomicsTrip').value='no';$('extraHoursInput').value='6';
+ $('extraEconomicsCleaningScope').value='esterni';$('extraEconomicsMode').value='tariffa';$('extraEconomicsTrip').value='no';$('extraHoursInput').value='6';
  $('extraEconomicsEquipment').checked=true;$('extraHoursForm').dispatchEvent(new h.document.defaultView.Event('input'));
  assert.match($('extraEconomicsRates').textContent,/30,00/);assert.match($('extraEconomicsNightSplit').textContent,/3,5 ore diurne/);
  await h.save();const saved=h.calls.find(x=>x[0]==='save_extra_economics_v202')[1].p_values;

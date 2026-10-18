@@ -1,24 +1,22 @@
-const CACHE='overgreen-v270';
+const CACHE='overgreen-v271';
 self.addEventListener('install',e=>e.waitUntil(self.skipWaiting()));
-self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('overgreen-v')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{
   if(e.request.method!=='GET')return;
   const url=new URL(e.request.url);
   // Non memorizzare API Supabase, URL firmati o risorse di domini esterni.
   if(url.origin!==self.location.origin)return;
-  // V195: la risposta di rete non attende la scrittura su disco.
-  // waitUntil viene registrato durante l'evento, non dopo un await.
-  const network=fetch(e.request,{cache:'no-store'});
-  e.waitUntil(network.then(response=>{
-    if(!response.ok)return;
-    const copy=response.clone();
-    return caches.open(CACHE).then(cache=>cache.put(e.request,copy));
-  }).catch(()=>{}));
-  e.respondWith(network.catch(async err=>{
+  const immutable=url.searchParams.has('v')&&/\.(?:js|css|png|svg|woff2)$/.test(url.pathname);
+  const writes=[];
+  const network=()=>fetch(e.request,{cache:immutable?'default':'no-cache'}).then(response=>{
+    if(response.ok){const copy=response.clone();writes.push(caches.open(CACHE).then(cache=>cache.put(e.request,copy)).catch(()=>{}))}return response;
+  });
+  const response=(async()=>{
     const cached=await caches.match(e.request);
-    if(cached)return cached;
-    throw err;
-  }));
+    if(immutable&&cached)return cached;
+    try{return await network()}catch(err){if(cached)return cached;throw err}
+  })();
+  e.respondWith(response);e.waitUntil(response.then(()=>Promise.all(writes)).catch(()=>{}));
 });
 
 // V186 — Target N° dei report cliente extra in alto a destra come Genera chiusura.

@@ -15,7 +15,7 @@ function setup() {
     set(value) { for (const o of this.querySelectorAll('option')) if (o.value === String(value)) o.setAttribute('selected', ''); else o.removeAttribute('selected'); }
   });
   dom.HTMLElement.prototype.scrollIntoView = function () { calls.push(['scroll', this.id]); };
-  const c = { document, window: { OvergreenOperations: ops }, navigator: { onLine: true }, console,
+  const c = { renderedViews:new Map(),viewRevision:()=> '1',document, window: { OvergreenOperations: ops }, navigator: { onLine: true }, console,
     $: id => document.getElementById(id), today: () => '2026-09-07', tomorrow: () => '2026-09-08', fmt: d => d,
     admin: () => c.isAdmin, isAdmin: true, currentView: 'dashboard', CURRENT_VIEW_KEY: 'view', localStorage: { setItem() {} },
     stores: [{ id: 'st', nome: 'SEDE QA', client_type: 'privato', ultimo_passaggio: '2026-08-01', intervallo_giorni: 15 }],
@@ -32,7 +32,7 @@ function setup() {
   };
   for (const name of ['renderDashboard', 'renderStores', 'renderSchedules', 'renderExtras', 'renderDailyReport', 'renderStats', 'openSignatureSheetsView', 'openCompanyArchive', 'renderWorkContacts', 'auditViewOpen', 'renderSchedulePicker', 'openHistoryEdit', 'openDone', 'openPendingDialog', 'openActivityConsuntivoDialog', 'openExtraEdit', 'openSchedulePdfDialog']) c[name] = (...args) => calls.push([name, ...args]);
   vm.createContext(c);
-  vm.runInContext(source('function setView(name)', 'function syncImpersonationUi'), c);
+  vm.runInContext(source('function setView(', 'function syncImpersonationUi'), c);
   vm.runInContext(source('function openExtraById', 'function extraSearchText'), c);
   vm.runInContext(source('function openScheduleDate', 'function contactStoreNames'), c);
   vm.runInContext(ui, c);

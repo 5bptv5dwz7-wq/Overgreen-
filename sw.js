@@ -1,4 +1,4 @@
-const CACHE='overgreen-v271';
+const CACHE='overgreen-v273';
 self.addEventListener('install',e=>e.waitUntil(self.skipWaiting()));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('overgreen-v')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{
@@ -8,13 +8,19 @@ self.addEventListener('fetch',e=>{
   if(url.origin!==self.location.origin)return;
   const immutable=url.searchParams.has('v')&&/\.(?:js|css|png|svg|woff2)$/.test(url.pathname);
   const writes=[];
-  const network=()=>fetch(e.request,{cache:immutable?'default':'no-cache'}).then(response=>{
-    if(response.ok){const copy=response.clone();writes.push(caches.open(CACHE).then(cache=>cache.put(e.request,copy)).catch(()=>{}))}return response;
-  });
+  const network=async(cached)=>{
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),cached?6000:25000);
+    try{
+      const response=await fetch(e.request,{cache:immutable?'default':'no-cache',signal:controller.signal});
+      if(response.ok){const copy=response.clone();writes.push(caches.open(CACHE).then(cache=>cache.put(e.request,copy)).catch(()=>{}))}
+      if(cached&&response.status>=500)return cached;
+      return response;
+    }finally{clearTimeout(timer)}
+  };
   const response=(async()=>{
-    const cached=await caches.match(e.request);
+    const cache=await caches.open(CACHE),cached=await cache.match(e.request);
     if(immutable&&cached)return cached;
-    try{return await network()}catch(err){if(cached)return cached;throw err}
+    try{return await network(cached)}catch(err){if(cached)return cached;throw err}
   })();
   e.respondWith(response);e.waitUntil(response.then(()=>Promise.all(writes)).catch(()=>{}));
 });

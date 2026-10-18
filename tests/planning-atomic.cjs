@@ -1,0 +1,63 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
+const {PGlite}=require('@electric-sql/pglite');
+const admin='00000000-0000-0000-0000-000000000001',worker='00000000-0000-0000-0000-000000000002';
+const sid='10000000-0000-0000-0000-000000000001',store='20000000-0000-0000-0000-000000000001',extra='30000000-0000-0000-0000-000000000001';
+const uuid=()=>require('node:crypto').randomUUID();
+test('planning transaction: retry, stale edits, full rollback, mixed positions, date rules and worker authorization',async()=>{
+ const db=new PGlite();try{
+ await db.exec(`create role authenticated;create role anon;create schema auth;
+ create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('app.actor',true),'')::uuid$$;
+ create function public.is_admin() returns boolean language sql stable as $$select auth.uid()='${admin}'::uuid$$;
+ create function public.is_active_user() returns boolean language sql stable as $$select auth.uid() is not null$$;
+ create table profiles(id uuid primary key,attivo boolean);insert into profiles values('${admin}',true),('${worker}',true);
+ create table stores(id uuid primary key,attivo boolean,client_type text);insert into stores values('${store}',true,'eurospin');
+ create table schedules(id uuid primary key default gen_random_uuid(),giorno date,creato_da uuid,auto_rollover boolean);
+ create table schedule_members(schedule_id uuid references schedules,profile_id uuid references profiles,primary key(schedule_id,profile_id));
+ create table schedule_items(id uuid primary key default gen_random_uuid(),schedule_id uuid references schedules,store_id uuid references stores,tipo text,stato text,posizione integer);
+ create table extras(id uuid primary key,updated_at timestamptz default '2026-10-18T12:00:00Z',store_id uuid references stores,schedule_id uuid references schedules,schedule_item_id uuid references schedule_items,stato text,posizione_giro integer,giorno_intervento date,con_ordinario boolean,execution_date_mode text,execution_date date,deadline_at timestamptz,
+ client_type text,closure_profile text,nome_esterno text,indirizzo_esterno text,titolo text,numero_target text,categoria_target text,descrizione text,data_richiesta date);
+ create table extra_workers(extra_id uuid references extras,profile_id uuid references profiles,primary key(extra_id,profile_id));
+ create table schedule_activities(id uuid primary key default gen_random_uuid(),schedule_id uuid references schedules,posizione integer);
+ create table extra_work_items(id uuid primary key default gen_random_uuid(),extra_id uuid references extras,titolo text,posizione integer,stato text,nota text);
+ create table extra_work_item_photos(id uuid primary key,work_item_id uuid references extra_work_items);
+ create table extra_work_item_notes(id uuid primary key,work_item_id uuid references extra_work_items);
+ create table overgreen_requests_v198(request_id uuid primary key,actor_id uuid,operation text,payload jsonb,response jsonb);
+ alter table overgreen_requests_v198 enable row level security;create policy caller on overgreen_requests_v198 to authenticated using(actor_id=auth.uid() and is_admin()) with check(actor_id=auth.uid() and is_admin());
+ grant usage on schema public,auth to authenticated;grant all on all tables in schema public to authenticated;
+ insert into schedules(id,giorno) values('${sid}','2026-10-20');insert into schedule_members values('${sid}','${worker}');
+ insert into schedule_activities(schedule_id,posizione) values('${sid}',9);
+ insert into extras(id,store_id,stato,con_ordinario,execution_date_mode,execution_date,client_type,titolo) values('${extra}','${store}','programmato',true,'on','2026-10-20','eurospin','Target');
+ `);
+ await db.exec(fs.readFileSync('supabase/migrations/20261018200305_reliability_v273.sql','utf8'));
+ await db.exec(`set role authenticated;select set_config('app.actor','${admin}',false);`);
+ const op=async(operation,payload,id=uuid())=>(await db.query('select overgreen_plan_v273($1,$2,$3) result',[id,operation,JSON.stringify(payload)])).rows[0].result;
+ const add={id:sid,stores:[store],extras:[],expected_day:'2026-10-20',expected_members:[worker]},request=uuid();
+ const result=await op('add',add,request);assert.equal(result.added,1);assert.equal(result.linked,1);assert.deepEqual(await op('add',add,request),result);
+ assert.equal((await db.query('select count(*)::int n from schedule_items')).rows[0].n,1);
+ assert.equal((await db.query('select posizione from schedule_items')).rows[0].posizione,10,'activities participate in order');
+ assert.equal((await op('add',add)).added,0,'another tap cannot duplicate the site');
+ await assert.rejects(op('add',{...add,expected_day:'2026-10-21'}),/cambiate/);
+ await assert.rejects(op('add',{...add,extras:[uuid()]}),/Extra non disponibile/);
+ assert.equal((await db.query('select count(*)::int n from schedule_items')).rows[0].n,1);
+ const patch={id:extra,members:[worker],expected_updated_at:'2026-10-18T12:00:00Z',extra:{titolo:'Changed',giorno_intervento:'2026-10-20',con_ordinario:true},work_items:[{titolo:'Lavorazione'}]};
+ await op('edit_extra',patch);assert.equal((await db.query('select titolo from extras')).rows[0].titolo,'Changed');
+ const work=(await db.query('select id from extra_work_items')).rows[0].id;
+ await db.exec(`insert into extra_work_item_notes values('${uuid()}','${work}')`);
+ await assert.rejects(op('edit_extra',{...patch,extra:{...patch.extra,titolo:'Must roll back'},work_items:[]}),/foto, note/);
+ assert.equal((await db.query('select titolo from extras')).rows[0].titolo,'Changed');
+ assert.equal((await db.query('select count(*)::int n from extra_work_items')).rows[0].n,1);
+ await assert.rejects(op('edit_extra',{...patch,expected_updated_at:'2026-10-18T11:00:00Z'}),/modificato/);
+ await assert.rejects(op('edit_extra',{...patch,extra:{stato:'completato'}}),/Campo/);
+ // A date-rule failure must roll back the new schedule, team, title and work list together.
+ await db.exec(`update extras set schedule_item_id=null,con_ordinario=false`);
+ const before=(await db.query('select count(*)::int n from schedules')).rows[0].n;
+ await assert.rejects(op('extra',{id:extra,day:'2026-10-21',members:[admin]}),/vincoli/);
+ assert.equal((await db.query('select count(*)::int n from schedules')).rows[0].n,before);
+ const standalone={id:extra,day:'2026-10-20',members:[admin]},r=uuid();
+ const planned=await op('extra',standalone,r);await op('extra',standalone,r);
+ assert.notEqual(planned.schedule_id,sid);assert.equal((await db.query('select count(*)::int n from schedules')).rows[0].n,before+1);
+ assert.equal((await db.query('select profile_id from extra_workers')).rows[0].profile_id,admin);
+ await db.exec(`select set_config('app.actor','${worker}',false)`);await assert.rejects(op('add',add),/amministratori/);
+ await db.exec(`set role anon`);await assert.rejects(op('add',add),/permission denied/);
+ }finally{await db.close()}
+});

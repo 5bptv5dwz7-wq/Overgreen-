@@ -27,8 +27,9 @@ Deno.serve(async (req) => {
   const body=items.slice(0,3).map((e:any)=>`${e.pv} · ${e.numero_target?'Target '+e.numero_target:e.titolo}\n${e.rule_date?labels[e.rule_mode]+' '+e.rule_date.split('-').reverse().join('/'):'Sollecito · Il prima possibile'}${e.rule_mode!=='sollecito'&&!e.giorno_intervento?' · Da programmare':''}`).join('\n')+(items.length>3?`\nAltri ${items.length-3} promemoria: apri il riepilogo.`:'')
   let sent=0,failed=0
   for(const sub of subs.data||[]){
-   const claim=await db.from('extra_reminder_deliveries').insert({subscription_id:sub.id,reminder_day:day})
-   if(claim.error){if(claim.error.code==='23505')continue;throw claim.error}
+   const claim=await db.from('extra_reminder_deliveries').upsert({subscription_id:sub.id,reminder_day:day},{onConflict:'subscription_id,reminder_day',ignoreDuplicates:true}).select('subscription_id')
+   if(claim.error)throw claim.error
+   if(!claim.data?.length)continue
    try{
     await webpush.sendNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},JSON.stringify({title:`🔔 ${items.length} promemoria · extra e solleciti`,body,tag:`extra-dates-${day}`,url:'?notificationKind=reminders&notificationId=daily'}),{TTL:43200,urgency:'high',timeout:10000})
     sent++

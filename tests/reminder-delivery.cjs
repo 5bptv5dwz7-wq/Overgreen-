@@ -1,0 +1,9 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const {stripTypeScriptTypes}=require('node:module');
+const source=stripTypeScriptTypes(fs.readFileSync('supabase/functions/extra-daily-reminders/index.ts','utf8').replace(/^import .*\n/gm,''));
+function harness(){let handler,sent=0,claims=new Set();const db={rpc:async name=>({data:name==='verify_extra_reminder_token'?true:[{pv:'Test',titolo:'Test',rule_date:'2026-10-20',rule_mode:'on'}]}),from(table){const q={row:null,opts:null,select(){return q},eq(){return q},or(){return q},in(){return q},upsert(row,opts){q.row=row;q.opts=opts;return q},then(resolve){let data=[];if(table==='profiles')data=[{id:'admin'}];if(table==='push_subscriptions')data=[{id:'device',endpoint:'fake',p256dh:'key',auth:'key'}];if(table==='extra_reminder_deliveries'){assert.equal(q.opts.ignoreDuplicates,true);const key=q.row.subscription_id+q.row.reminder_day;if(!claims.has(key)){claims.add(key);data=[q.row]}}return Promise.resolve({data}).then(resolve)}};return q}};
+ vm.runInNewContext(source,{createClient:()=>db,Deno:{serve:fn=>handler=fn,env:{get:()=> 'test'}},Response,console,webpush:{setVapidDetails(){},sendNotification:async()=>sent++}});
+ return {get sent(){return sent},call:(dry=false,token='x'.repeat(64))=>handler(new Request('https://test',{method:'POST',headers:{'x-reminder-token':token},body:JSON.stringify({dry_run:dry})}))};
+}
+test('scheduled retry has no duplicate error and never sends twice to a claimed device',async()=>{const h=harness();assert.equal((await h.call()).status,200);assert.equal(h.sent,1);assert.equal((await h.call()).status,200);assert.equal(h.sent,1)});
+test('reminder dry run and invalid authentication send no notification',async()=>{const h=harness();assert.equal((await h.call(true)).status,200);assert.equal(h.sent,0);assert.equal((await h.call(false,'bad')).status,401);assert.equal(h.sent,0)});

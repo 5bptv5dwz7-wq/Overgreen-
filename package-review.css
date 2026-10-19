@@ -1,0 +1,12 @@
+.package-review{width:min(1100px,96vw);max-width:96vw;max-height:94dvh;overflow:auto;overscroll-behavior:contain;padding:20px;border:0;border-radius:16px}
+.pr-head{display:flex;justify-content:space-between;align-items:start;gap:12px;position:sticky;top:-20px;background:#fff;z-index:3;padding:12px 0;border-bottom:1px solid #dae6de}
+.pr-head h2{margin:0;font-size:1.2rem}.pr-head p{margin:5px 0;font-size:.85rem;color:#526659}
+#pr-status{white-space:pre-line;color:#8a4208}#pr-overview{display:flex;gap:20px;flex-wrap:wrap;margin:10px 0;font-weight:600}
+.pr-nav{display:flex;gap:8px;align-items:center}.pr-nav select{flex:1;min-width:0}.pr-nav button{font-size:.85rem;padding:8px}
+#pr-identity h3{margin:12px 0 6px}#pr-identity p{margin:5px 0;white-space:pre-line}
+.pr-steps{display:flex;gap:6px;margin:14px 0}.pr-steps button{flex:1;background:#edf3ef;color:#234534;padding:10px}.pr-steps button.active{background:#075b31;color:white}
+.pr-view-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}.pr-view-tools button{padding:8px 16px}.pr-document{max-height:60dvh;min-height:220px;overflow:auto;background:#e8ece9;border:1px solid #cdd8d0;padding:8px;touch-action:pan-x pan-y pinch-zoom}.pr-document canvas{display:block;margin:auto;max-width:none}.pr-document img{width:100%;height:auto;display:block}
+.pr-values{width:100%;border-collapse:collapse;margin:12px 0}.pr-values th,.pr-values td{padding:9px;border-bottom:1px solid #dce6df;text-align:left;overflow-wrap:anywhere}.pr-values th{width:45%;font-size:.8rem;color:#526659}
+.pr-footer{border-top:1px solid #dce6df;padding-top:16px;margin-top:18px;display:flex;gap:10px;flex-wrap:wrap}.pr-sheet{overflow:auto;max-height:65dvh}.pr-sheet table{border-collapse:collapse;font-size:.8rem}.pr-sheet th,.pr-sheet td{border:1px solid #ccd7cf;padding:8px;min-width:110px}.pr-sheet th{position:sticky;top:0;background:#e1eee5}
+.pr-final-files input[type=checkbox]{width:22px;height:22px;flex:none}.pr-final-files button{overflow-wrap:anywhere;text-align:left}.package-review .actions{flex-wrap:wrap;margin-top:12px}
+@media(max-width:600px){.package-review{padding:12px;width:98vw;max-width:98vw}.pr-head{top:-12px}.pr-nav{flex-wrap:wrap}.pr-nav select{order:-1;width:100%;flex-basis:100%}.pr-nav button{flex:1}.pr-steps button{font-size:.8rem;padding:8px 3px}.pr-head button{padding:8px;font-size:.8rem}.pr-values th{width:44%}}

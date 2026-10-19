@@ -104,7 +104,8 @@ const ExtraHoursUi=(()=>{
     if(!force&&s.loaded&&formKey()!==s.savedForm&&!confirm('Chiudere senza salvare le modifiche economiche?'))return;
     state=null;dispose(s);el('extraHoursCanvas').replaceChildren();el('extraHoursInput').value='';
     el('extraHoursDialog').close();
-    if(!force&&s.returnToEconomics&&admin())restoreExtraEconomicsBook();
+    if(!force&&s.onClose&&admin())void s.onClose();
+    else if(!force&&s.returnToEconomics&&admin())restoreExtraEconomicsBook();
   }
   async function render(s){
     if(!current(s))return;
@@ -169,7 +170,7 @@ const ExtraHoursUi=(()=>{
   async function open(extra,options={}){
     if(!admin()||!model().isBillableExtra(extra))return;
     bind();if(state){close();if(state)return}
-    const s={returnToEconomics:options.returnToEconomics===true,extraId:extra.id,row:null,report:null,page:1,zoom:1,loaded:false,saving:false,savedText:'',savedForm:'',extraCategory:extra.categoria_target||null,nightHours:extra.night_hours??0,suggestedOperators:typeof extraWorkers==='undefined'?0:new Set(extraWorkers.filter(w=>w.extra_id===extra.id).map(w=>w.profile_id)).size,pdf:null,image:null};state=s;
+    const s={onClose:typeof options.onClose==='function'?options.onClose:null,returnToEconomics:options.returnToEconomics===true,extraId:extra.id,row:null,report:null,page:1,zoom:1,loaded:false,saving:false,savedText:'',savedForm:'',extraCategory:extra.categoria_target||null,nightHours:extra.night_hours??0,suggestedOperators:typeof extraWorkers==='undefined'?0:new Set(extraWorkers.filter(w=>w.extra_id===extra.id).map(w=>w.profile_id)).size,pdf:null,image:null};state=s;
     const store=stores.find(x=>x.id===extra.store_id);
     el('extraHoursContext').textContent=[store?.nome||extra.nome_esterno,extra.numero_target?'Target '+extra.numero_target:'',extra.titolo].filter(Boolean).join(' · ');
     el('extraHoursInput').value='';el('extraHoursMeta').textContent='Caricamento ore…';el('extraHoursChanged').hidden=true;el('extraHoursOriginal').hidden=true;

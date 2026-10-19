@@ -9,7 +9,7 @@ async function loadExtraEconomics(){
   }catch(error){extraEconomicsRecords=[];extraEconomicsError='Dati economici non caricati. Premi Aggiorna per riprovare.';return false}
 }
 function syncExtraEconomicsRole(){
-  if(admin())return;economicsExcludedIds.clear();extraEconomicsRecords=[];extraEconomicsBookRows=[];
+  if(admin())return;window.PackageReview?.clearForRole();economicsExcludedIds.clear();extraEconomicsRecords=[];extraEconomicsBookRows=[];
   document.getElementById('extraEconomicsBook')?.close();
   for(const id of ['extraEconomicsBookList','extraEconomicsBookSummary'])document.getElementById(id)?.replaceChildren();
 }
@@ -81,6 +81,7 @@ function openExtraEconomicsBook(){
     for(const id of ['extraEconomicsMonth','extraEconomicsBookCategory','extraEconomicsBookMode','extraEconomicsBookState'])$(id).onchange=renderExtraEconomicsBook;
     $('extraEconomicsBookClose').onclick=()=>dialog.close();$('extraEconomicsBookRefresh').onclick=refreshExtraEconomicsBook;$('extraEconomicsBookExport').onclick=exportExtraEconomics;
     $('extraEconomicsBookZip').onclick=exportEconomicsZip;
+    $('extraEconomicsBookReview').onclick=()=>window.PackageReview.open();
     $('extraEconomicsSelectAll').onclick=()=>{extraEconomicsBookRows.forEach(x=>economicsExcludedIds.delete(x.extra.id));renderExtraEconomicsBook()};
     $('extraEconomicsSelectNone').onclick=()=>{extraEconomicsBookRows.forEach(x=>economicsExcludedIds.add(x.extra.id));renderExtraEconomicsBook()};
   }
@@ -158,16 +159,19 @@ function updateEconomicsSelection(){
   const count=extraEconomicsBookRows.filter(x=>!economicsExcludedIds.has(x.extra.id)).length;
   $('extraEconomicsSelectionCount').textContent=`${count} selezionati per ZIP`;
   $('extraEconomicsBookZip').disabled=economicsZipBusy||!!extraEconomicsError||!count;
+  $('extraEconomicsBookReview').disabled=economicsZipBusy||!!extraEconomicsError||!count;
 }
 function economicsZipIssues(rows){
   return rows.flatMap(x=>{
     const missing=[...eurospinPackagePrerequisites(x.extra).missing];
+    for(const tipo of ['pdf_richiesta','rapportino_eurospin','rapportino_overgreen'])if(attachments.filter(a=>a.extra_id===x.extra.id&&a.tipo===tipo).length>1)missing.push('Più versioni attive di '+tipo+': sostituisci il documento prima della verifica');
     if(x.extra.stato!=='completato')missing.push('chiusura da convalidare');
     if(!x.calc.ready)missing.push(economicsStatus(x.calc,x.row));
     return missing.length?[`${x.extra.numero_target||x.extra.titolo||x.extra.id}: ${missing.join(', ')}`]:[];
   });
 }
 async function exportEconomicsZip(){
+  if(window.PackageReview)return window.PackageReview.open();
   if(!admin()||economicsZipBusy)return;
   const ids=new Set(extraEconomicsBookRows.filter(x=>!economicsExcludedIds.has(x.extra.id)).map(x=>x.extra.id));
   if(!ids.size)return;

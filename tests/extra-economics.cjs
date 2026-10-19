@@ -108,3 +108,16 @@ test('Eurospin export preserves intervention date, notes open work and never inv
  c.addEconomicsWorksheet(book,[{extra,row:r,calc:model.review(r,extra)}]);
  const v=book.sheets[0].rows[2].values;assert.equal(v[2].toISOString().slice(0,10),'2026-08-08');assert.equal(v[4],'');assert.match(v[17],/Numero chiusura da verificare/);assert.match(v[17],/Intervento aperto/);
 });
+
+test('Cleaning export separates 5 euros per crew hour without duplicating equipment in totals',()=>{
+ for(const equipment of [true,false])for(const night of [0,2.5,6]){
+  const c=uiSetup(),book=excelBook(),r={...cases[0].input,pricing_category:'pulizie',equipment,night_hours:night,...model.rates('pulizie',equipment)};
+  const extra={...c.extras[0],categoria_target:'pulizie',night_hours:night};
+  c.addEconomicsWorksheet(book,[{extra,row:r,calc:model.review(r,extra)}]);
+  const sheet=book.sheets[0],h=sheet.rows[1].values,v=sheet.rows[2].values;
+  assert.equal(h.length,20);assert.equal(h[13],'ATTREZZATURE');assert.equal(h[14],'COSTO ATTREZZATURE');
+  assert.equal(v[13],equipment?'SI':'NO');assert.equal(v[14],equipment?30:0);
+  assert.equal(v[10],(6-night)*18+night*25);assert.equal(v[15],v[10]+v[14]);
+  assert.equal(v[18],v[15]+100);assert.match(sheet.autoFilter.to,/^T/);
+ }
+});

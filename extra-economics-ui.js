@@ -82,11 +82,14 @@ function openExtraEconomicsBook(){
 }
 function addEconomicsWorksheet(workbook,rows){
   const model=window.OvergreenEconomics,ws=workbook.addWorksheet('Foglio1');
-  // Eurospin template: preserve the exact 18 columns and their order.
+  // Green exports retain the template; cleaning exports expose the equipment surcharge.
   const headers=['PUNTO VENDITA','DATA RICHIESTA INTERVENTO','DATA INTERVENTO','NUMERO INTERVENTO','NUMERO CHIUSURA INTERVENTO','DESCRIZIONE INTERVENTO','NUMERO TECNICI','USCITA','IMPORTO FORFETTARIO TRASFERTA','N. ORE ORDINARIE','COSTO ORE ORDINARIE ','N. ORE CON CESTELLO','COSTO ORE CON CESTELLO','COSTO TOTALE ORE','TOTALE',"MODALITA'",'TOTALE FATTURATO','NOTE'];
   const widths=[25,16,16,18,20,35,12,10,18,15,16,16,17,16,14,14,17,45];
+  const hasCleaning=rows.some(x=>(x.extra.categoria_target||x.row.pricing_category)==='pulizie');
+  if(hasCleaning){headers.splice(13,0,'ATTREZZATURE','COSTO ATTREZZATURE');widths.splice(13,0,16,20)}
+  const lastColumn=hasCleaning?'T':'R';
   ws.columns=widths.map(width=>({width}));
-  ws.mergeCells('A1:R1');
+  ws.mergeCells(`A1:${lastColumn}1`);
   ws.getCell('A1').value='CONSUNTIVO OVERGREEN '+model.periodLabel($('extraEconomicsMonth').value).toUpperCase();
   ws.getRow(1).font={bold:true,size:14};ws.getRow(1).alignment={horizontal:'center',vertical:'middle'};ws.getRow(1).height=24;
   const header=ws.addRow(headers);header.font={bold:true,size:9,color:{argb:'FFFFFFFF'}};header.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF2F6B45'}};header.alignment={wrapText:true,vertical:'middle',horizontal:'center'};header.height=48;
@@ -107,13 +110,18 @@ function addEconomicsWorksheet(workbook,rows){
     // Ordinary costs are line amounts, not hourly rates. Equipment is not a basket lift.
     // TOTALE is the hourly comparison; TOTALE FATTURATO uses the selected pricing mode.
     const hourlyTotal=c.labor==null||c.exit==null?null:c.labor+c.exit+c.expenses;
-    const row=ws.addRow([(st?.nome||e.nome_esterno||'').toUpperCase(),excelDateValue(extraRequestDate(e)),excelDateValue(e.giorno_intervento||model.closureDate(e)),String(e.numero_target||''),x.closureNumber||'',e.titolo||'',r.operator_count??null,typeof r.dedicated_trip==='boolean'?(r.dedicated_trip?'SI':'NO'):'',euros(c.exit),r.total_hours??null,euros(c.labor),null,null,euros(c.labor),euros(hourlyTotal),({tariffa:'ORE',preventivo:'PREVENTIVO',consuntivo:'CONSUNTIVO'})[r.pricing_mode]||'',c.ready?euros(c.total):null,notes.join(' | ')]);
+    const cleaning=(e.categoria_target||r.pricing_category)==='pulizie';
+    const equipmentCost=cleaning&&r.equipment?(r.total_hours==null?null:Math.round(Number(r.total_hours)*500)):0;
+    const laborWithoutEquipment=c.labor==null||equipmentCost==null?null:c.labor-equipmentCost;
+    const values=[(st?.nome||e.nome_esterno||'').toUpperCase(),excelDateValue(extraRequestDate(e)),excelDateValue(e.giorno_intervento||model.closureDate(e)),String(e.numero_target||''),x.closureNumber||'',e.titolo||'',r.operator_count??null,typeof r.dedicated_trip==='boolean'?(r.dedicated_trip?'SI':'NO'):'',euros(c.exit),r.total_hours??null,euros(laborWithoutEquipment),null,null,euros(c.labor),euros(hourlyTotal),({tariffa:'ORE',preventivo:'PREVENTIVO',consuntivo:'CONSUNTIVO'})[r.pricing_mode]||'',c.ready?euros(c.total):null,notes.join(' | ')];
+    if(hasCleaning)values.splice(13,0,cleaning?(r.equipment?'SI':'NO'):'',cleaning?euros(equipmentCost):null);
+    const row=ws.addRow(values);
     for(const col of [2,3])row.getCell(col).numFmt='dd/mm/yyyy';
-    for(const col of [9,11,13,14,15,17])row.getCell(col).numFmt='#,##0.00 "€"';
+    for(const col of (hasCleaning?[9,11,13,15,16,17,19]:[9,11,13,14,15,17]))row.getCell(col).numFmt='#,##0.00 "€"';
     for(const col of [10,12])row.getCell(col).numFmt='0.00';
     row.alignment={vertical:'top',wrapText:true};
   }
-  ws.views=[{state:'frozen',ySplit:2}];ws.autoFilter={from:'A2',to:`R${Math.max(3,rows.length+2)}`};
+  ws.views=[{state:'frozen',ySplit:2}];ws.autoFilter={from:'A2',to:`${lastColumn}${Math.max(3,rows.length+2)}`};
   return ws;
 }
 async function exportExtraEconomics(){

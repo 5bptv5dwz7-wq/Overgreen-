@@ -121,3 +121,31 @@ test('Cleaning export separates 5 euros per crew hour without duplicating equipm
   assert.equal(v[18],v[15]+100);assert.match(sheet.autoFilter.to,/^T/);
  }
 });
+test('ZIP selection exports matching PDFs and category workbooks; deselected extras stay out',async()=>{
+ const c=uiSetup(),files=[],books=[];
+ c.extras.push({...c.extras[0],id:'clean',numero_target:'22',categoria_target:'pulizie'},{...c.extras[0],id:'omit',numero_target:'33'});
+ c.readAllRows=async()=>({data:c.extras.map(e=>({extra_id:e.id,...cases[0].input,pricing_category:e.categoria_target,...model.rates(e.categoria_target)}))});
+ await c.loadExtraEconomics();c.renderExtraEconomicsBook();
+ const checks=c.$('extraEconomicsBookList').querySelectorAll('input');checks[2].checked=false;checks[2].onchange();
+ c.eurospinPackagePrerequisites=()=>({missing:[]});c.ensureLibraries=async()=>{};c.window.PDFLib={};
+ c.readClosureNumberFromEurospinFile=async e=>({number:'123456'});
+ c.buildExtraClosurePdfBlob=async e=>'PDF:'+e.id;c.eurospinPackageFilename=e=>e.id+'.pdf';
+ c.window.ExcelJS={Workbook:class{constructor(){const b=excelBook();books.push(b);return Object.assign(b,{xlsx:{writeBuffer:async()=>new Uint8Array([1])}})}}};
+ c.window.JSZip=class{file(n,v){files.push([n,v])}async generateAsync(){return {size:100}}};
+ c.URL={createObjectURL:()=> 'blob:test',revokeObjectURL(){}};c.setTimeout=()=>{};
+ await c.exportEconomicsZip();
+ assert.equal(files.length,4);assert.deepEqual(files.filter(x=>x[0].endsWith('.pdf')).map(x=>x[1]).sort(),['PDF:clean','PDF:e']);
+ assert.equal(books[0].sheets[0].rows[1].values.length,18);assert.equal(books[1].sheets[0].rows[1].values.length,20);
+ assert.equal(books[0].sheets[0].rows.length,3);assert.equal(books[1].sheets[0].rows.length,3);
+ assert.match(c.$('extraEconomicsBookStatus').textContent,/ZIP generato: 2/);
+});
+test('ZIP blocks incomplete documents and unreadable closure numbers without partial download',async()=>{
+ for(const unreadable of [false,true]){
+  const c=uiSetup();await c.loadExtraEconomics();c.renderExtraEconomicsBook();
+  c.eurospinPackagePrerequisites=()=>({missing:unreadable?[]:['file Eurospin']});
+  c.ensureLibraries=async()=>{};c.window.PDFLib={};c.window.ExcelJS={};c.window.JSZip=class{constructor(){throw Error('Must not create partial ZIP')}};
+  c.readClosureNumberFromEurospinFile=async()=>({number:null});
+  await c.exportEconomicsZip();assert.match(c.$('extraEconomicsBookStatus').textContent,unreadable?/Numero chiusura non leggibile/:/file Eurospin/);
+  assert.equal(c.$('extraEconomicsBookZip').disabled,false);
+ }
+});

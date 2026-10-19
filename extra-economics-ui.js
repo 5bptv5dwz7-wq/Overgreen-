@@ -1,4 +1,5 @@
 /* Admin-only saved summaries and monthly Excel; no financial data in worker views. */
+let economicsExcludedIds=new Set(),economicsZipBusy=false;
 let extraEconomicsRecords=[],extraEconomicsError='',extraEconomicsBookRows=[];
 async function loadExtraEconomics(){
   if(!admin()){extraEconomicsRecords=[];extraEconomicsError='';return false}
@@ -8,7 +9,7 @@ async function loadExtraEconomics(){
   }catch(error){extraEconomicsRecords=[];extraEconomicsError='Dati economici non caricati. Premi Aggiorna per riprovare.';return false}
 }
 function syncExtraEconomicsRole(){
-  if(admin())return;extraEconomicsRecords=[];extraEconomicsBookRows=[];
+  if(admin())return;economicsExcludedIds.clear();extraEconomicsRecords=[];extraEconomicsBookRows=[];
   document.getElementById('extraEconomicsBook')?.close();
   for(const id of ['extraEconomicsBookList','extraEconomicsBookSummary'])document.getElementById(id)?.replaceChildren();
 }
@@ -49,7 +50,7 @@ function populateEconomicsPeriods(){
 function renderExtraEconomicsBook(){
   if(!admin())return;const model=window.OvergreenEconomics,list=$('extraEconomicsBookList');list.replaceChildren();
   $('extraEconomicsBookExport').disabled=!!extraEconomicsError;
-  if(extraEconomicsError){$('extraEconomicsBookStatus').textContent=extraEconomicsError;$('extraEconomicsBookSummary').replaceChildren();extraEconomicsBookRows=[];return}
+  if(extraEconomicsError){$('extraEconomicsBookStatus').textContent=extraEconomicsError;$('extraEconomicsBookSummary').replaceChildren();extraEconomicsBookRows=[];updateEconomicsSelection();return}
   populateEconomicsPeriods();
   extraEconomicsBookRows=model.filterRows(extras,extraEconomicsRecords,attachments,economicsBookFilter());
   const ready=extraEconomicsBookRows.filter(x=>x.calc.ready),total=ready.reduce((sum,x)=>sum+x.calc.total,0),incomplete=extraEconomicsBookRows.length-ready.length;
@@ -58,8 +59,10 @@ function renderExtraEconomicsBook(){
   $('extraEconomicsBookExport').disabled=!extraEconomicsBookRows.length;
   for(const x of extraEconomicsBookRows){const st=stores.find(s=>s.id===x.extra.store_id),article=document.createElement('article');article.className='economic-book-row';
     article.innerHTML=`<div><strong>${esc(st?.nome||x.extra.nome_esterno||'Extra')} · ${esc(x.extra.numero_target||'Target non indicato')}</strong><p>${esc(x.extra.titolo||'')}</p><small>${esc(model.periodLabel(model.period(x.extra)))}${model.closureDate(x.extra)?' · Chiusura '+esc(model.closureDate(x.extra).split('-').reverse().join('/')):''} · ${esc(model.modes[x.row.pricing_mode]||'Modalità da scegliere')} · ${esc(economicsStatus(x.calc,x.row))}</small>${x.extra.categoria_target==='pulizie'?`<p><strong>${esc(model.cleaningInvoiceLabel(x.row,'pulizie'))}</strong></p>`:''}</div><div><strong>${esc(model.money(x.calc.total))}</strong><button type="button" class="secondary">Apri</button></div>`;
+    const select=document.createElement('input');select.type='checkbox';select.checked=!economicsExcludedIds.has(x.extra.id);select.setAttribute('aria-label','Includi '+(x.extra.numero_target||x.extra.titolo||'extra')+' nello ZIP');select.onchange=()=>{if(select.checked)economicsExcludedIds.delete(x.extra.id);else economicsExcludedIds.add(x.extra.id);updateEconomicsSelection()};article.prepend(select);
     article.querySelector('button').onclick=()=>{$('extraEconomicsBook').close();void openExtraHours(x.extra,{returnToEconomics:true})};list.appendChild(article);
   }
+  updateEconomicsSelection();
 }
 async function refreshExtraEconomicsBook(){
   if(!admin())return;const b=$('extraEconomicsBookRefresh');b.disabled=true;$('extraEconomicsBookExport').disabled=true;$('extraEconomicsBookStatus').textContent='Aggiornamento…';
@@ -77,10 +80,13 @@ function openExtraEconomicsBook(){
   if(!dialog.dataset.bound){dialog.dataset.bound='true';$('extraEconomicsMonth').dataset.initialPeriod=today().slice(0,7);
     for(const id of ['extraEconomicsMonth','extraEconomicsBookCategory','extraEconomicsBookMode','extraEconomicsBookState'])$(id).onchange=renderExtraEconomicsBook;
     $('extraEconomicsBookClose').onclick=()=>dialog.close();$('extraEconomicsBookRefresh').onclick=refreshExtraEconomicsBook;$('extraEconomicsBookExport').onclick=exportExtraEconomics;
+    $('extraEconomicsBookZip').onclick=exportEconomicsZip;
+    $('extraEconomicsSelectAll').onclick=()=>{extraEconomicsBookRows.forEach(x=>economicsExcludedIds.delete(x.extra.id));renderExtraEconomicsBook()};
+    $('extraEconomicsSelectNone').onclick=()=>{extraEconomicsBookRows.forEach(x=>economicsExcludedIds.add(x.extra.id));renderExtraEconomicsBook()};
   }
   dialog.showModal();renderExtraEconomicsBook();void refreshExtraEconomicsBook();
 }
-function addEconomicsWorksheet(workbook,rows){
+function addEconomicsWorksheet(workbook,rows,period=$('extraEconomicsMonth').value){
   const model=window.OvergreenEconomics,ws=workbook.addWorksheet('Foglio1');
   // Green exports retain the template; cleaning exports expose the equipment surcharge.
   const headers=['PUNTO VENDITA','DATA RICHIESTA INTERVENTO','DATA INTERVENTO','NUMERO INTERVENTO','NUMERO CHIUSURA INTERVENTO','DESCRIZIONE INTERVENTO','NUMERO TECNICI','USCITA','IMPORTO FORFETTARIO TRASFERTA','N. ORE ORDINARIE','COSTO ORE ORDINARIE ','N. ORE CON CESTELLO','COSTO ORE CON CESTELLO','COSTO TOTALE ORE','TOTALE',"MODALITA'",'TOTALE FATTURATO','NOTE'];
@@ -90,7 +96,7 @@ function addEconomicsWorksheet(workbook,rows){
   const lastColumn=hasCleaning?'T':'R';
   ws.columns=widths.map(width=>({width}));
   ws.mergeCells(`A1:${lastColumn}1`);
-  ws.getCell('A1').value='CONSUNTIVO OVERGREEN '+model.periodLabel($('extraEconomicsMonth').value).toUpperCase();
+  ws.getCell('A1').value='CONSUNTIVO OVERGREEN '+model.periodLabel(period).toUpperCase();
   ws.getRow(1).font={bold:true,size:14};ws.getRow(1).alignment={horizontal:'center',vertical:'middle'};ws.getRow(1).height=24;
   const header=ws.addRow(headers);header.font={bold:true,size:9,color:{argb:'FFFFFFFF'}};header.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF2F6B45'}};header.alignment={wrapText:true,vertical:'middle',horizontal:'center'};header.height=48;
   const euros=value=>value==null?null:value/100;
@@ -147,3 +153,64 @@ async function exportExtraEconomics(){
 
 
 
+
+function updateEconomicsSelection(){
+  const count=extraEconomicsBookRows.filter(x=>!economicsExcludedIds.has(x.extra.id)).length;
+  $('extraEconomicsSelectionCount').textContent=`${count} selezionati per ZIP`;
+  $('extraEconomicsBookZip').disabled=economicsZipBusy||!!extraEconomicsError||!count;
+}
+function economicsZipIssues(rows){
+  return rows.flatMap(x=>{
+    const missing=[...eurospinPackagePrerequisites(x.extra).missing];
+    if(x.extra.stato!=='completato')missing.push('chiusura da convalidare');
+    if(!x.calc.ready)missing.push(economicsStatus(x.calc,x.row));
+    return missing.length?[`${x.extra.numero_target||x.extra.titolo||x.extra.id}: ${missing.join(', ')}`]:[];
+  });
+}
+async function exportEconomicsZip(){
+  if(!admin()||economicsZipBusy)return;
+  const ids=new Set(extraEconomicsBookRows.filter(x=>!economicsExcludedIds.has(x.extra.id)).map(x=>x.extra.id));
+  if(!ids.size)return;
+  const filter=economicsBookFilter(),status=$('extraEconomicsBookStatus');
+  economicsZipBusy=true;
+  const controls=[...$('extraEconomicsBook').querySelectorAll('button,input,select')];
+  const disabled=controls.map(el=>el.disabled);controls.forEach(el=>el.disabled=true);
+  try{
+    status.textContent='Controllo documenti e dati economici…';
+    await loadAll();if(!admin())return;if(extraEconomicsError)throw Error(extraEconomicsError);
+    const rows=window.OvergreenEconomics.filterRows(extras,extraEconomicsRecords,attachments,filter).filter(x=>ids.has(x.extra.id));
+    if(rows.length!==ids.size)throw Error('Gli extra selezionati sono cambiati. Aggiorna la lista e riprova.');
+    const issues=economicsZipIssues(rows);if(issues.length)throw Error('Completa questi extra prima di generare lo ZIP:\n'+issues.join('\n'));
+    await ensureLibraries('JSZip','ExcelJS','PDFLib');
+    if(!window.JSZip||!window.ExcelJS||!window.PDFLib)throw Error('Librerie non disponibili. Riprova.');
+    const missing=[];
+    for(let i=0;i<rows.length;i++){
+      if(!admin())return;
+      status.textContent=`Leggo numero chiusura ${i+1}/${rows.length}…`;
+      const result=await readClosureNumberFromEurospinFile(rows[i].extra);rows[i].closureNumber=result.number||'';
+      if(!result.number)missing.push(rows[i].extra.numero_target||rows[i].extra.titolo||rows[i].extra.id);
+    }
+    if(missing.length)throw Error('Numero chiusura non leggibile: '+missing.join(', ')+'. Controlla i rapportini Eurospin.');
+    const zip=new window.JSZip();let done=0;
+    for(const category of ['verde','pulizie']){
+      const group=rows.filter(x=>(x.extra.categoria_target||x.row.pricing_category)===category);if(!group.length)continue;
+      const folder=category==='verde'?'Verde':'Pulizie';
+      const book=new window.ExcelJS.Workbook();addEconomicsWorksheet(book,group,filter.month);
+      zip.file(`${folder}/Excel economico.xlsx`,await book.xlsx.writeBuffer());
+      for(const x of group){
+        if(!admin())return;
+        status.textContent=`Genero chiusura ${++done}/${rows.length}…`;
+        const pdf=await buildExtraClosurePdfBlob(x.extra,.68,1500);
+        // Prefix guarantees no overwrites even with repeated targets, places and dates.
+        zip.file(`${folder}/${String(done).padStart(3,'0')} - ${eurospinPackageFilename(x.extra,done-1)}`,pdf);
+      }
+    }
+    if(done!==rows.length)throw Error('Categoria non riconosciuta: nessun pacchetto scaricato.');
+    status.textContent='Comprimo ZIP…';
+    const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}},p=>{status.textContent=`Comprimo ZIP… ${Math.round(p.percent)}%`});
+    if(!admin())return;
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Overgreen - Chiusure ed economia - ${filter.month||'tutti'}.zip`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+    status.textContent=`ZIP generato: ${rows.length} chiusure con i relativi Excel · ${(blob.size/1024/1024).toFixed(1)} MB.`;
+  }catch(error){if(admin()){status.textContent=error.message||'Creazione ZIP non riuscita.';status.style.whiteSpace='pre-line'}}
+  finally{economicsZipBusy=false;controls.forEach((el,i)=>el.disabled=disabled[i]);if(admin())updateEconomicsSelection()}
+}

@@ -18,7 +18,7 @@ test('month/category/mode filters include drafts and exclude other clients or ca
 function uiSetup(){
   const dom=parseHTML(fs.readFileSync(__dirname+'/../index.html','utf8')),document=dom.document;
   Object.defineProperty(dom.HTMLSelectElement.prototype,'value',{configurable:true,get(){return (this.querySelector('option[selected]')||this.querySelector('option'))?.value||''},set(v){for(const o of this.querySelectorAll('option'))if(o.value===String(v))o.setAttribute('selected','');else o.removeAttribute('selected')}});
-  const c={document,window:{OvergreenEconomics:model},console,$:id=>document.getElementById(id),admin:()=>c.isAdmin,isAdmin:true,stores:[],extras:[{id:'e',client_type:'eurospin',categoria_target:'verde',nome_esterno:'<img src=x>',stato:'completato',closed_at:'2026-09-08T10:00:00Z',giorno_intervento:'2026-08-08'}],attachments:[],today:()=> '2026-09-08',esc:s=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'),readAllRows:async()=>({data:[{extra_id:'e',...cases[0].input,...model.rates('verde')}]}),loadAll:async()=>{},openExtraHours:()=>{},renderExtras:()=>{}};
+  const c={excelDateValue:s=>s?new Date(s):null,extraRequestDate:e=>e.data_richiesta||null,document,window:{OvergreenEconomics:model},console,$:id=>document.getElementById(id),admin:()=>c.isAdmin,isAdmin:true,stores:[],extras:[{id:'e',client_type:'eurospin',categoria_target:'verde',nome_esterno:'<img src=x>',stato:'completato',closed_at:'2026-09-08T10:00:00Z',giorno_intervento:'2026-08-08'}],attachments:[],today:()=> '2026-09-08',esc:s=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'),readAllRows:async()=>({data:[{extra_id:'e',...cases[0].input,...model.rates('verde')}]}),loadAll:async()=>{},openExtraHours:()=>{},renderExtras:()=>{}};
   c.$('extraEconomicsBook').showModal=()=>c.$('extraEconomicsBook').setAttribute('open','');c.$('extraEconomicsBook').close=()=>c.$('extraEconomicsBook').removeAttribute('open');
   vm.createContext(c);vm.runInContext(fs.readFileSync(__dirname+'/../extra-economics-ui.js','utf8'),c);return c;
 }
@@ -32,12 +32,16 @@ test('failed economic fetch does not present a zero balance or allow export',asy
   const c=uiSetup();c.readAllRows=async()=>({error:Error('offline')});await c.loadExtraEconomics();c.renderExtraEconomicsBook();
   assert.match(c.$('extraEconomicsBookStatus').textContent,/non caricati/);assert(c.$('extraEconomicsBookExport').disabled);assert.equal(c.$('extraEconomicsBookSummary').childElementCount,0);
 });
-test('Excel columns retain nullable amounts and exclude a draft quote from the summary sum',()=>{
-  const c=uiSetup(),sheets=[];
-  const workbook={addWorksheet(name){const rows=[];const sheet={name,rows,getRow(n){return rows[n-1]||(rows[n-1]={getCell(){return {}}})},addRow(values){const r={values,getCell(){return {}}};rows.push(r);return r},eachRow(fn){rows.forEach(fn)}};sheets.push(sheet);return sheet}};
-  const input={...cases[8].input,...model.rates('verde')},row={extra:c.extras[0],row:input,calc:model.review(input,c.extras[0])};
-  c.addEconomicsWorksheet(workbook,[row]);const values=sheets[0].rows[1].values;
-  assert.equal(values[18],1200);assert.equal(values[19],'No');assert.equal(sheets[1].rows[2].values[1],0);
+function excelBook(){
+ const sheets=[];return {sheets,addWorksheet(name){const rows=[];const sheet={name,rows,mergeCells(){this.getRow(1)},getCell(){return {}},getRow(n){while(rows.length<n)rows.push({values:[],getCell(){return {}}});return rows[n-1]},addRow(values){const r={values,getCell(){return {}}};rows.push(r);return r}};sheets.push(sheet);return sheet}};
+}
+test('Eurospin export retains 18 exact headers, one sheet and unaccepted quote exclusion',()=>{
+ const c=uiSetup(),book=excelBook(),input={...cases[8].input,...model.rates('verde')};
+ c.addEconomicsWorksheet(book,[{extra:c.extras[0],row:input,calc:model.review(input,c.extras[0])}]);
+ assert.equal(book.sheets.length,1);const sheet=book.sheets[0];
+ assert.equal(sheet.rows[1].values.length,18);assert.equal(sheet.rows[1].values[10],'COSTO ORE ORDINARIE ');
+ assert.equal(sheet.rows[1].values[17],'NOTE');assert.equal(sheet.rows[2].values[16],null);
+ assert.match(sheet.rows[2].values[17],/escluso dal totale fatturato/);assert.match(sheet.autoFilter.to,/^R/);
 });
 
 test('V209 included targets and other closure profiles never enter the economic book',()=>{
@@ -55,10 +59,10 @@ test('V212 discount is exact in cents and works with every pricing mode',()=>{
   for(const bad of [-1,0.001,'abc'])assert.throws(()=>model.calculate({...r,discount_amount:bad}));
  }
 });
-test('V212 Excel contains original subtotal, discount and final net price',()=>{
- const c=uiSetup(),sheets=[],book={addWorksheet(){const rows=[];const s={rows,getRow(n){return rows[n-1]||(rows[n-1]={getCell(){return {}}})},addRow(values){const r={values,getCell(){return {}}};rows.push(r);return r},eachRow(fn){rows.forEach(fn)}};sheets.push(s);return s}};
- const r={...cases[0].input,...model.rates('verde'),discount_amount:20};c.addEconomicsWorksheet(book,[{extra:c.extras[0],row:r,calc:model.review(r,c.extras[0])}]);
- const v=sheets[0].rows[1].values;assert.equal(v[18],300);assert.equal(v[24],320);assert.equal(v[25],20);assert.equal(sheets[1].rows[2].values[1],300);
+test('Eurospin export keeps crew hours, expenses and discounts without extra columns',()=>{
+ const c=uiSetup(),book=excelBook(),r={...cases[0].input,...model.rates('verde'),pricing_mode:'consuntivo',discount_amount:20,expenses:[{description:'Smaltimento',amount:50}]};
+ c.addEconomicsWorksheet(book,[{extra:c.extras[0],row:r,closureNumber:'001234',calc:model.review(r,c.extras[0])}]);
+ const v=book.sheets[0].rows[2].values;assert.equal(v.length,18);assert.equal(v[4],'001234');assert.equal(v[9],6);assert.equal(v[10],120);assert.equal(v[11],null);assert.equal(v[14],370);assert.equal(v[16],350);assert.match(v[17],/Smaltimento: 50/);assert.match(v[17],/Sconto: 20/);
 });
 
 test('V223 splits partial and full night work, with equipment, exact decimals and no extra operator multiplier',()=>{
@@ -98,10 +102,9 @@ test('V229 period selector preserves Aperti through refresh and combines with ca
  select.value='open';c.renderExtraEconomicsBook();assert.equal(select.value,'open');assert.equal(c.$('extraEconomicsBookList').children.length,1);assert.match(c.$('extraEconomicsBookList').textContent,/Aperti/);
  c.$('extraEconomicsBookCategory').value='verde';c.renderExtraEconomicsBook();assert.equal(c.$('extraEconomicsBookList').children.length,0);assert.equal(c.$('extraEconomicsBookExport').disabled,true);
 });
-test('V229 Excel includes closure date and economic category, including open extras',()=>{
- const c=uiSetup(),sheets=[];const book={addWorksheet(){const rows=[];const s={rows,getRow(){return {}},addRow(values){const r={values,getCell:()=>({})};rows.push(r);return r},eachRow(){}};sheets.push(s);return s}};
- const closed={...c.extras[0],closed_at:'2026-09-30T22:30:00Z'},open={...c.extras[0],stato:'da_integrare',closed_at:null};
- const r={...cases[0].input,...model.rates('verde')};c.addEconomicsWorksheet(book,[closed,open].map(extra=>({extra,row:r,calc:model.review(r,extra)})));
- assert.equal(sheets[0].rows[0].values[31],'2026-10-01');assert.equal(sheets[0].rows[0].values[32],'ottobre 2026');
- assert.equal(sheets[0].rows[1].values[31],'');assert.equal(sheets[0].rows[1].values[32],'Aperti');assert.match(sheets[0].autoFilter.to,/^AG/);
+test('Eurospin export preserves intervention date, notes open work and never invents a closure number',()=>{
+ const c=uiSetup(),book=excelBook(),r={...cases[0].input,...model.rates('verde')};
+ const extra={...c.extras[0],stato:'da_integrare',closed_at:null};
+ c.addEconomicsWorksheet(book,[{extra,row:r,calc:model.review(r,extra)}]);
+ const v=book.sheets[0].rows[2].values;assert.equal(v[2].toISOString().slice(0,10),'2026-08-08');assert.equal(v[4],'');assert.match(v[17],/Numero chiusura da verificare/);assert.match(v[17],/Intervento aperto/);
 });

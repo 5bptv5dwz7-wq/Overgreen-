@@ -81,22 +81,40 @@ function openExtraEconomicsBook(){
   dialog.showModal();renderExtraEconomicsBook();void refreshExtraEconomicsBook();
 }
 function addEconomicsWorksheet(workbook,rows){
-  const model=window.OvergreenEconomics,ws=workbook.addWorksheet('Economia extra');
-  const columns=[['Sede',26],['Target',18],['Descrizione',35],['Data esecuzione',18],['Stato lavoro',18],['Categoria',14],['Modalità',18],['Operatori',12],['Addebito uscita',18],['Tariffa uscita per operatore',18],['Uscita aggiunta',18],['Ore complessive',16],['Tariffa oraria',16],['Manodopera a ore (informativa per preventivi)',23],['Importo preventivo',18],['Stato preventivo',18],['Uscita inclusa nel preventivo',20],['Spese',16],['Totale calcolato',18],['Incluso nel totale riepilogo',20],['Verifica',45],['Dettaglio spese',45],['Note economiche',40],['Riferimento preventivo',24],['Subtotale prima dello sconto',20],['Sconto',16],['Ore diurne',16],['Ore notturne',16],['Tariffa notturna',18],['Manodopera diurna',20],['Manodopera notturna',20],['Data chiusura',18],['Periodo economia',24]];
-  ws.columns=columns.map(([header,width])=>({header,width}));ws.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};ws.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF075B31'}};ws.getRow(1).height=45;ws.getRow(1).alignment={wrapText:true,vertical:'middle'};
-  for(const x of rows){const e=x.extra,r=x.row,c=x.calc,st=stores.find(s=>s.id===e.store_id),q=r.pricing_mode==='preventivo';
-    const row=ws.addRow([st?.nome||e.nome_esterno||'',String(e.numero_target||''),e.titolo||'',e.giorno_intervento||'',e.stato,r.pricing_category||e.categoria_target||'',model.modes[r.pricing_mode]||'',r.operator_count??null,typeof r.dedicated_trip==='boolean'?(r.dedicated_trip?'Sì':'No'):'',r.exit_rate??null,c.exit==null?null:c.exit/100,r.total_hours??null,r.hourly_rate??null,c.labor==null?null:c.labor/100,q?r.quote_amount??null:null,q?model.quoteStates[r.quote_status]||'':'',q?(c.exitIncluded?'Sì':'No'):'',c.expenses/100,c.total==null?null:c.total/100,c.ready?'Sì':'No',economicsStatus(c,r),(r.expenses||[]).map(s=>s.description+': '+model.money(model.cents(s.amount))).join(' | '),r.economic_notes||'',r.quote_reference||'',c.subtotal==null?null:c.subtotal/100,c.discount/100,c.dayHours,c.nightHours,r.night_hourly_rate??null,c.laborDay==null?null:c.laborDay/100,c.laborNight==null?null:c.laborNight/100,model.closureDate(e),model.periodLabel(model.period(e))]);
-    for(const col of [10,11,13,14,15,18,19,25,26,29,30,31])row.getCell(col).numFmt='#,##0.00 "€"';for(const col of [12,27,28])row.getCell(col).numFmt='0.00';
+  const model=window.OvergreenEconomics,ws=workbook.addWorksheet('Foglio1');
+  // Eurospin template: preserve the exact 18 columns and their order.
+  const headers=['PUNTO VENDITA','DATA RICHIESTA INTERVENTO','DATA INTERVENTO','NUMERO INTERVENTO','NUMERO CHIUSURA INTERVENTO','DESCRIZIONE INTERVENTO','NUMERO TECNICI','USCITA','IMPORTO FORFETTARIO TRASFERTA','N. ORE ORDINARIE','COSTO ORE ORDINARIE ','N. ORE CON CESTELLO','COSTO ORE CON CESTELLO','COSTO TOTALE ORE','TOTALE',"MODALITA'",'TOTALE FATTURATO','NOTE'];
+  const widths=[25,16,16,18,20,35,12,10,18,15,16,16,17,16,14,14,17,45];
+  ws.columns=widths.map(width=>({width}));
+  ws.mergeCells('A1:R1');
+  ws.getCell('A1').value='CONSUNTIVO OVERGREEN '+model.periodLabel($('extraEconomicsMonth').value).toUpperCase();
+  ws.getRow(1).font={bold:true,size:14};ws.getRow(1).alignment={horizontal:'center',vertical:'middle'};ws.getRow(1).height=24;
+  const header=ws.addRow(headers);header.font={bold:true,size:9,color:{argb:'FFFFFFFF'}};header.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF2F6B45'}};header.alignment={wrapText:true,vertical:'middle',horizontal:'center'};header.height=48;
+  const euros=value=>value==null?null:value/100;
+  for(const x of rows){
+    const e=x.extra,r=x.row,c=x.calc,st=stores.find(s=>s.id===e.store_id),q=r.pricing_mode==='preventivo',notes=[];
+    if(r.economic_notes)notes.push(r.economic_notes);
+    if(r.quote_reference)notes.push('Riferimento preventivo: '+r.quote_reference);
+    if(q)notes.push('Preventivo: '+(model.quoteStates[r.quote_status]||'da verificare')+(c.exitIncluded?' · trasferta inclusa':''));
+    if(c.nightHours>0)notes.push('Ore notturne incluse: '+c.nightHours+' × '+model.money(model.cents(r.night_hourly_rate)));
+    if(r.equipment)notes.push('Tariffa con attrezzature');
+    if((r.expenses||[]).length)notes.push('Spese: '+r.expenses.map(s=>s.description+': '+model.money(model.cents(s.amount))).join('; '));
+    if(c.discount)notes.push('Sconto: '+model.money(c.discount));
+    if(!c.ready)notes.push(economicsStatus(c,r)+' · escluso dal totale fatturato');
+    if(!x.closureNumber)notes.push('Numero chiusura da verificare');
+    if(!['completato','in_attesa'].includes(e.stato))notes.push('Intervento aperto');
+    const invoice=model.cleaningInvoiceLabel(r,e.categoria_target||r.pricing_category);if(invoice)notes.push(invoice);
+    // Ordinary costs are line amounts, not hourly rates. Equipment is not a basket lift.
+    // TOTALE is the hourly comparison; TOTALE FATTURATO uses the selected pricing mode.
+    const hourlyTotal=c.labor==null||c.exit==null?null:c.labor+c.exit+c.expenses;
+    const row=ws.addRow([(st?.nome||e.nome_esterno||'').toUpperCase(),excelDateValue(extraRequestDate(e)),excelDateValue(e.giorno_intervento||model.closureDate(e)),String(e.numero_target||''),x.closureNumber||'',e.titolo||'',r.operator_count??null,typeof r.dedicated_trip==='boolean'?(r.dedicated_trip?'SI':'NO'):'',euros(c.exit),r.total_hours??null,euros(c.labor),null,null,euros(c.labor),euros(hourlyTotal),({tariffa:'ORE',preventivo:'PREVENTIVO',consuntivo:'CONSUNTIVO'})[r.pricing_mode]||'',c.ready?euros(c.total):null,notes.join(' | ')]);
+    for(const col of [2,3])row.getCell(col).numFmt='dd/mm/yyyy';
+    for(const col of [9,11,13,14,15,17])row.getCell(col).numFmt='#,##0.00 "€"';
+    for(const col of [10,12])row.getCell(col).numFmt='0.00';
     row.alignment={vertical:'top',wrapText:true};
   }
-  ws.views=[{state:'frozen',ySplit:1}];ws.autoFilter={from:'A1',to:`AG${Math.max(2,rows.length+1)}`};
-  const summary=workbook.addWorksheet('Riepilogo');summary.columns=[{width:65},{width:22}];
-  summary.addRow(['Overgreen · importi IVA esclusa']);summary.addRow(['Generato',new Date().toLocaleString('it-IT')]);
-  summary.addRow(['Totale extra con dati completi e preventivi accettati',rows.filter(x=>x.calc.ready).reduce((sum,x)=>sum+x.calc.total,0)/100]).getCell(2).numFmt='#,##0.00 "€"';
-  summary.addRow(['Extra esclusi dal totale complessivo',rows.filter(x=>!x.calc.ready).length]);
-  summary.addRow(['I mesi si riferiscono alla data di chiusura (ora italiana). Gli extra aperti sono nella categoria Aperti.']);
-  summary.addRow(['Le ore indicate sono il totale di tutti gli operatori.']);summary.addRow(['Nei preventivi la manodopera a ore è informativa: non viene sommata al preventivo.']);summary.addRow(['Il riepilogo non attesta l’emissione o il pagamento di una fattura.']);
-  summary.eachRow(r=>r.alignment={wrapText:true,vertical:'top'});return ws;
+  ws.views=[{state:'frozen',ySplit:2}];ws.autoFilter={from:'A2',to:`R${Math.max(3,rows.length+2)}`};
+  return ws;
 }
 async function exportExtraEconomics(){
  await ensureLibraries('ExcelJS');
@@ -105,10 +123,16 @@ async function exportExtraEconomics(){
   try{
     await loadAll();if(!admin())return;if(extraEconomicsError)throw new Error(extraEconomicsError);
     const rows=window.OvergreenEconomics.filterRows(extras,extraEconomicsRecords,attachments,economicsBookFilter());if(!rows.length)throw new Error('Nessun extra da esportare.');
+    for(let i=0;i<rows.length;i++){
+      if(!admin())return;
+      $('extraEconomicsBookStatus').textContent=`Lettura numeri chiusura ${i+1}/${rows.length}…`;
+      const result=await readClosureNumberFromEurospinFile(rows[i].extra);
+      rows[i].closureNumber=result.number||'';
+    }
     const workbook=new window.ExcelJS.Workbook();addEconomicsWorksheet(workbook,rows);const buffer=await workbook.xlsx.writeBuffer();if(!admin())return;
     const blob=new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),url=URL.createObjectURL(blob),a=document.createElement('a');
     a.href=url;a.download=`Overgreen-economia-extra-${$('extraEconomicsMonth').value||'tutti'}.xlsx`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
-    $('extraEconomicsBookStatus').textContent='Excel economico generato.';
+    const missing=rows.filter(x=>!x.closureNumber).length;$('extraEconomicsBookStatus').textContent='Excel Eurospin generato.'+(missing?` ${missing} numeri chiusura da verificare, segnalati nelle note.`:'');
   }catch(error){if(admin())$('extraEconomicsBookStatus').textContent=error.message||'Esportazione non riuscita.'}
   finally{if(admin())b.disabled=false}
 }

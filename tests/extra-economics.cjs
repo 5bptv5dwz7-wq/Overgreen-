@@ -149,3 +149,16 @@ test('ZIP blocks incomplete documents and unreadable closure numbers without par
   assert.equal(c.$('extraEconomicsBookZip').disabled,false);
  }
 });
+
+test('Complete ZIP size limit retries all PDFs and Excel together and rejects oversize',async()=>{
+ for(const sizes of [[10000000],[10000001,9000000],[11000000,11000000,11000000,11000000,10000001]]){
+  const c=uiSetup(),archives=[],profiles=[];let attempts=0;
+  c.window.JSZip=class{constructor(){this.files=[];archives.push(this.files)}file(name){this.files.push(name)}async generateAsync(){return {size:sizes[attempts++]}}};
+  c.buildExtraClosurePdfBlob=async(e,q,side)=>{profiles.push([q,side]);return 'pdf'};c.eurospinPackageFilename=e=>e.id+'.pdf';
+  const groups=[{folder:'Verde',excel:'xlsx',rows:[{extra:{id:'1'}}]},{folder:'Pulizie',excel:'xlsx',rows:[{extra:{id:'2'}}]}];
+  if(sizes.length===5)await assert.rejects(c.buildEconomicsZipUnderLimit(groups,{}),/Limite complessivo: 10 MB/);
+  else assert.ok((await c.buildEconomicsZipUnderLimit(groups,{})).size<=10000000);
+  assert.equal(attempts,sizes.length);assert.ok(archives.every(files=>files.length===4&&files.filter(n=>n.endsWith('.xlsx')).length===2));
+  if(attempts>1)assert.ok(profiles[2][0]<profiles[0][0]);
+ }
+});

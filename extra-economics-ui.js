@@ -191,26 +191,41 @@ async function exportEconomicsZip(){
       if(!result.number)missing.push(rows[i].extra.numero_target||rows[i].extra.titolo||rows[i].extra.id);
     }
     if(missing.length)throw Error('Numero chiusura non leggibile: '+missing.join(', ')+'. Controlla i rapportini Eurospin.');
-    const zip=new window.JSZip();let done=0;
+    const groups=[];
     for(const category of ['verde','pulizie']){
       const group=rows.filter(x=>(x.extra.categoria_target||x.row.pricing_category)===category);if(!group.length)continue;
       const folder=category==='verde'?'Verde':'Pulizie';
       const book=new window.ExcelJS.Workbook();addEconomicsWorksheet(book,group,filter.month);
-      zip.file(`${folder}/Excel economico.xlsx`,await book.xlsx.writeBuffer());
-      for(const x of group){
-        if(!admin())return;
-        status.textContent=`Genero chiusura ${++done}/${rows.length}…`;
-        const pdf=await buildExtraClosurePdfBlob(x.extra,.68,1500);
-        // Prefix guarantees no overwrites even with repeated targets, places and dates.
-        zip.file(`${folder}/${String(done).padStart(3,'0')} - ${eurospinPackageFilename(x.extra,done-1)}`,pdf);
-      }
+      groups.push({folder,rows:group,excel:await book.xlsx.writeBuffer()});
     }
-    if(done!==rows.length)throw Error('Categoria non riconosciuta: nessun pacchetto scaricato.');
-    status.textContent='Comprimo ZIP…';
-    const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}},p=>{status.textContent=`Comprimo ZIP… ${Math.round(p.percent)}%`});
+    if(groups.reduce((n,g)=>n+g.rows.length,0)!==rows.length)throw Error('Categoria non riconosciuta: nessun pacchetto scaricato.');
+    const blob=await buildEconomicsZipUnderLimit(groups,status);
+    if(!blob)return;
     if(!admin())return;
     const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Overgreen - Chiusure ed economia - ${filter.month||'tutti'}.zip`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
-    status.textContent=`ZIP generato: ${rows.length} chiusure con i relativi Excel · ${(blob.size/1024/1024).toFixed(1)} MB.`;
+    status.textContent=`ZIP generato: ${rows.length} chiusure con i relativi Excel · ${(blob.size/1000000).toFixed(2)} MB.`;
   }catch(error){if(admin()){status.textContent=error.message||'Creazione ZIP non riuscita.';status.style.whiteSpace='pre-line'}}
   finally{economicsZipBusy=false;controls.forEach((el,i)=>el.disabled=disabled[i]);if(admin())updateEconomicsSelection()}
+}
+
+async function buildEconomicsZipUnderLimit(groups,status){
+  // Decimal MB: the complete archive, including both Excel files, must fit.
+  const limit=10000000,profiles=[[.72,1600],[.62,1350],[.52,1150],[.44,1000],[.36,850]];
+  const total=groups.reduce((n,g)=>n+g.rows.length,0);let blob;
+  for(let attempt=0;attempt<profiles.length;attempt++){
+    if(!admin())return null;
+    const [quality,maxSide]=profiles[attempt],zip=new window.JSZip();let done=0;
+    for(const group of groups){
+      zip.file(`${group.folder}/Excel economico.xlsx`,group.excel);
+      for(const x of group.rows){
+        if(!admin())return null;
+        status.textContent=`Ottimizzo ZIP ${attempt+1}/${profiles.length} · chiusura ${++done}/${total}…`;
+        const pdf=await buildExtraClosurePdfBlob(x.extra,quality,maxSide);
+        zip.file(`${group.folder}/${String(done).padStart(3,'0')} - ${eurospinPackageFilename(x.extra,done-1)}`,pdf);
+      }
+    }
+    blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:9}},p=>{status.textContent=`Comprimo ZIP ${attempt+1}/${profiles.length}… ${Math.round(p.percent)}%`});
+    if(blob.size<=limit)return blob;
+  }
+  throw Error(`Il pacchetto completo pesa ${(blob.size/1000000).toFixed(2)} MB anche con la compressione massima. Limite complessivo: 10 MB, Excel inclusi. Seleziona meno extra e riprova. Nessun file è stato escluso e nessuno ZIP è stato scaricato.`);
 }

@@ -12,3 +12,32 @@
 @media(max-width:600px){.package-review{padding:12px;width:98vw;max-width:98vw}.pr-head{top:-12px}.pr-nav{flex-wrap:wrap}.pr-nav select{order:-1;width:100%;flex-basis:100%}.pr-nav button{flex:1}.pr-steps button{font-size:.8rem;padding:8px 3px}.pr-head button{padding:8px;font-size:.8rem}.pr-values th{width:44%}}
 
 .pr-final-accept{display:flex;align-items:center;gap:10px;margin:16px 0;font-weight:600}.pr-final-accept input{width:22px;height:22px;flex:none}#pr-final-preview:empty{display:none}
+
+/* Keep review actions outside the scrolling content, including on landscape iPad. */
+.package-review{box-sizing:border-box;height:94vh;height:94dvh;padding:12px 16px;overflow:hidden}
+.package-review[open]{display:flex;flex-direction:column}
+.package-review .pr-head{position:static;flex:none;padding:4px 0 8px}
+.pr-body{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding-right:3px}
+.package-review #pr-status:empty{display:none}
+.package-review #pr-overview{font-size:.8rem;gap:12px;margin:6px 0}
+.package-review #pr-identity h3{font-size:1rem;margin:8px 0 4px}
+.package-review #pr-identity p{font-size:.8rem;margin:3px 0}
+.package-review .pr-steps{margin:8px 0}
+.package-review .pr-steps button{padding:7px}
+.package-review #pr-content>p{font-size:.8rem;margin:6px 0}
+.package-review .pr-view-tools{margin:5px 0;gap:6px}
+.package-review .pr-view-tools button{padding:6px 12px;min-height:32px}
+.package-review .pr-document{box-sizing:border-box;height:34vh;height:34dvh;max-height:300px;min-height:140px}
+.package-review .pr-document img{width:auto;height:auto;max-width:100%;max-height:100%;margin:auto;object-fit:contain}
+.package-review #pr-actions{flex:none;display:flex;align-items:center;gap:6px;margin:0;padding:8px 0;border-top:1px solid #dce6df;background:#fff}
+.package-review #pr-actions button{padding:8px 10px;min-height:36px;font-size:.8rem}
+.package-review #pr-accept,.package-review #pr-download{order:-1;flex:1 0 100%;font-weight:600}
+.package-review .pr-footer{flex:none;margin:0;padding:6px 0 0;gap:8px}
+.package-review .pr-footer button{padding:7px 10px;font-size:.8rem;min-height:34px}
+@media(max-width:600px){
+ .package-review{padding:10px;width:98vw;max-width:98vw;height:96vh;height:96dvh;max-height:96dvh}
+ .package-review #pr-actions{gap:4px;padding:6px 0}
+ .package-review #pr-actions button{padding:6px 8px;font-size:.75rem}
+ .package-review .pr-head h2{font-size:1rem}
+ .package-review .pr-head p{font-size:.75rem}
+}

@@ -13,10 +13,10 @@ window.PackageReview=(()=>{
     if(dialog)return;
     dialog=document.createElement('dialog');dialog.id='packageReviewDialog';dialog.className='package-review';
     dialog.innerHTML=`<div class="pr-head"><div><h2>Verifica pacchetto Eurospin</h2><p id="pr-progress"></p></div><button type="button" id="pr-close" class="secondary">Salva ed esci</button></div>
-      <p id="pr-status" role="status"></p><div id="pr-overview"></div>
+      <div class="pr-body" id="pr-body"><p id="pr-status" role="status"></p><div id="pr-overview"></div>
       <div class="pr-nav"><button type="button" id="pr-prev" class="secondary">← Extra precedente</button><select id="pr-select" aria-label="Extra da verificare"></select><button type="button" id="pr-next" class="secondary">Extra successivo →</button></div>
       <div id="pr-identity"></div><div class="pr-steps"><button type="button" data-pr-step="eurospin">1 · Eurospin</button><button type="button" data-pr-step="overgreen">2 · Overgreen</button><button type="button" data-pr-step="economics">3 · Riga Excel</button></div>
-      <div id="pr-content"></div><div class="actions" id="pr-actions"></div>
+      <div id="pr-content"></div></div><div class="actions" id="pr-actions"></div>
       <div class="pr-footer"><button type="button" id="pr-build">4 · Genera ZIP e riepilogo</button><button type="button" id="pr-refresh" class="secondary">Aggiorna verifica</button></div>`;
     document.body.appendChild(dialog);
     $r('close').onclick=close;dialog.addEventListener('cancel',e=>{e.preventDefault();close()});
@@ -72,7 +72,7 @@ window.PackageReview=(()=>{
     if(c.review&&!r)$r('identity').append(text('p','Dati o allegati cambiati: le precedenti conferme non sono più valide.'));
     if(r?.note)$r('identity').append(text('p','Da sistemare: '+r.note));
     dialog.querySelectorAll('[data-pr-step]').forEach(b=>{b.classList.toggle('active',b.dataset.prStep===s.step);b.textContent=({eurospin:'1 · Eurospin',overgreen:'2 · Overgreen',economics:'3 · Riga Excel'})[b.dataset.prStep]+(r?.checks?.[b.dataset.prStep]?' ✓':'')});
-    const content=$r('content'),actions=$r('actions');content.replaceChildren();actions.replaceChildren();
+    const content=$r('content'),actions=$r('actions');content.replaceChildren();actions.replaceChildren();$r('body').scrollTop=0;
     if(s.step==='economics'){
       content.append(text('p','Confronta questi valori con i rapportini. È la stessa riga usata per creare il file Excel.'));
       const label=text('label','Numero chiusura Eurospin · confermalo leggendo il rapportino');const input=document.createElement('input');input.id='pr-number';input.inputMode='numeric';input.maxLength=8;input.value=r?.closure_number||'';label.append(input);content.append(label);
@@ -124,7 +124,7 @@ window.PackageReview=(()=>{
       const task=window.pdfjsLib.getDocument(typeof source==='string'?{url:source}:{data:source});v.loading=task;v.pdf=await task.promise;
       if(!current(s)||serial!==viewSerial){v.pdf.destroy();return}v.page=Math.max(1,Math.min(v.pdf.numPages,v.page));
       const draw=async()=>{if(viewer!==v||!current(s))return;try{v.task?.cancel()}catch{}const page=await v.pdf.getPage(v.page);if(viewer!==v)return;
-        const width=Math.max(260,area.clientWidth||600),base=page.getViewport({scale:1}),viewport=page.getViewport({scale:Math.min(2,window.devicePixelRatio||1)*width/base.width*v.zoom}),canvas=document.createElement('canvas');canvas.width=viewport.width;canvas.height=viewport.height;canvas.style.width=width*v.zoom+'px';area.replaceChildren(canvas);
+        const base=page.getViewport({scale:1}),width=Math.max(1,Math.min((area.clientWidth||600)-16,((area.clientHeight||300)-16)*base.width/base.height)),viewport=page.getViewport({scale:Math.min(2,window.devicePixelRatio||1)*width/base.width*v.zoom}),canvas=document.createElement('canvas');canvas.width=viewport.width;canvas.height=viewport.height;canvas.style.width=width*v.zoom+'px';area.replaceChildren(canvas);area.scrollTop=0;area.scrollLeft=0;
         v.task=page.render({canvasContext:canvas.getContext('2d'),viewport});try{await v.task.promise}catch(err){if(err.name==='RenderingCancelledException')return;throw err}
         if(viewer!==v)return;v.seen.add(v.page);v.complete=v.seen.size===v.pdf.numPages;status.textContent=`Pagina ${v.page}/${v.pdf.numPages} · ${v.seen.size} aperte`;syncButtons();};
       const control=(label,fn)=>{const b=text('button',label);b.type='button';b.className='secondary';b.onclick=()=>{fn();void draw().catch(e=>feedback(e.message))};bar.append(b)};
@@ -132,7 +132,7 @@ window.PackageReview=(()=>{
     }else{
       const img=document.createElement('img');img.alt=name;img.src=source;area.append(img);
       await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('Immagine non leggibile. Sostituisci il file.'))});if(viewer!==v||!current(s))return;v.complete=true;status.textContent='Immagine · ingrandisci per controllare';
-      for(const [label,factor] of [['−',-.25],['+',.25]]){const b=text('button',label);b.type='button';b.onclick=()=>{v.zoom=Math.max(.5,Math.min(3,v.zoom+factor));img.style.width=v.zoom*100+'%';img.style.maxWidth='none'};bar.append(b)}syncButtons();
+      for(const [label,factor] of [['−',-.25],['+',.25]]){const b=text('button',label);b.type='button';b.onclick=()=>{v.zoom=Math.max(.5,Math.min(3,v.zoom+factor));img.style.width='auto';img.style.height=Math.max(1,area.clientHeight-16)*v.zoom+'px';img.style.maxHeight='none';img.style.maxWidth='none'};bar.append(b)}syncButtons();
     }
   }
   async function replacement(file,tipo,options={}){
@@ -172,7 +172,7 @@ window.PackageReview=(()=>{
   }
   async function renderFinal(){
     dispose();const s=state,f=s.final,host=$r('content');
-    host.replaceChildren(text('h3','Pacchetto pronto · controllo rapido'),text('p',`${s.rows.length} chiusure · ${f.files.length-s.rows.length} Excel · ${(f.blob.size/1000000).toFixed(2)} MB / 10 MB. I documenti e i dati sono già stati verificati. Puoi aprire i file definitivi qui sotto senza riconfermare ogni pagina.`));
+    $r('body').scrollTop=0;host.replaceChildren(text('h3','Pacchetto pronto · controllo rapido'),text('p',`${s.rows.length} chiusure · ${f.files.length-s.rows.length} Excel · ${(f.blob.size/1000000).toFixed(2)} MB / 10 MB. I documenti e i dati sono già stati verificati. Puoi aprire i file definitivi qui sotto senza riconfermare ogni pagina.`));
     $r('actions').replaceChildren();
     const summary=document.createElement('div');summary.className='pr-sheet';const table=document.createElement('table'),head=document.createElement('tr');
     for(const label of ['Sede','Target','Chiusura','Importo'])head.append(text('th',label));table.append(head);

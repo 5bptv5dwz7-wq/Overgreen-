@@ -129,6 +129,28 @@ function addEconomicsWorksheet(workbook,rows,period=$('extraEconomicsMonth').val
     row.alignment={vertical:'top',wrapText:true};
   }
   ws.views=[{state:'frozen',ySplit:2}];ws.autoFilter={from:'A2',to:`${lastColumn}${Math.max(3,rows.length+2)}`};
+  const billedColumn=hasCleaning?19:17,billedLetter=hasCleaning?'S':'Q';
+  const totalRow=(label,predicate)=>{
+    const selected=rows.map((x,i)=>({x,i})).filter(({x})=>predicate(x));
+    const references=selected.map(({i})=>`${billedLetter}${i+3}`);
+    const cents=selected.reduce((sum,{x})=>sum+(x.calc.ready?x.calc.total:0),0);
+    const values=Array(headers.length).fill(null);values[0]=label;
+    values[billedColumn-1]={formula:references.length?`SUM(${references.join(',')})`:'0',result:cents/100};
+    const row=ws.addRow(values);row.font={bold:true};row.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE5F0E8'}};
+    row.getCell(billedColumn).numFmt='#,##0.00 "€"';row.alignment={wrapText:true,vertical:'middle'};row.height=34;
+    if(row.number)ws.mergeCells(`A${row.number}:${hasCleaning?'R':'P'}${row.number}`);
+  };
+  if(rows.length){
+    ws.addRow([]);
+    const category=x=>x.extra.categoria_target||x.row.pricing_category;
+    if(rows.some(x=>category(x)==='verde'))totalRow('TOTALE FATTURATO VERDE · IVA ESCLUSA',x=>category(x)==='verde');
+    if(hasCleaning){
+      totalRow('TOTALE PULIZIE IVA ORDINARIA · IMPONIBILE',x=>category(x)==='pulizie'&&x.row.cleaning_scope==='esterni');
+      totalRow('TOTALE PULIZIE REVERSE CHARGE · IMPONIBILE',x=>category(x)==='pulizie'&&x.row.cleaning_scope==='interni');
+      if(rows.some(x=>category(x)==='pulizie'&&!['interni','esterni'].includes(x.row.cleaning_scope)))totalRow('PULIZIE DA CLASSIFICARE · VERIFICARE REGIME IVA',x=>category(x)==='pulizie'&&!['interni','esterni'].includes(x.row.cleaning_scope));
+    }
+  }
+
   return ws;
 }
 async function exportExtraEconomics(){

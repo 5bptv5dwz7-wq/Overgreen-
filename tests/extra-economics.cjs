@@ -136,7 +136,7 @@ test('ZIP selection exports matching PDFs and category workbooks; deselected ext
  await c.exportEconomicsZip();
  assert.equal(files.length,4);assert.deepEqual(files.filter(x=>x[0].endsWith('.pdf')).map(x=>x[1]).sort(),['PDF:clean','PDF:e']);
  assert.equal(books[0].sheets[0].rows[1].values.length,18);assert.equal(books[1].sheets[0].rows[1].values.length,20);
- assert.equal(books[0].sheets[0].rows.length,3);assert.equal(books[1].sheets[0].rows.length,3);
+ assert.equal(books[0].sheets[0].rows.length,5);assert.equal(books[1].sheets[0].rows.length,7);
  assert.match(c.$('extraEconomicsBookStatus').textContent,/ZIP generato: 2/);
 });
 test('ZIP blocks incomplete documents and unreadable closure numbers without partial download',async()=>{
@@ -161,4 +161,14 @@ test('Complete ZIP size limit retries all PDFs and Excel together and rejects ov
   assert.equal(attempts,sizes.length);assert.ok(archives.every(files=>files.length===4&&files.filter(n=>n.endsWith('.xlsx')).length===2));
   if(attempts>1)assert.ok(profiles[2][0]<profiles[0][0]);
  }
+});
+test('V281 totals separate green, ordinary VAT and reverse without including incomplete amounts',()=>{
+ const c=uiSetup(),book=excelBook();
+ const row=(category,scope,total,ready=true)=>({extra:{...c.extras[0],categoria_target:category},row:{pricing_category:category,cleaning_scope:scope},calc:{ready,total,missing:[],issues:[],expenses:0}});
+ c.addEconomicsWorksheet(book,[row('verde',null,12345),row('pulizie','esterni',20010),row('pulizie','interni',9999),row('pulizie','esterni',50000,false),row('pulizie',null,1200)]);
+ const sheet=book.sheets[0],totals=sheet.rows.filter(r=>String(r.values[0]).startsWith('TOTALE')||String(r.values[0]).startsWith('PULIZIE DA'));
+ assert.equal(totals.length,4);assert.deepEqual(totals.map(r=>r.values[18].result),[123.45,200.10,99.99,12]);
+ assert.equal(totals[0].values[18].formula,'SUM(S3)');assert.equal(totals[1].values[18].formula,'SUM(S4,S6)');assert.equal(totals[2].values[18].formula,'SUM(S5)');assert.equal(sheet.autoFilter.to,'T7');
+ const green=excelBook();c.addEconomicsWorksheet(green,[row('verde',null,12345),row('verde',null,55)]);
+ const total=green.sheets[0].rows.at(-1);assert.equal(total.values[16].result,124);assert.equal(total.values[16].formula,'SUM(Q3,Q4)');
 });

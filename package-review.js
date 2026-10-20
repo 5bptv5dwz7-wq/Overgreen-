@@ -57,7 +57,7 @@ window.PackageReview=(()=>{
     const accept=$r('accept');if(accept)accept.disabled=state.step==='economics'?(!validReview(context())?.checks?.eurospin||!validReview(context())?.checks?.overgreen||!item()?.calc.ready):!viewer?.complete;
   }
   function button(label,handler,cls='secondary'){const b=text('button',label);b.type='button';b.className=cls;b.onclick=()=>run(handler);return b}
-  function formatCell(c){const v=c.value;if(v instanceof Date)return v.toLocaleDateString('it-IT');if(typeof v==='number'&&String(c.numFmt).includes('€'))return window.OvergreenEconomics.money(Math.round(v*100));return v==null?'—':String(v)}
+  function formatCell(c){if(c.isMerged&&c.master?.address!==c.address)return '';const raw=c.value,v=raw&&typeof raw==='object'&&'result' in raw?raw.result:raw;if(v instanceof Date)return v.toLocaleDateString('it-IT');if(typeof v==='number'&&String(c.numFmt).includes('€'))return window.OvergreenEconomics.money(Math.round(v*100));return v==null?'—':String(v)}
   function rowTable(book,container){const ws=book.worksheets[0],headers=ws.getRow(2),table=document.createElement('table');table.className='pr-values';
     for(let i=1;i<=ws.columnCount;i++){const tr=document.createElement('tr');tr.append(text('th',headers.getCell(i).value),text('td',formatCell(ws.getRow(3).getCell(i))));table.append(tr)}container.append(table)}
   async function render(){
@@ -87,6 +87,12 @@ window.PackageReview=(()=>{
       content.append(text('p','Controlla tutte le pagine: sede e target, data, lavoro, ore/operatori, firme e leggibilità.'));
       if(a){try{await showDocument(content,await signedAttachmentUrl(a),a.mime_type,a.nome_file)}catch(error){content.append(text('p','Anteprima non disponibile: '+error.message+'. Puoi sostituire il documento qui sotto.'))}if(!current(s))return}else content.append(text('p','Rapportino mancante. Caricalo qui sotto.'));
       const pick=(camera=false)=>{const input=document.createElement('input');input.type='file';input.accept=camera?'image/*':'application/pdf,image/jpeg,image/png,image/webp';if(camera)input.setAttribute('capture','environment');input.onchange=()=>{if(input.files[0])void run(()=>replacement(input.files[0],tipo))};input.click()};
+      if(a)for(const [label,angle] of [['↶ Ruota 90°',-90],['↷ Ruota 90°',90]])actions.append(button(label,async()=>{
+        const page=viewer?.page||1;feedback('Preparo il rapportino ruotato…');
+        const response=await fetch(await signedAttachmentUrl(a));if(!response.ok)throw Error('Impossibile leggere il rapportino.');
+        const blob=await response.blob(),file=new File([blob],a.nome_file||'rapportino.pdf',{type:a.mime_type||blob.type});
+        const rotated=await rotatedReviewFile(file,page,angle);if(current(s))await replacement(rotated,tipo,{rotation:true,page});
+      }));
       const replace=button('Sostituisci PDF / foto',()=>pick());const camera=button('Fotografa rapportino',()=>pick(true));actions.append(replace,camera,button('Versioni precedenti',()=>versions(tipo)));
       const request=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');if(request)actions.append(button('Apri richiesta',()=>openAttachment(request)));
     }
@@ -108,15 +114,15 @@ window.PackageReview=(()=>{
   }
   function navigate(delta){return run(async()=>{state.index+=delta;state.step='eurospin';await render()})}
 
-  async function showDocument(host,source,mime='',name='Documento'){
-    dispose();const serial=viewSerial,s=state,v={page:1,zoom:1,seen:new Set(),complete:false,pdf:null,url:null};viewer=v;
+  async function showDocument(host,source,mime='',name='Documento',startPage=1){
+    dispose();const serial=viewSerial,s=state,v={page:startPage,zoom:1,seen:new Set(),complete:false,pdf:null,url:null};viewer=v;
     const bar=document.createElement('div');bar.className='pr-view-tools';const area=document.createElement('div');area.className='pr-document';host.append(bar,area);
     const status=text('span','Caricamento…');bar.append(status);
     const isPdf=mime.includes('pdf')||/\.pdf$/i.test(name);
     if(isPdf){
       await ensureLibraries('pdfjsLib');if(!current(s)||serial!==viewSerial)return;
       const task=window.pdfjsLib.getDocument(typeof source==='string'?{url:source}:{data:source});v.loading=task;v.pdf=await task.promise;
-      if(!current(s)||serial!==viewSerial){v.pdf.destroy();return}
+      if(!current(s)||serial!==viewSerial){v.pdf.destroy();return}v.page=Math.max(1,Math.min(v.pdf.numPages,v.page));
       const draw=async()=>{if(viewer!==v||!current(s))return;try{v.task?.cancel()}catch{}const page=await v.pdf.getPage(v.page);if(viewer!==v)return;
         const width=Math.max(260,area.clientWidth||600),base=page.getViewport({scale:1}),viewport=page.getViewport({scale:Math.min(2,window.devicePixelRatio||1)*width/base.width*v.zoom}),canvas=document.createElement('canvas');canvas.width=viewport.width;canvas.height=viewport.height;canvas.style.width=width*v.zoom+'px';area.replaceChildren(canvas);
         v.task=page.render({canvasContext:canvas.getContext('2d'),viewport});try{await v.task.promise}catch(err){if(err.name==='RenderingCancelledException')return;throw err}
@@ -129,17 +135,20 @@ window.PackageReview=(()=>{
       for(const [label,factor] of [['−',-.25],['+',.25]]){const b=text('button',label);b.type='button';b.onclick=()=>{v.zoom=Math.max(.5,Math.min(3,v.zoom+factor));img.style.width=v.zoom*100+'%';img.style.maxWidth='none'};bar.append(b)}syncButtons();
     }
   }
-  async function replacement(file,tipo){
+  async function replacement(file,tipo,options={}){
     const s=state,e=item().extra,c=context();if(!file.size||!['application/pdf','image/jpeg','image/png','image/webp'].includes(file.type))throw Error('Scegli un PDF, JPEG, PNG o WebP leggibile.');
-    const host=$r('content'),actions=$r('actions');host.replaceChildren(text('h3','Anteprima del nuovo rapportino'));actions.replaceChildren();
-    const url=URL.createObjectURL(file);try{await showDocument(host,url,file.type,file.name)}finally{if(viewer)viewer.url=url;else URL.revokeObjectURL(url)}
+    const host=$r('content'),actions=$r('actions');host.replaceChildren(text('h3',options.rotation?'Anteprima rotazione · salva per applicarla al rapportino e allo ZIP':'Anteprima del nuovo rapportino'));actions.replaceChildren();
+    const url=URL.createObjectURL(file);try{await showDocument(host,url,file.type,file.name,options.page||1)}finally{if(viewer)viewer.url=url;else URL.revokeObjectURL(url)}
     let uploaded=false;const id=crypto.randomUUID(),path=`extra/${e.id}/${id}-${file.name.replace(/[^a-zA-Z0-9._-]/g,'-')}`;
-    actions.append(button('Conferma sostituzione',async()=>{
-      if(!viewer?.complete)throw Error('Controlla tutte le pagine del nuovo documento.');
+    if(options.rotation)for(const [label,angle] of [['↶ Ruota ancora',-90],['↷ Ruota ancora',90]])actions.append(button(label,async()=>{
+      const page=viewer?.page||1,rotated=await rotatedReviewFile(file,page,angle);if(current(s))await replacement(rotated,tipo,{rotation:true,page});
+    }));
+    actions.append(button(options.rotation?'Salva rotazione':'Conferma sostituzione',async()=>{
+      if(!options.rotation&&!viewer?.complete)throw Error('Controlla tutte le pagine del nuovo documento.');
       feedback('Caricamento e sostituzione…');if(!uploaded){await uploadFile(path,file);uploaded=true;}
       await rpc('replace_review_report',{p_id:e.id,p_tipo:tipo,p_fingerprint:c.fingerprint,p_new_id:id,p_path:path,p_name:file.name,p_mime:file.type,p_size:file.size});
       if(!current(s))return;await refresh();await render();feedback('Documento sostituito. Il precedente è recuperabile in Versioni precedenti. Ricontrolla e salva Economia.');
-    },''),button('Annulla sostituzione',render));
+    },''),button(options.rotation?'Annulla rotazione':'Annulla sostituzione',render));
   }
   async function versions(tipo){
     const s=state,{data,error}=await sb.from('extra_report_versions').select('*').eq('extra_id',item().extra.id).order('replaced_at',{ascending:false});if(error)throw error;if(!current(s))return;
@@ -193,3 +202,23 @@ window.PackageReview=(()=>{
   }
   return {open,clearForRole,validReview,approved,same};
 })();
+
+async function rotatedReviewFile(file,pageNumber,angle){
+  if(![-90,90].includes(angle))throw Error('Rotazione non valida.');
+  const name=(file.name||'rapportino').replace(/\.[^.]+$/,'').replace(/-ruotato$/,'');
+  if(file.type.includes('pdf')||/\.pdf$/i.test(file.name)){
+    await ensureLibraries('PDFLib');const lib=window.PDFLib,doc=await lib.PDFDocument.load(await file.arrayBuffer());
+    if(pageNumber<1||pageNumber>doc.getPageCount())throw Error('Pagina non disponibile.');
+    const page=doc.getPage(pageNumber-1);page.setRotation(lib.degrees((page.getRotation().angle+angle+360)%360));
+    return new File([await doc.save()],name+'-ruotato.pdf',{type:'application/pdf'});
+  }
+  if(!['image/jpeg','image/png','image/webp'].includes(file.type))throw Error('Formato non supportato per la rotazione.');
+  const url=URL.createObjectURL(file);
+  try{
+    const img=await new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=()=>reject(Error('Immagine non leggibile.'));image.src=url});
+    const canvas=document.createElement('canvas');canvas.width=img.naturalHeight;canvas.height=img.naturalWidth;
+    const ctx=canvas.getContext('2d');ctx.translate(canvas.width/2,canvas.height/2);ctx.rotate(angle*Math.PI/180);ctx.drawImage(img,-img.naturalWidth/2,-img.naturalHeight/2);
+    const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Rotazione non riuscita.')),'image/png'));
+    return new File([blob],name+'-ruotato.png',{type:'image/png'});
+  }finally{URL.revokeObjectURL(url)}
+}

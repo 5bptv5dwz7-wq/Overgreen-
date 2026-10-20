@@ -58,3 +58,12 @@ test('Final summary downloads exact prepared archive without mandatory page revi
  await c.window.PackageReview.open();await c.$('pr-build').onclick();
  const check=c.$('pr-final-accept');check.checked=true;check.onchange();await c.$('pr-download').onclick();assert.equal(c.downloads,1);
 });
+test('Rotation preview can be cancelled and only explicit save replaces the report',async()=>{
+ const c=setup();let uploads=0,replacements=0;
+ c.File=File;c.crypto={randomUUID:()=> 'new-id'};c.fetch=async()=>({ok:true,blob:async()=>new Blob(['pdf'],{type:'application/pdf'})});
+ c.rotatedReviewFile=async file=>new File(['rotated'],file.name,{type:'application/pdf'});c.uploadFile=async()=>{uploads++};
+ const rpc=c.sb.rpc;c.sb.rpc=async(name,args)=>{if(name==='replace_review_report'){replacements++;assert.equal(args.p_tipo,'rapportino_eurospin');assert.equal(args.p_fingerprint,'v1');c.context.fingerprint='v2';return {data:{id:'new-id'}}}return rpc(name,args)};
+ await c.window.PackageReview.open();await byText(c,'↷ Ruota 90°').onclick();assert.equal(uploads,0);assert.equal(replacements,0);
+ await byText(c,'Annulla rotazione').onclick();assert.equal(replacements,0);
+ await byText(c,'↶ Ruota 90°').onclick();await byText(c,'Salva rotazione').onclick();assert.equal(uploads,1);assert.equal(replacements,1);assert.match(c.$('pr-status').textContent,/precedente.*recuperabile/);
+});

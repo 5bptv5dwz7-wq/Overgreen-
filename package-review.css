@@ -10,3 +10,5 @@
 .pr-footer{border-top:1px solid #dce6df;padding-top:16px;margin-top:18px;display:flex;gap:10px;flex-wrap:wrap}.pr-sheet{overflow:auto;max-height:65dvh}.pr-sheet table{border-collapse:collapse;font-size:.8rem}.pr-sheet th,.pr-sheet td{border:1px solid #ccd7cf;padding:8px;min-width:110px}.pr-sheet th{position:sticky;top:0;background:#e1eee5}
 .pr-final-files input[type=checkbox]{width:22px;height:22px;flex:none}.pr-final-files button{overflow-wrap:anywhere;text-align:left}.package-review .actions{flex-wrap:wrap;margin-top:12px}
 @media(max-width:600px){.package-review{padding:12px;width:98vw;max-width:98vw}.pr-head{top:-12px}.pr-nav{flex-wrap:wrap}.pr-nav select{order:-1;width:100%;flex-basis:100%}.pr-nav button{flex:1}.pr-steps button{font-size:.8rem;padding:8px 3px}.pr-head button{padding:8px;font-size:.8rem}.pr-values th{width:44%}}
+
+.pr-final-accept{display:flex;align-items:center;gap:10px;margin:16px 0;font-weight:600}.pr-final-accept input{width:22px;height:22px;flex:none}#pr-final-preview:empty{display:none}

@@ -31,8 +31,9 @@ test('Guided review requires all pages, saves each step and matches the final ar
  await pages(c);await c.$('pr-accept').onclick();assert.equal(c.context.review.checks.overgreen,true);
  assert.equal(c.$('pr-number').value,'123456');await c.$('pr-accept').onclick();assert.equal(c.context.review.checks.economics,true);
  assert.equal(c.$('pr-build').disabled,false);await c.$('pr-build').onclick();assert.equal(c.$('pr-download').disabled,true);
- await byText(c,'Verde/001.pdf').onclick();await pages(c);await byText(c,'Confermo leggibilità di tutte le pagine').onclick();
- await byText(c,'Verde/Excel.xlsx').onclick();const check=c.document.querySelector('[data-pr-file="Verde/Excel.xlsx"]');check.checked=true;check.onchange();
+ await byText(c,'Apri anteprima').onclick();
+ assert.equal(c.$('pr-download').disabled,true);
+ const check=c.$('pr-final-accept');check.checked=true;check.onchange();
  assert.equal(c.$('pr-download').disabled,false);await c.$('pr-download').onclick();assert.equal(c.downloads,1);
 });
 test('Changes after review invalidate confirmations and prevent download',async()=>{
@@ -44,4 +45,16 @@ test('Role loss closes and removes sensitive preview data',async()=>{
 });
 test('Review fingerprints include review changes as well as data changes',()=>{
  const c=setup(),a=new Map([['e',{fingerprint:'same',review:{closure_number:'123456'}}]]),b=new Map([['e',{fingerprint:'same',review:{closure_number:'123457'}}]]);assert.equal(c.window.PackageReview.same(a,b),false);assert.equal(c.window.PackageReview.approved({fingerprint:'new',review:{fingerprint:'old',checks:{eurospin:true,overgreen:true,economics:true},closure_number:'123456'}}),false);
+});
+
+test('Final summary permits download without reopening documents but blocks stale data',async()=>{
+ const c=setup();c.context.review={fingerprint:'v1',checks:{eurospin:true,overgreen:true,economics:true},closure_number:'123456'};
+ await c.window.PackageReview.open();await c.$('pr-build').onclick();
+ const check=c.$('pr-final-accept');check.checked=true;check.onchange();assert.equal(c.$('pr-download').disabled,false);
+ c.context.fingerprint='v2';await c.$('pr-download').onclick();assert.equal(c.downloads,0);assert.match(c.$('pr-status').textContent,/cambiati/);
+});
+test('Final summary downloads exact prepared archive without mandatory page review',async()=>{
+ const c=setup();c.context.review={fingerprint:'v1',checks:{eurospin:true,overgreen:true,economics:true},closure_number:'123456'};
+ await c.window.PackageReview.open();await c.$('pr-build').onclick();
+ const check=c.$('pr-final-accept');check.checked=true;check.onchange();await c.$('pr-download').onclick();assert.equal(c.downloads,1);
 });

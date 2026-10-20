@@ -17,7 +17,7 @@ window.PackageReview=(()=>{
       <div class="pr-nav"><button type="button" id="pr-prev" class="secondary">← Extra precedente</button><select id="pr-select" aria-label="Extra da verificare"></select><button type="button" id="pr-next" class="secondary">Extra successivo →</button></div>
       <div id="pr-identity"></div><div class="pr-steps"><button type="button" data-pr-step="eurospin">1 · Eurospin</button><button type="button" data-pr-step="overgreen">2 · Overgreen</button><button type="button" data-pr-step="economics">3 · Riga Excel</button></div>
       <div id="pr-content"></div><div class="actions" id="pr-actions"></div>
-      <div class="pr-footer"><button type="button" id="pr-build">4 · Prepara e verifica ZIP finale</button><button type="button" id="pr-refresh" class="secondary">Aggiorna verifica</button></div>`;
+      <div class="pr-footer"><button type="button" id="pr-build">4 · Genera ZIP e riepilogo</button><button type="button" id="pr-refresh" class="secondary">Aggiorna verifica</button></div>`;
     document.body.appendChild(dialog);
     $r('close').onclick=close;dialog.addEventListener('cancel',e=>{e.preventDefault();close()});
     $r('prev').onclick=()=>navigate(-1);$r('next').onclick=()=>navigate(1);
@@ -52,8 +52,8 @@ window.PackageReview=(()=>{
   function syncButtons(){
     if(!state||!admin())return;
     $r('prev').disabled=state.index===0;$r('next').disabled=state.index>=state.rows.length-1;
-    $r('build').disabled=!state.rows.length||!state.ids.every(id=>approved(state.context.get(id)))||state.rows.some(x=>economicsZipIssues([x]).length);
-    if(state.final){const f=state.final;dialog.querySelectorAll('[data-pr-file]').forEach(n=>n.disabled=!f.opened.has(n.dataset.prFile));const download=$r('download');if(download)download.disabled=f.confirmed.size!==f.files.length;}
+    $r('build').disabled=!!state.final||!state.rows.length||!state.ids.every(id=>approved(state.context.get(id)))||state.rows.some(x=>economicsZipIssues([x]).length);
+    if(state.final){const download=$r('download');if(download)download.disabled=!state.final.accepted;}
     const accept=$r('accept');if(accept)accept.disabled=state.step==='economics'?(!validReview(context())?.checks?.eurospin||!validReview(context())?.checks?.overgreen||!item()?.calc.ready):!viewer?.complete;
   }
   function button(label,handler,cls='secondary'){const b=text('button',label);b.type='button';b.className=cls;b.onclick=()=>run(handler);return b}
@@ -159,18 +159,36 @@ window.PackageReview=(()=>{
     const fresh=await contexts(s.ids);if(!same(s.context,fresh))throw Error('Dati cambiati durante la generazione. Aggiorna e ricontrolla.');
     const zip=await window.JSZip.loadAsync(blob),files=Object.values(zip.files).filter(f=>!f.dir),pdfCount=files.filter(f=>/\.pdf$/i.test(f.name)).length;
     if(pdfCount!==s.rows.length||files.length!==s.rows.length+groups.length)throw Error('Il contenuto ZIP non corrisponde agli extra selezionati.');
-    s.final={blob,zip,files,confirmed:new Set(),opened:new Set(),context:fresh};await renderFinal();
+    s.final={blob,zip,files,accepted:false,context:fresh};await renderFinal();
   }
   async function renderFinal(){
-    dispose();const s=state,f=s.final,host=$r('content');host.replaceChildren(text('h3','Controllo del pacchetto definitivo'),text('p',`${s.rows.length} chiusure · ${f.files.length-s.rows.length} Excel · ${(f.blob.size/1000000).toFixed(2)} MB / 10 MB. Apri e conferma ogni file: scaricherai esattamente questi contenuti.`));$r('actions').replaceChildren();
-    const list=document.createElement('div');list.className='pr-final-files';const preview=document.createElement('div');host.append(list,preview);
-    for(const file of f.files){const line=document.createElement('div');line.className='actions';const check=document.createElement('input');check.type='checkbox';check.dataset.prFile=file.name;check.disabled=!f.opened.has(file.name);check.checked=f.confirmed.has(file.name);check.setAttribute('aria-label','Confermo '+file.name);
-      check.onchange=()=>{if(!f.opened.has(file.name)){check.checked=false;return}check.checked?f.confirmed.add(file.name):f.confirmed.delete(file.name);download.disabled=f.confirmed.size!==f.files.length};
-      const open=button(file.name,async()=>{preview.replaceChildren(text('h3',file.name));
-        if(/\.pdf$/i.test(file.name)){await showDocument(preview,await file.async('uint8array'),'application/pdf',file.name);const accept=button('Confermo leggibilità di tutte le pagine',async()=>{if(!viewer?.complete)throw Error('Apri tutte le pagine del PDF compresso.');f.opened.add(file.name);f.confirmed.add(file.name);check.disabled=false;check.checked=true;download.disabled=f.confirmed.size!==f.files.length});preview.append(accept)}
-        else{dispose();const book=new window.ExcelJS.Workbook();await book.xlsx.load(await file.async('uint8array'));const ws=book.worksheets[0],wrap=document.createElement('div');wrap.className='pr-sheet';const table=document.createElement('table');for(let i=2;i<=ws.rowCount;i++){const tr=document.createElement('tr');for(let j=1;j<=ws.columnCount;j++)tr.append(text(i===2?'th':'td',formatCell(ws.getRow(i).getCell(j))));table.append(tr)}wrap.append(table);preview.append(wrap);f.opened.add(file.name);check.disabled=false;}
-      });line.append(check,open);list.append(line)}
-    const download=button('Conferma finale e scarica ZIP verificato',async()=>{if(f.confirmed.size!==f.files.length)throw Error('Conferma tutti i file finali.');const fresh=await contexts(s.ids);if(!same(f.context,fresh)){s.final=null;await refresh();await render();throw Error('Dati cambiati: il pacchetto va rigenerato e ricontrollato.');}if(!current(s))return;if(f.blob.size>10000000)throw Error('ZIP oltre 10 MB');const url=URL.createObjectURL(f.blob),a=document.createElement('a');a.href=url;a.download=`Overgreen - Verificato - ${s.period||'tutti'}.zip`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);feedback('ZIP verificato scaricato. Nessun invio a Eurospin è stato effettuato.');},'');download.id='pr-download';download.disabled=f.confirmed.size!==f.files.length;
+    dispose();const s=state,f=s.final,host=$r('content');
+    host.replaceChildren(text('h3','Pacchetto pronto · controllo rapido'),text('p',`${s.rows.length} chiusure · ${f.files.length-s.rows.length} Excel · ${(f.blob.size/1000000).toFixed(2)} MB / 10 MB. I documenti e i dati sono già stati verificati. Puoi aprire i file definitivi qui sotto senza riconfermare ogni pagina.`));
+    $r('actions').replaceChildren();
+    const summary=document.createElement('div');summary.className='pr-sheet';const table=document.createElement('table'),head=document.createElement('tr');
+    for(const label of ['Sede','Target','Chiusura','Importo'])head.append(text('th',label));table.append(head);
+    for(const x of s.rows){const row=document.createElement('tr');for(const value of [stores.find(v=>v.id===x.extra.store_id)?.nome||x.extra.nome_esterno||'Sede',x.extra.numero_target||'—',validReview(s.context.get(x.extra.id)).closure_number,window.OvergreenEconomics.money(x.calc.total)])row.append(text('td',value));table.append(row)}
+    summary.append(table);host.append(summary);
+    host.append(text('p','Totale: '+window.OvergreenEconomics.money(s.rows.reduce((n,x)=>n+x.calc.total,0))+' · IVA esclusa'));
+    const controls=document.createElement('div');controls.className='pr-nav';const select=document.createElement('select');select.setAttribute('aria-label','File definitivo da visualizzare');
+    f.files.forEach((file,i)=>{const option=text('option',file.name);option.value=i;select.append(option)});select.value='0';let index=0;
+    const preview=document.createElement('div');preview.id='pr-final-preview';
+    const show=async()=>{
+      const file=f.files[index];select.value=String(index);preview.replaceChildren(text('h3',file.name));
+      if(/\.pdf$/i.test(file.name))await showDocument(preview,await file.async('uint8array'),'application/pdf',file.name);
+      else{dispose();const book=new window.ExcelJS.Workbook();await book.xlsx.load(await file.async('uint8array'));if(!current(s))return;const ws=book.worksheets[0],wrap=document.createElement('div');wrap.className='pr-sheet';const sheet=document.createElement('table');for(let i=2;i<=ws.rowCount;i++){const tr=document.createElement('tr');for(let j=1;j<=ws.columnCount;j++)tr.append(text(i===2?'th':'td',formatCell(ws.getRow(i).getCell(j))));sheet.append(tr)}wrap.append(sheet);preview.append(wrap)}
+    };
+    select.onchange=()=>run(async()=>{index=Number(select.value);await show()});
+    controls.append(button('← File',async()=>{index=(index+f.files.length-1)%f.files.length;await show()}),select,button('Apri anteprima',show),button('File →',async()=>{index=(index+1)%f.files.length;await show()}));host.append(controls,preview);
+    host.append(text('p','Le anteprime mostrano i file effettivi dello ZIP, dopo la compressione. Il controllo finale è unico: non serve sfogliare di nuovo tutte le pagine.'));
+    const label=text('label',''),check=document.createElement('input');check.type='checkbox';check.id='pr-final-accept';check.checked=f.accepted;label.className='pr-final-accept';label.append(check,text('span','Ho controllato il riepilogo e confermo il pacchetto.'));
+    check.onchange=()=>{f.accepted=check.checked;syncButtons()};host.append(label);
+    const download=button('Conferma e scarica ZIP',async()=>{
+      if(!f.accepted)throw Error('Conferma il riepilogo prima di scaricare.');
+      const fresh=await contexts(s.ids);if(!same(f.context,fresh)){s.final=null;await refresh();await render();throw Error('Dati cambiati: il pacchetto va rigenerato e ricontrollato.');}
+      if(!current(s))return;if(f.blob.size>10000000)throw Error('ZIP oltre 10 MB');
+      const url=URL.createObjectURL(f.blob),a=document.createElement('a');a.href=url;a.download=`Overgreen - Verificato - ${s.period||'tutti'}.zip`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);feedback('ZIP scaricato. Nessun invio a Eurospin è stato effettuato.');
+    },'');download.id='pr-download';download.disabled=!f.accepted;
     $r('actions').append(download,button('Torna agli extra',render));
   }
   return {open,clearForRole,validReview,approved,same};

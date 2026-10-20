@@ -1,4 +1,4 @@
-const APP_VERSION='V278';
+const APP_VERSION='V280';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -3777,20 +3777,20 @@ async function normalizeImageForPackagePdf(bytes,mime='image/jpeg',quality=.68,m
     return new Uint8Array(await out.arrayBuffer());
   }finally{URL.revokeObjectURL(url)}
 }
-async function appendAttachmentForPackage(targetDoc,a,quality=.68,maxSide=1500){
+async function appendAttachmentForPackage(targetDoc,a,quality=.68,maxSide=1500,readBytes=fetchAttachmentBytes){
   await ensureLibraries('PDFLib');
-  const bytes=await fetchAttachmentBytes(a),mime=String(a.mime_type||'').toLowerCase(),name=String(a.nome_file||'').toLowerCase();
+  const bytes=await readBytes(a),mime=String(a.mime_type||'').toLowerCase(),name=String(a.nome_file||'').toLowerCase();
   if(mime.includes('pdf')||name.endsWith('.pdf')){
-    // Preserve PDF text/vector quality. Only the first page is required by the existing closure format.
+    // Preserve every page of the reviewed attachment, including PDF text/vector quality.
     const source=await PDFLib.PDFDocument.load(bytes);if(!source.getPageCount())throw new Error(`${attachmentLabel(a)} è vuoto`);
-    const [page]=await targetDoc.copyPages(source,[0]);targetDoc.addPage(page);return
+    const pages=await targetDoc.copyPages(source,source.getPageIndices());for(const page of pages)targetDoc.addPage(page);return
   }
   const compact=await normalizeImageForPackagePdf(bytes,mime,quality,maxSide),image=await targetDoc.embedJpg(compact);
   const page=targetDoc.addPage([595.28,841.89]),pw=page.getWidth(),ph=page.getHeight(),scale=Math.min(pw/image.width,ph/image.height);
   page.drawImage(image,{x:(pw-image.width*scale)/2,y:(ph-image.height*scale)/2,width:image.width*scale,height:image.height*scale});
 }
 
-async function buildExtraClosurePdfBlob(e,packageQuality=.68,packageMaxSide=1500){
+async function buildExtraClosurePdfBlob(e,packageQuality=.68,packageMaxSide=1500,readBytes=fetchAttachmentBytes){
   await ensureLibraries('PDFLib');
   const reportEurospin=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),reportOvergreen=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen'),requestFile=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');
   if(!requestFile||!reportOvergreen||!reportEurospin)throw new Error('Per generare la chiusura servono richiesta, file Overgreen e file Eurospin.');
@@ -3831,13 +3831,13 @@ async function buildExtraClosurePdfBlob(e,packageQuality=.68,packageMaxSide=1500
       const cellW=(photoW-gap*(cols-1))/cols;
       for(let i=0;i<selected.length;i++){
         try{
-          const a=selected[i],bytes=await fetchAttachmentBytes(a),mime=String(a.mime_type||'').toLowerCase(),compactBytes=await normalizeImageForPackagePdf(bytes,mime,packageQuality,packageMaxSide),img=await doc.embedJpg(compactBytes),col=i%cols,row=Math.floor(i/cols),x=photoMargin+col*(cellW+gap),top=y-row*(cellH+gap),scale=Math.min(cellW/img.width,cellH/img.height);
+          const a=selected[i],bytes=await readBytes(a),mime=String(a.mime_type||'').toLowerCase(),compactBytes=await normalizeImageForPackagePdf(bytes,mime,packageQuality,packageMaxSide),img=await doc.embedJpg(compactBytes),col=i%cols,row=Math.floor(i/cols),x=photoMargin+col*(cellW+gap),top=y-row*(cellH+gap),scale=Math.min(cellW/img.width,cellH/img.height);
           page.drawImage(img,{x:x+(cellW-img.width*scale)/2,y:top-cellH+(cellH-img.height*scale)/2,width:img.width*scale,height:img.height*scale})
         }catch{}
       }
     }
     page.drawText('Generato da Overgreen Cloud',{x:margin,y:22,size:8,font:regular,color:muted});
-    await appendAttachmentForPackage(doc,requestFile,packageQuality,packageMaxSide);await appendAttachmentForPackage(doc,reportOvergreen,packageQuality,packageMaxSide);await appendAttachmentForPackage(doc,reportEurospin,packageQuality,packageMaxSide);
+    await appendAttachmentForPackage(doc,requestFile,packageQuality,packageMaxSide,readBytes);await appendAttachmentForPackage(doc,reportOvergreen,packageQuality,packageMaxSide,readBytes);await appendAttachmentForPackage(doc,reportEurospin,packageQuality,packageMaxSide,readBytes);
     addPdfGeneratedAtFooter(doc,regular,muted);
     const bytes=await doc.save();
     return new Blob([bytes],{type:'application/pdf'});
@@ -5676,7 +5676,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=278').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=280').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

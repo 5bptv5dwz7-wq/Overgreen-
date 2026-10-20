@@ -216,6 +216,16 @@ async function buildEconomicsZipUnderLimit(groups,status){
   // Decimal MB: the complete archive, including both Excel files, must fit.
   const limit=10000000,profiles=[[.72,1600],[.62,1350],[.52,1150],[.44,1000],[.36,850]];
   const total=groups.reduce((n,g)=>n+g.rows.length,0);let blob;
+  // This cache only lives for this export; bound retained originals on mobile.
+  const originals=new Map();let retainedBytes=0;
+  const readBytes=async a=>{
+    const key=JSON.stringify([a.id,a.storage_path,a.updated_at,a.size_bytes]);
+    if(originals.has(key))return originals.get(key).slice();
+    const bytes=await fetchAttachmentBytes(a);
+    if(retainedBytes+bytes.byteLength<=32*1024*1024){originals.set(key,bytes.slice());retainedBytes+=bytes.byteLength;}
+    return bytes;
+  };
+
   for(let attempt=0;attempt<profiles.length;attempt++){
     if(!admin())return null;
     const [quality,maxSide]=profiles[attempt],zip=new window.JSZip();let done=0;
@@ -224,11 +234,11 @@ async function buildEconomicsZipUnderLimit(groups,status){
       for(const x of group.rows){
         if(!admin())return null;
         status.textContent=`Ottimizzo ZIP ${attempt+1}/${profiles.length} · chiusura ${++done}/${total}…`;
-        const pdf=await buildExtraClosurePdfBlob(x.extra,quality,maxSide);
+        const pdf=await buildExtraClosurePdfBlob(x.extra,quality,maxSide,readBytes);
         zip.file(`${group.folder}/${String(done).padStart(3,'0')} - ${eurospinPackageFilename(x.extra,done-1)}`,pdf);
       }
     }
-    blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:9}},p=>{status.textContent=`Comprimo ZIP ${attempt+1}/${profiles.length}… ${Math.round(p.percent)}%`});
+    blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}},p=>{status.textContent=`Comprimo ZIP ${attempt+1}/${profiles.length}… ${Math.round(p.percent)}%`});
     if(blob.size<=limit)return blob;
   }
   throw Error(`Il pacchetto completo pesa ${(blob.size/1000000).toFixed(2)} MB anche con la compressione massima. Limite complessivo: 10 MB, Excel inclusi. Seleziona meno extra e riprova. Nessun file è stato escluso e nessuno ZIP è stato scaricato.`);

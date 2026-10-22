@@ -1,4 +1,4 @@
-const APP_VERSION='V283';
+const APP_VERSION='V284';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -2167,10 +2167,61 @@ async function createIntesaFullReportAsSingles(data=dailyReportData()){
   return {file,fileName,title:`Report Intesa Sanpaolo completo · ${jobs.length} report singoli`,sizeKb:Math.max(1,Math.round(file.size/1024))};
 }
 
+async function appendExtraEconomicsPdf(pdf,extra){
+  if(!admin())throw new Error('Accesso ai dati economici non consentito.');
+  const model=window.OvergreenEconomics,row=extraEconomicsRecords.find(r=>r.extra_id===extra.id);
+  const {StandardFonts,rgb}=PDFLib,regular=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold);
+  let page,y;
+  const newPage=()=>{page=pdf.addPage([595.28,841.89]);y=790;page.drawText('OVERGREEN - DETTAGLIO ECONOMICO',{x:42,y,size:14,font:bold,color:rgb(.02,.35,.18)});y-=28};
+  const line=(label,value)=>{
+    for(const text of wrapPdfText(pdfSafeText(`${label}${value==null?'':': '+value}`),regular,10,511)){
+      if(y<55)newPage();page.drawText(text,{x:42,y,size:10,font:regular});y-=15;
+    }y-=5;
+  };
+  newPage();line('Extra',extra.titolo||'');line('Target / Ticket',extra.numero_target||'Non indicato');
+  if(!row){line('Economia non compilata');return}
+  const c=model.review(row,extra,latestEconomicsReport(extra.id)),money=model.money,amount=v=>money(model.cents(v)),value=v=>v??'Da compilare';
+  line('Stato',economicsStatus(c,row));
+  line('Modalità',model.modes[row.pricing_mode]||'Da compilare');
+  line('Categoria',row.pricing_category||'Da compilare');
+  line('Regime fatturazione',model.cleaningInvoiceLabel(row)||'IVA esclusa');
+  line('Operatori',value(row.operator_count));line('Attrezzature',row.equipment?'Sì':'No');
+  line('Ore complessive squadra',value(row.total_hours));
+  line('Ore diurne',value(c.dayHours));line('Tariffa diurna',amount(row.hourly_rate));line('Importo ore diurne',money(c.laborDay));
+  line('Ore notturne',c.nightHours);line('Tariffa notturna',amount(row.night_hourly_rate));line('Importo ore notturne',money(c.laborNight));
+  line('Totale manodopera',money(c.labor));
+  line('Addebito uscita',typeof row.dedicated_trip==='boolean'?(row.dedicated_trip?'Sì':'No'):'Da compilare');
+  line('Forfait viaggio per operatore',amount(row.exit_rate));line('Totale uscita',money(c.exit));
+  if(row.pricing_mode==='preventivo'){
+    line('Importo preventivo',amount(row.quote_amount));line('Stato preventivo',model.quoteStates[row.quote_status]||'Da compilare');
+    line('Riferimento preventivo',row.quote_reference||'Non indicato');line('Uscita inclusa nel preventivo',c.exitIncluded?'Sì':'No');
+  }
+  for(const expense of row.expenses||[])line('Spesa - '+(expense.description||'Descrizione mancante'),amount(expense.amount));
+  line('Totale spese',money(c.expenses));line('Subtotale',money(c.subtotal));line('Sconto',money(c.discount));
+  line(c.ready?'Totale (IVA esclusa)':'Totale da verificare (IVA esclusa)',money(c.total));
+  if(row.economic_notes)line('Note economiche',row.economic_notes);
+}
+async function createDailyReportWithEconomics(data){
+  if(!admin())throw new Error('Accesso ai dati economici non consentito.');
+  if(extraEconomicsError)throw new Error(extraEconomicsError);
+  const base=await createDailyReportFile('full'),pdf=await PDFLib.PDFDocument.load(await base.file.arrayBuffer());
+  for(const extra of data.extra){
+    await appendExtraEconomicsPdf(pdf,extra);
+    for(const attachment of attachments.filter(a=>a.extra_id===extra.id&&['rapportino_eurospin','rapportino_overgreen'].includes(a.tipo))){
+      try{await appendAttachmentForPackage(pdf,attachment)}catch(error){throw new Error(`Rapportino di ${extra.numero_target||extra.titolo} non incluso: ${error.message}`)}
+    }
+  }
+  const fileName=base.fileName.replace('completo','completo con economia');
+  pdf.setTitle('Report completo con economia');
+  const file=new File([await pdf.save()],fileName,{type:'application/pdf'});
+  return {file,fileName,title:'Report completo con economia',sizeKb:Math.max(1,Math.round(file.size/1024))};
+}
+
 async function createDailyReportFile(mode='compact'){
   await ensureLibraries('PDFLib');
   if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
   const data=dailyReportData();
+  if(mode==='economics')return createDailyReportWithEconomics(data);
   if(mode==='full'&&($('reportClient')?.value||'all')==='intesa')return createIntesaFullReportAsSingles(data);
   const {PDFDocument,StandardFonts,rgb}=PDFLib,counts=reportCounts(data);
   const typeLabel=({all:'Tutti i lavori',ordinary:'Interventi ordinari',extra:'Lavori extra'})[$('reportType')?.value||'all'];
@@ -2244,7 +2295,7 @@ function reportRevisionData(d){
  return [attachmentMediaScope(),d,linkedExtras,attachments.filter(a=>ordinary.has(a.intervention_id)||extra.has(a.extra_id)),stores.filter(s=>storeIds.has(s.id)),profiles,interventionWorkers.filter(w=>ordinary.has(w.intervention_id)),extraWorkers.filter(w=>extra.has(w.extra_id)),work,extraWorkItemPhotos.filter(p=>workIds.has(p.work_item_id)),extraWorkItemNotes.filter(n=>workIds.has(n.work_item_id))];
 }
 function dailyReportPdfKey(mode='compact'){
- return mode+'::'+JSON.stringify(reportRevisionData(dailyReportData()));
+ return mode+'::'+JSON.stringify([reportRevisionData(dailyReportData()),mode==='economics'?[admin(),extraEconomicsRecords,extraEconomicsError]:null]);
 }
 async function getDailyReportPdf(mode='compact'){
   const key=dailyReportPdfKey(mode);
@@ -2267,6 +2318,10 @@ function prewarmDailyReportPdfs(){
 }
 async function exportDailyReportPdf(mode='compact'){
   try{
+    if(mode==='economics'){
+      if(!admin())throw new Error('Accesso ai dati economici non consentito.');
+      if(!await loadExtraEconomics())throw new Error(extraEconomicsError);
+    }
     const key=dailyReportPdfKey(mode);
     const cached=dailyReportPdfCache.get(key);
     if(cached){
@@ -2277,7 +2332,7 @@ async function exportDailyReportPdf(mode='compact'){
     // Se il PDF non è ancora pronto, lo completiamo e lo teniamo in cache.
     // Su iOS una generazione molto lunga può far scadere il gesto utente:
     // in quel raro caso basta ripremere il pulsante e la condivisione sarà immediata.
-    toast(mode==='full'?'Preparo il PDF completo...':'Preparo il PDF sintetico...');
+    toast(mode==='economics'?'Preparo il PDF completo con economia...':mode==='full'?'Preparo il PDF completo...':'Preparo il PDF sintetico...');
     const data=await getDailyReportPdf(mode);
     try{
       await shareClientReportData(data);
@@ -5628,7 +5683,7 @@ async function recoverSupabaseSession(){
 async function resetBrokenSession(){try{await sb.auth.signOut({scope:'local'})}catch{};localStorage.removeItem('sb-'+new URL(cfg.supabaseUrl).hostname.split('.')[0]+'-auth-token');sessionStorage.removeItem(IMPERSONATE_PROFILE_KEY);realProfile=null;profile=null;session=null;$('app').classList.add('hidden');$('loginScreen').classList.remove('hidden');const box=$('loginError');if(box){box.textContent='Le credenziali salvate non sono più valide. Accedi di nuovo.';box.classList.remove('hidden')}}
 
 document.querySelectorAll('[data-stats-days]').forEach(b=>b.addEventListener('click',()=>setStatsDays(b.dataset.statsDays)));$('statsClient')?.addEventListener('change',renderStats);$('statsType')?.addEventListener('change',renderStats);$('statsSiteType')?.addEventListener('change',renderStats);$('statsStartDate')?.addEventListener('change',renderStats);$('statsEndDate')?.addEventListener('change',renderStats);$('statsRefresh')?.addEventListener('click',async()=>{await loadAll();renderStats();toast('Statistiche aggiornate')});
-const refreshReportAndPdfCache=()=>{renderDailyReport();prewarmDailyReportPdfs()};$('reportDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportStartDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportEndDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportMonth')?.addEventListener('change',refreshReportAndPdfCache);document.querySelectorAll('[data-report-mode]').forEach(b=>b.addEventListener('click',()=>{setReportMode(b.dataset.reportMode);prewarmDailyReportPdfs()}));$('reportClient')?.addEventListener('change',refreshReportAndPdfCache);$('reportType')?.addEventListener('change',refreshReportAndPdfCache);$('reportWorker')?.addEventListener('change',refreshReportAndPdfCache);$('reportRefresh')?.addEventListener('click',async()=>{await loadAll();dailyReportPdfCache.clear();dailyReportPdfPending.clear();renderDailyReport();prewarmDailyReportPdfs();toast('Report aggiornato')});$('shareDailyReport')?.addEventListener('click',shareDailyReport);$('exportDailyReportCompact')?.addEventListener('click',()=>exportDailyReportPdf('compact'));$('exportDailyReportFull')?.addEventListener('click',()=>exportDailyReportPdf('full'));
+const refreshReportAndPdfCache=()=>{renderDailyReport();prewarmDailyReportPdfs()};$('reportDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportStartDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportEndDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportMonth')?.addEventListener('change',refreshReportAndPdfCache);document.querySelectorAll('[data-report-mode]').forEach(b=>b.addEventListener('click',()=>{setReportMode(b.dataset.reportMode);prewarmDailyReportPdfs()}));$('reportClient')?.addEventListener('change',refreshReportAndPdfCache);$('reportType')?.addEventListener('change',refreshReportAndPdfCache);$('reportWorker')?.addEventListener('change',refreshReportAndPdfCache);$('reportRefresh')?.addEventListener('click',async()=>{await loadAll();dailyReportPdfCache.clear();dailyReportPdfPending.clear();renderDailyReport();prewarmDailyReportPdfs();toast('Report aggiornato')});$('shareDailyReport')?.addEventListener('click',shareDailyReport);$('exportDailyReportCompact')?.addEventListener('click',()=>exportDailyReportPdf('compact'));$('exportDailyReportFull')?.addEventListener('click',()=>exportDailyReportPdf('full'));$('exportDailyReportEconomics')?.addEventListener('click',()=>exportDailyReportPdf('economics'));
 
 function resetAppData(){
  closeClientReportPreview();
@@ -5681,7 +5736,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=283').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=284').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

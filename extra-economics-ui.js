@@ -9,6 +9,7 @@ async function loadExtraEconomics(){
   }catch(error){extraEconomicsRecords=[];extraEconomicsError='Dati economici non caricati. Premi Aggiorna per riprovare.';return false}
 }
 function syncExtraEconomicsRole(){
+  document.getElementById('exportDailyReportEconomics')?.classList.toggle('hidden',!admin());
   if(admin())return;window.PackageReview?.clearForRole();economicsExcludedIds.clear();extraEconomicsRecords=[];extraEconomicsBookRows=[];
   document.getElementById('extraEconomicsBook')?.close();
   for(const id of ['extraEconomicsBookList','extraEconomicsBookSummary'])document.getElementById(id)?.replaceChildren();

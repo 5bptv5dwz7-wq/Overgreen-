@@ -1,4 +1,4 @@
-const APP_VERSION='V284';
+const APP_VERSION='V285';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -2093,6 +2093,38 @@ async function downloadSingleClientReport(kind,row){
     await shareClientReportData(data);
   }catch(err){alert('Impossibile creare il report cliente PDF: '+err.message)}
 }
+async function createSingleExtraEconomicsReport(extra){
+  if(!admin())throw new Error('Accesso ai dati economici non consentito.');
+  const scope=attachmentMediaScope();
+  if(!await loadExtraEconomics())throw new Error(extraEconomicsError);
+  const base=await createSingleClientReportFile('extra',extra);
+  const pdf=await PDFLib.PDFDocument.load(await base.file.arrayBuffer());
+  await appendExtraEconomicsPdf(pdf,extra);
+  const documents=attachments.filter(a=>a.extra_id===extra.id&&['pdf_richiesta','rapportino_overgreen','rapportino_eurospin'].includes(a.tipo));
+  for(const attachment of documents){
+    try{await appendAttachmentForPackage(pdf,attachment)}catch(error){throw new Error(`${attachmentLabel(attachment)} non incluso: ${error.message}`)}
+  }
+  if(!admin()||scope!==attachmentMediaScope())throw new Error('Sessione cambiata. Riprova.');
+  const fileName=base.fileName.replace(/^Report - /,'Report completo con economia - ');
+  pdf.setTitle(`Report completo con economia - ${pdfSafeText(extra.titolo||'Extra')}`);
+  const file=new File([await pdf.save()],fileName,{type:'application/pdf'});
+  return {file,fileName,title:`Report completo con economia - ${extra.titolo||'Extra'}`,sizeKb:Math.max(1,Math.round(file.size/1024))};
+}
+function appendSingleExtraEconomicsButton(card,extra){
+  if(!admin())return;
+  const actions=card.querySelector('.actions');if(!actions)return;
+  const button=document.createElement('button');button.type='button';button.className='secondary';
+  button.dataset.extraEconomicsReport=extra.id;button.textContent='PDF completo con economia';
+  button.addEventListener('click',async()=>{
+    const label=button.textContent;button.disabled=true;button.textContent='Creo PDF con economia…';
+    try{const data=await createSingleExtraEconomicsReport(extras.find(e=>e.id===extra.id)||extra);await shareClientReportData(data)}
+    catch(error){if(error?.name!=='AbortError')alert('Impossibile creare il report: '+error.message)}
+    finally{button.disabled=false;button.textContent=label}
+  });
+  const download=actions.querySelector('[data-client-download]');
+  if(download)download.after(button);else actions.prepend(button);
+}
+
 async function previewSingleClientReport(kind,row){
   const actor=attachmentMediaScope(),request=++clientReportPreviewRequest;
   try{
@@ -2425,6 +2457,7 @@ function renderDailyReport(){
     const c=document.createElement('article');c.className='card daily-report-card';c.innerHTML=`<div class="daily-report-head"><div><span class="report-kind">${isOrd?'INTERVENTO ORDINARIO':'LAVORO EXTRA'}</span><h3>${esc(title)}</h3><p class="muted">${esc(place)}</p></div><span class="badge-state">${esc(reportStatusLabel(r.stato))}</span></div><div class="report-meta"><span>📅 ${esc(fmt(isOrd?interventionEndDate(r):r.giorno_intervento))}</span><span>🕒 ${esc(fmtClosedAt(r.closed_at))}</span><span>✅ ${esc(closedByName(r))}</span><span>👤 ${esc(names.join(' · ')||'Operatore non indicato')}</span><span>📷 ${pics.length}</span>${docs.length?`<span>📄 ${docs.length}</span>`:''}</div><div class="report-note"><strong>Note</strong><p>${esc((isOrd?r.note:(r.note_lorenzo||r.descrizione))||'Nessuna nota')}</p></div><div class="report-photo-grid"></div><div class="actions report-actions client-report-buttons"><button class="secondary" data-client-preview>📄 Anteprima</button><button data-client-download>⬇️ Report cliente PDF</button>${st?'<button class="secondary" data-store>Scheda punto vendita</button>':''}${docs.map(a=>`<button class="secondary" data-doc="${a.id}">${esc(attachmentLabel(a))}</button>`).join('')}</div>`;
     c.querySelector('[data-client-preview]')?.addEventListener('click',()=>previewSingleClientReport(item.kind,r));
     c.querySelector('[data-client-download]')?.addEventListener('click',()=>downloadSingleClientReport(item.kind,r));
+    if(!isOrd)appendSingleExtraEconomicsButton(c,r);
     c.querySelector('[data-store]')?.addEventListener('click',()=>showStoreDetail(st));
     c.querySelectorAll('[data-doc]').forEach(b=>b.onclick=()=>openAttachment(attachments.find(a=>a.id===b.dataset.doc)));
     const gallery=c.querySelector('.report-photo-grid');for(const a of pics){const b=document.createElement('button');b.className='report-photo';gallery.appendChild(b);mountAttachmentPhoto(b,a)}
@@ -4217,6 +4250,7 @@ function extraCard(e){
   c.querySelector('[data-extra-map]')?.addEventListener('click',()=>openExtraMaps(e,st));
   c.querySelector('[data-pdf]')?.addEventListener('click',()=>openAttachment(pdf));
   c.querySelector('[data-work-progress]')?.addEventListener('click',()=>openExtraWorkProgress(e));
+  appendSingleExtraEconomicsButton(c,e);
   c.querySelector('[data-report-eurospin]')?.addEventListener('click',()=>openAttachment(reportEurospin));
   c.querySelector('[data-report-overgreen]')?.addEventListener('click',()=>openAttachment(reportOvergreen));
   c.querySelector('[data-generate-work-report]')?.addEventListener('click',ev=>generateComplexExtraReportPdf(e,ev.currentTarget));
@@ -5736,7 +5770,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=284').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=285').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

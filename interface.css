@@ -232,3 +232,10 @@ dialog :is(.picker,.reuse-schedule-stores){overscroll-behavior:contain}
 .schedule-date-weather .schedule-weather-note,.schedule-date-weather small{font-size:.73rem;color:#59685f}
 
 .schedule-date-weather.is-caution{background:#fff8df;border-color:#dfc66c}
+
+/* Dashboard: document requirements follow the extra's closure profile. */
+.dashboard-extra-documents{margin:8px 0;padding:9px 11px;border:1px solid #d9ad55;border-radius:10px;background:#fff5df;color:#694b12;line-height:1.4}
+.dashboard-extra-documents.documents-not-required{border-color:#a9cdb3;background:#edf7ef;color:#28583b}
+.dashboard-extra-documents b,.dashboard-extra-documents small{display:block;white-space:normal;overflow-wrap:anywhere}
+.dashboard-extra-documents b{font-size:.88rem}
+.dashboard-extra-documents small{font-size:.82rem;color:inherit}

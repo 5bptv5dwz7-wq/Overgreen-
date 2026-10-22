@@ -1,4 +1,4 @@
-const APP_VERSION='V285';
+const APP_VERSION='V286';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -2203,35 +2203,58 @@ async function appendExtraEconomicsPdf(pdf,extra){
   if(!admin())throw new Error('Accesso ai dati economici non consentito.');
   const model=window.OvergreenEconomics,row=extraEconomicsRecords.find(r=>r.extra_id===extra.id);
   const {StandardFonts,rgb}=PDFLib,regular=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold);
-  let page,y;
-  const newPage=()=>{page=pdf.addPage([595.28,841.89]);y=790;page.drawText('OVERGREEN - DETTAGLIO ECONOMICO',{x:42,y,size:14,font:bold,color:rgb(.02,.35,.18)});y-=28};
-  const line=(label,value)=>{
-    for(const text of wrapPdfText(pdfSafeText(`${label}${value==null?'':': '+value}`),regular,10,511)){
-      if(y<55)newPage();page.drawText(text,{x:42,y,size:10,font:regular});y-=15;
-    }y-=5;
+  const green=rgb(.06,.28,.20),ink=rgb(.13,.20,.17),muted=rgb(.40,.47,.43),soft=rgb(.94,.97,.95),white=rgb(1,1,1),border=rgb(.85,.90,.87);
+  const left=42,right=553,width=511;let page,y,index=0;
+  const text=(value,x,yy,size=10,font=regular,color=ink)=>page.drawText(pdfSafeText(value),{x,y:yy,size,font,color});
+  const aligned=(value,yy,size=10,font=bold,color=ink)=>{const safe=pdfSafeText(value);text(safe,right-14-font.widthOfTextAtSize(safe,size),yy,size,font,color)};
+  const newPage=()=>{
+    page=pdf.addPage([595.28,841.89]);index++;
+    page.drawRectangle({x:0,y:714,width:595.28,height:128,color:green});
+    text('OVERGREEN',left,796,20,bold,white);text('RIEPILOGO ECONOMICO',left,767,11,bold,white);
+    text(extra.numero_target?'TARGET / TICKET  '+extra.numero_target:'LAVORO EXTRA',left,740,9,regular,white);
+    text('DETTAGLIO IMPORTI · IVA ESCLUSA',left,35,7,regular,muted);aligned(String(index),35,8,regular,muted);y=687;
   };
-  newPage();line('Extra',extra.titolo||'');line('Target / Ticket',extra.numero_target||'Non indicato');
-  if(!row){line('Economia non compilata');return}
-  const c=model.review(row,extra,latestEconomicsReport(extra.id)),money=model.money,amount=v=>money(model.cents(v)),value=v=>v??'Da compilare';
-  line('Stato',economicsStatus(c,row));
-  line('Modalità',model.modes[row.pricing_mode]||'Da compilare');
-  line('Categoria',row.pricing_category||'Da compilare');
-  line('Regime fatturazione',model.cleaningInvoiceLabel(row)||'IVA esclusa');
-  line('Operatori',value(row.operator_count));line('Attrezzature',row.equipment?'Sì':'No');
-  line('Ore complessive squadra',value(row.total_hours));
-  line('Ore diurne',value(c.dayHours));line('Tariffa diurna',amount(row.hourly_rate));line('Importo ore diurne',money(c.laborDay));
-  line('Ore notturne',c.nightHours);line('Tariffa notturna',amount(row.night_hourly_rate));line('Importo ore notturne',money(c.laborNight));
-  line('Totale manodopera',money(c.labor));
-  line('Addebito uscita',typeof row.dedicated_trip==='boolean'?(row.dedicated_trip?'Sì':'No'):'Da compilare');
-  line('Forfait viaggio per operatore',amount(row.exit_rate));line('Totale uscita',money(c.exit));
+  const ensure=height=>{if(y-height<60)newPage()};
+  const paragraph=(value,size=10,font=regular,color=ink)=>{
+    for(const ln of wrapPdfText(pdfSafeText(value),font,size,width-28)){ensure(size+7);text(ln,left+14,y,size,font,color);y-=size+5}y-=8;
+  };
+  const heading=()=>{ensure(30);page.drawRectangle({x:left,y:y-25,width,height:25,color:green});text('DESCRIZIONE',left+14,y-16,8,bold,white);aligned('IMPORTO',y-16,8,bold,white);y-=25};
+  const entry=(label,detail,amount)=>{
+    const lines=wrapPdfText(pdfSafeText(label),bold,10,345),details=detail?wrapPdfText(pdfSafeText(detail),regular,8.5,345):[];
+    const all=[...lines.map(t=>({t,size:10,font:bold,color:ink})),...details.map(t=>({t,size:8.5,font:regular,color:muted}))];
+    // Split exceptionally long descriptions without clipping or losing expense text.
+    for(let offset=0;offset<all.length;){
+      if(y-50<60){newPage();heading()}
+      const count=Math.max(1,Math.min(all.length-offset,Math.floor((y-80)/14))),chunk=all.slice(offset,offset+count),h=Math.max(43,chunk.length*14+17);
+      page.drawRectangle({x:left,y:y-h,width,height:h,color:soft});
+      chunk.forEach((ln,i)=>text(ln.t,left+14,y-18-i*14,ln.size,ln.font,ln.color));
+      if(offset===0)aligned(amount,y-19,11);
+      page.drawLine({start:{x:left,y:y-h},end:{x:right,y:y-h},thickness:.6,color:border});y-=h;offset+=count;
+    }
+  };
+  newPage();paragraph(extra.titolo||'Lavoro extra',16,bold,green);
+  if(!row){paragraph('Economia non compilata',11,bold,muted);return}
+  const c=model.review(row,extra,latestEconomicsReport(extra.id)),money=model.money,amount=v=>money(model.cents(v));
+  const meta=[model.modes[row.pricing_mode],row.pricing_category==='verde'?'Verde':row.pricing_category==='pulizie'?'Pulizie':null,extra.giorno_intervento?fmt(extra.giorno_intervento):null].filter(Boolean).join('  /  ');
+  if(meta)paragraph(meta,9,regular,muted);
+  if(!c.ready)paragraph(economicsStatus(c,row),9,bold,rgb(.60,.36,.09));
+  heading();
   if(row.pricing_mode==='preventivo'){
-    line('Importo preventivo',amount(row.quote_amount));line('Stato preventivo',model.quoteStates[row.quote_status]||'Da compilare');
-    line('Riferimento preventivo',row.quote_reference||'Non indicato');line('Uscita inclusa nel preventivo',c.exitIncluded?'Sì':'No');
+    entry('Importo a preventivo',[row.quote_reference,c.exitIncluded?'Forfait viaggio incluso':null].filter(Boolean).join(' · '),amount(row.quote_amount));
+  }else{
+    if(c.dayHours>0||c.labor==null)entry(c.nightHours>0?'Manodopera diurna':'Manodopera',`${c.dayHours??'Ore da compilare'} ore squadra × ${amount(row.hourly_rate)}/h${row.equipment?' · attrezzature incluse':''}`,money(c.laborDay));
+    if(c.nightHours>0)entry('Manodopera notturna',`${c.nightHours} ore squadra × ${amount(row.night_hourly_rate)}/h${row.equipment?' · attrezzature incluse':''}`,money(c.laborNight));
   }
-  for(const expense of row.expenses||[])line('Spesa - '+(expense.description||'Descrizione mancante'),amount(expense.amount));
-  line('Totale spese',money(c.expenses));line('Subtotale',money(c.subtotal));line('Sconto',money(c.discount));
-  line(c.ready?'Totale (IVA esclusa)':'Totale da verificare (IVA esclusa)',money(c.total));
-  if(row.economic_notes)line('Note economiche',row.economic_notes);
+  if(c.exit>0)entry('Forfait viaggio',`${row.operator_count} operatori × ${amount(row.exit_rate)}`,money(c.exit));
+  for(const expense of row.expenses||[])entry(expense.description||'Spesa senza descrizione','',amount(expense.amount));
+  if(c.discount>0){entry('Subtotale','',money(c.subtotal));entry('Sconto','', '- '+money(c.discount))}
+  y-=18;ensure(95);
+  page.drawRectangle({x:left,y:y-80,width,height:80,color:green});
+  text(c.ready?'TOTALE INTERVENTO':'TOTALE DA VERIFICARE',left+16,y-24,10,bold,white);
+  aligned(money(c.total),y-51,25,bold,white);
+  text('IVA esclusa',left+16,y-53,9,regular,white);y-=102;
+  const invoice=model.cleaningInvoiceLabel(row);if(invoice)paragraph(invoice,9,regular,muted);
+  if(row.economic_notes){ensure(45);paragraph('NOTE ECONOMICHE',8,bold,green);paragraph(row.economic_notes,9,regular,muted)}
 }
 async function createDailyReportWithEconomics(data){
   if(!admin())throw new Error('Accesso ai dati economici non consentito.');
@@ -5770,7 +5793,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=285').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=286').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

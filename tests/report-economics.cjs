@@ -4,7 +4,7 @@ function setup(records=[],isAdmin=true){
  const texts=[],pages=[];
  const c={admin:()=>isAdmin,window:{OvergreenEconomics:model},extraEconomicsRecords:records,PDFLib:{StandardFonts:{},rgb:()=>0},pdfSafeText:String,wrapPdfText:s=>[s],latestEconomicsReport:()=>null,economicsStatus:c=>c.complete?'Dati completi':'Da completare'};
  vm.createContext(c);vm.runInContext(source.slice(source.indexOf('async function appendExtraEconomicsPdf'),source.indexOf('async function createDailyReportWithEconomics')),c);
- const pdf={embedFont:async()=>({}),addPage:()=>{const p={drawText:(s,o)=>{assert(o.y>=55);texts.push(s)}};pages.push(p);return p}};
+ const pdf={embedFont:async()=>({widthOfTextAtSize:(s,size)=>s.length*size*.5}),addPage:()=>{const p={drawRectangle(){},drawLine(){},drawText:(s,o)=>{assert(o.y>=30);texts.push(s)}};pages.push(p);return p}};
  return {c,pdf,texts,pages};
 }
 test('saved economics includes all expenses, notes, discount and existing calculated total across pages',async()=>{

@@ -3,7 +3,7 @@ const {parseHTML}=require('linkedom');
 function setup(isAdmin=true){
  const {document}=parseHTML(fs.readFileSync(__dirname+'/../index.html','utf8'));
  const c={document,admin:()=>isAdmin,today:()=> '2026-10-16',fmt:s=>s,esc:s=>String(s||'').replaceAll('<','&lt;'),$:id=>document.getElementById(id),stores:[{id:'asap',nome:'Subito'},{id:'today',nome:'Oggi'},{id:'future',nome:'Futuro'},{id:'late',nome:'Scaduto'},{id:'none',nome:'Senza sollecito'}],interventions:[],scheduleItems:[],schedules:[],effectiveScheduleState:i=>i.stato,showStoreDetail(){},schedulePickerSelected:new Set(),schedulePickerMode:'all',schedulePickerLetter:'A',setView(){},renderSchedulePicker(){},updateScheduleSelectedCount(){},toast(){},openDialog:id=>{c.opened=id},withFormBusy:async(_id,fn)=>fn(),sb:{rpc:async()=>{throw Error('unexpected write')}},confirm:()=>true};
- vm.createContext(c);vm.runInContext(fs.readFileSync(__dirname+'/../store-reminders.js','utf8'),c);
+ c.workspaceMatches=r=>(r?.client_type||'eurospin')==='eurospin';vm.createContext(c);vm.runInContext(fs.readFileSync(__dirname+'/../store-reminders.js','utf8'),c);
  vm.runInContext(`storeReminders=[{store_id:'asap',active:true,due_date:null},{store_id:'today',active:true,due_date:'2026-10-16'},{store_id:'future',active:true,due_date:'2026-10-20'},{store_id:'late',active:true,due_date:'2026-10-15'}].map(r=>({...r,requested_at:'2026-10-16T08:00:00Z',note:'<test>'}));`,c);
  c.$('scheduleForm').scrollIntoView=()=>{};return c;
 }

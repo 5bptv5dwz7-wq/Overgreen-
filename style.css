@@ -389,3 +389,12 @@
 #savedRouteWeatherDialog .route-weather-stats:nth-child(3){grid-column:3;grid-row:1}
 #savedRouteWeatherDialog .route-weather-score{display:none}
 }
+
+/* Persistent client workspaces */
+.workspace-fixed-client{display:none!important}
+.client-workspaces{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 16px;background:var(--panel,#fff);border-bottom:1px solid #dce4e0}
+.client-workspaces button{background:#edf2ef;color:#234235;border:2px solid transparent;border-radius:10px;padding:10px 14px}
+.client-workspaces button.active{background:#e2f3e8;border-color:#258451;color:#145a34}
+.client-workspaces button[data-workspace="intesa"].active{background:#e8f1fb;border-color:#3672a3;color:#214e72}
+#workspaceLabel{margin-left:auto;font-weight:600;font-size:13px;color:#52645b}
+@media(max-width:600px){.client-workspaces{gap:5px;padding:8px}.client-workspaces button{flex:1;padding:9px 6px;font-size:13px}#workspaceLabel{width:100%;text-align:center}}

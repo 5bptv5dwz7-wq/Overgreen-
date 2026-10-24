@@ -103,7 +103,7 @@ async function updateSyncUi(){
   const old=missing.some(i=>Date.now()-new Date(i.closed_at||i.created_at).getTime()>10*60*1000);
   const text=state.error?state.error:pending.length?`☁️ ${pending.length} chiusur${pending.length===1?'a':'e'} conservat${pending.length===1?'a':'e'} sul telefono · invio da completare`:blocked?`⚠️ ${blocked} foto da recuperare · apri dettagli`:state.running?`⬆️ Invio foto in corso · ${state.jobs.length} in coda`:state.jobs.length?`☁️ ${state.jobs.length} foto conservate sul telefono · ripresa automatica`:missing.length?`⚠️ ${missing.length} intervent${missing.length===1?'o':'i'} con foto mancanti${old?' · verifica necessaria':''}`:'✓ Tutte le foto ricevute';
   for(const id of ['backgroundSyncStatus','photoRepairStatus'])if($(id))$(id).textContent=text;
-  const badge=$('syncFloatingBadge');if(badge){badge.textContent=text;badge.classList.toggle('hidden',!state.error&&!pending.length&&!state.jobs.length);badge.classList.toggle('sync-error',!!state.error||blocked>0||old);badge.onclick=()=>{setView('settings');$('photoDeliveryDetails')?.scrollIntoView({block:'start',behavior:'smooth'})}}
+  const badge=$('syncFloatingBadge');if(badge){badge.textContent=text;badge.classList.toggle('hidden',!state.error&&!pending.length&&!state.jobs.length&&!missing.length);badge.classList.toggle('sync-error',!!state.error||blocked>0||old);badge.onclick=()=>{setView('settings');$('photoDeliveryDetails')?.scrollIntoView({block:'start',behavior:'smooth'})}}
   await renderPhotoDeliveryDetails(state);
 }
 async function renderPhotoDeliveryDetails(state=null){

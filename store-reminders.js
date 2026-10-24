@@ -23,9 +23,9 @@ function storeReminderPlanStatus(store){
  return `In programma: ${dates.map(fmt).join(', ')}${r.due_date?' · ⚠ data comunicata non coperta':''}`;
 }
 function renderStoreReminderPanels(){
- const rows=stores.filter(activeStoreReminder).sort(compareStoreReminders);
+ const allRows=stores.filter(activeStoreReminder).sort(compareStoreReminders);
  for(const id of ['dashboardReminders','scheduleReminders']){
-  const host=$(id);if(!host)continue;host.hidden=!rows.length;host.innerHTML='';if(!rows.length)continue;
+  const rows=id==='dashboardReminders'?allRows:allRows.filter(workspaceMatches);const host=$(id);if(!host)continue;host.hidden=!rows.length;host.innerHTML='';if(!rows.length)continue;
   host.innerHTML=`<h2>⚑ PV sollecitati <span>${rows.length}</span></h2><p class="muted">Priorità richieste dal cliente · passaggi ordinari</p>`;
   for(const st of rows){
    const card=document.createElement('article');card.className='reminder-panel-row';

@@ -43,9 +43,9 @@ function confirmExtraDateExecution(rows,day){
  return !issues.length||confirm('ATTENZIONE: la data non rispetta il vincolo del cliente.\n\n'+issues.join('\n')+'\n\nConfermi che il lavoro è stato realmente eseguito in questa data?');
 }
 function renderExtraDateAlerts(){
- const open=extras.filter(e=>extraDateRule(e)&&!['in_attesa','completato','annullato'].includes(e.stato)).sort((a,b)=>extraDateRule(a).date.localeCompare(extraDateRule(b).date));
+ const allOpen=extras.filter(e=>extraDateRule(e)&&!['in_attesa','completato','annullato'].includes(e.stato)).sort((a,b)=>extraDateRule(a).date.localeCompare(extraDateRule(b).date));
  for(const id of ['dashboardExtraDates','scheduleExtraDates']){
-  const host=$(id);if(!host)continue;host.hidden=!open.length;host.innerHTML='';if(!open.length)continue;
+  const open=id==='dashboardExtraDates'?allOpen:allOpen.filter(workspaceMatches);const host=$(id);if(!host)continue;host.hidden=!open.length;host.innerHTML='';if(!open.length)continue;
   host.innerHTML='<h2>📅 Extra con date da rispettare</h2><p>Promemoria giornalieri da 10 giorni prima, finché il lavoro resta aperto.</p>';
   for(const e of open){const st=stores.find(s=>s.id===e.store_id),r=document.createElement('article');r.className='reminder-panel-row';r.innerHTML=`<strong>${esc(st?.nome||e.nome_esterno||'Extra')} · ${esc(e.titolo)}</strong>${e.numero_target?`<small>Target ${esc(e.numero_target)}</small>`:''}${extraDateRuleMarkup(e)}${extraReminderCountdown(e)?`<small class="extra-reminder-countdown">🔔 ${esc(extraReminderCountdown(e))}</small>`:''}<small>${e.giorno_intervento?'In programma: '+fmt(e.giorno_intervento):'⚠ Da programmare'}</small><div class="actions"><button type="button" class="secondary">Apri extra</button></div>`;r.querySelector('button').onclick=()=>openExtraById(e.id);host.appendChild(r)}
  }

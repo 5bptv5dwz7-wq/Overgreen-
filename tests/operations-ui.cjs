@@ -31,7 +31,7 @@ function setup() {
     toast: text => calls.push(['toast', text]), alert: text => calls.push(['alert', text]), loadAll: async () => calls.push(['refresh'])
   };
   for (const name of ['renderDashboard', 'renderStores', 'renderSchedules', 'renderExtras', 'renderDailyReport', 'renderStats', 'openSignatureSheetsView', 'openCompanyArchive', 'renderWorkContacts', 'auditViewOpen', 'renderSchedulePicker', 'openHistoryEdit', 'openDone', 'openPendingDialog', 'openActivityConsuntivoDialog', 'openExtraEdit', 'openSchedulePdfDialog']) c[name] = (...args) => calls.push([name, ...args]);
-  vm.createContext(c);
+  Object.assign(c,{activeClient:'eurospin',mixedScheduleMode:false,clientType:r=>r?.client_type||'eurospin',clientLabel:c.clientLabel||((v)=>typeof v==='string'?v:v?.client_type||'eurospin'),workspaceMatches:r=>(r?.client_type||'eurospin')===c.activeClient,workspaceStoreMatches:id=>!c.stores?.length||c.stores.some(st=>st.id===id&&(st.client_type||'eurospin')===c.activeClient),syncClientWorkspace(){},activateClient(client){c.activeClient=client;c.extraClientFilter=client;c.storeClientFilter=client;c.scheduleClientFilter=client;}});vm.createContext(c);
   vm.runInContext(source('function setView(', 'function syncImpersonationUi'), c);
   vm.runInContext(source('function openExtraById', 'function extraSearchText'), c);
   vm.runInContext(source('function openScheduleDate', 'function contactStoreNames'), c);
@@ -55,7 +55,7 @@ test('page renders actions, escapes names, filters categories, switches to a sev
 test('extra action clears inherited client/category/search filters and opens the intended extra', async () => {
   const { c } = setup(); c.$('extraCategoryFilter').value = 'pulizie'; c.$('extraSearchInput').value = 'old';
   await c.runOperationsAction({ action: 'extra', id: 'e' });
-  assert.equal(c.extraClientFilter, 'all'); assert.equal(c.$('extraCategoryFilter').value, 'all'); assert.equal(c.$('extraSearchInput').value, '');
+  assert.equal(c.extraClientFilter, 'eurospin'); assert.equal(c.$('extraCategoryFilter').value, 'all'); assert.equal(c.$('extraSearchInput').value, '');
   assert.equal(c.pendingExtraFocusId, 'e'); assert(!c.$('extrasView').classList.contains('hidden'));
 });
 test('photo action opens the exact intervention editor; planner action preserves existing selection and date', async () => {

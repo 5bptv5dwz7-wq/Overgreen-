@@ -3,7 +3,7 @@ const src=fs.readFileSync(__dirname+'/../app.js','utf8');
 const header='EUROSPIN SPESA INTELLIGENTE Richiesta intervento n. 123456 del 08/09/2026 Punto Vendita: SPESA INTELLIGENTE S.p.A. BEINASCO Tel. 011123456 Fax 011999999 ';
 function context(){
  const nodes=new Map(),$=id=>{if(!nodes.has(id))nodes.set(id,{value:'',files:[],classList:{add(){},remove(){}},addEventListener(){}});return nodes.get(id)};
- const c={console,$,retroExtraCreateContext:null,stores:[],syncExtraClosureOptions(){},syncOrdinaryIncludedCreateUi(){},syncExtraNumberLabel(){},renderExtraStoreOptions(){},syncExtraDestinationUi(){},checkDuplicateTargetField(){},clearDuplicateTargetWarning(){},findStoreFromPdf:()=>null,fmt:s=>s};vm.createContext(c);
+ const c={console,$,retroExtraCreateContext:null,stores:[],syncExtraClosureOptions(){},syncOrdinaryIncludedCreateUi(){},syncExtraNumberLabel(){},renderExtraStoreOptions(){},syncExtraDestinationUi(){},checkDuplicateTargetField(){},clearDuplicateTargetWarning(){},findStoreFromPdf:()=>null,fmt:s=>s};$('extraClient').value='eurospin';vm.createContext(c);
  vm.runInContext(src.slice(src.indexOf('function pdfDateToIso'),src.indexOf('function normalizeMatchText')),c);
  vm.runInContext(src.slice(src.indexOf('let extraPdfReadVersion='),src.indexOf('function workItemsForExtra')),c);return c;
 }

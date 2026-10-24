@@ -20,7 +20,7 @@ function setup(){
  }throw Error(name)}};
  c.buildEconomicsZipUnderLimit=async()=>({size:1000});
  c.window.JSZip={loadAsync:async()=>({files:{a:{name:'Verde/001.pdf',async:async()=>new Uint8Array([1])},b:{name:'Verde/Excel.xlsx',async:async()=>new Uint8Array([1])}}})};
- vm.createContext(c);vm.runInContext(fs.readFileSync(__dirname+'/../package-review.js','utf8'),c);return c;
+ Object.assign(c,{activeClient:'eurospin',clientLabel:c.clientLabel||((v)=>typeof v==='string'?v:v?.client_type||'eurospin'),workspaceMatches:r=>(r?.client_type||'eurospin')===c.activeClient,workspaceStoreMatches:id=>!c.stores?.length||c.stores.some(st=>st.id===id&&(st.client_type||'eurospin')===c.activeClient),syncClientWorkspace(){},activateClient(client){c.activeClient=client;c.extraClientFilter=client;c.storeClientFilter=client;c.scheduleClientFilter=client;}});vm.createContext(c);vm.runInContext(fs.readFileSync(__dirname+'/../package-review.js','utf8'),c);return c;
 }
 const byText=(c,label)=>[...c.document.querySelectorAll('button')].find(b=>b.textContent===label);
 async function pages(c){byText(c,'→').onclick();await tick();await tick()}

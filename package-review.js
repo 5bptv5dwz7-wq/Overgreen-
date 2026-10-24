@@ -36,7 +36,7 @@ window.PackageReview=(()=>{
     const s=state,before=await contexts(s.ids);await loadAll();if(!current(s))return;
     if(extraEconomicsError)throw Error(extraEconomicsError);
     const after=await contexts(s.ids);if(!same(before,after))throw Error('Dati cambiati durante il caricamento. Premi Aggiorna verifica.');
-    const all=window.OvergreenEconomics.filterRows(extras,extraEconomicsRecords,attachments);
+    const all=window.OvergreenEconomics.filterRows(extras.filter(workspaceMatches),extraEconomicsRecords,attachments);
     s.rows=s.ids.map(id=>all.find(x=>x.extra.id===id));if(s.rows.some(x=>!x))throw Error('Un extra selezionato non è più esportabile. Torna in Economia.');
     s.context=after;s.final=null;
   }

@@ -40,7 +40,7 @@ function economicsBookFilter(){return {month:$('extraEconomicsMonth').value,cate
 function populateEconomicsPeriods(){
   const model=window.OvergreenEconomics,select=$('extraEconomicsMonth');
   const value=select.value||select.dataset.initialPeriod||'';delete select.dataset.initialPeriod;
-  const periods=new Set(model.filterRows(extras,[],[]).map(x=>model.period(x.extra)));
+  const periods=new Set(model.filterRows(extras.filter(workspaceMatches),[],[]).map(x=>model.period(x.extra)));
   if(value)periods.add(value);
   select.replaceChildren();
   for(const period of ['', 'open', ...[...periods].filter(p=>!['open','undated'].includes(p)).sort().reverse(), ...(periods.has('undated')?['undated']:[])]){
@@ -53,7 +53,7 @@ function renderExtraEconomicsBook(){
   $('extraEconomicsBookExport').disabled=!!extraEconomicsError;
   if(extraEconomicsError){$('extraEconomicsBookStatus').textContent=extraEconomicsError;$('extraEconomicsBookSummary').replaceChildren();extraEconomicsBookRows=[];updateEconomicsSelection();return}
   populateEconomicsPeriods();
-  extraEconomicsBookRows=model.filterRows(extras,extraEconomicsRecords,attachments,economicsBookFilter());
+  extraEconomicsBookRows=model.filterRows(extras.filter(workspaceMatches),extraEconomicsRecords,attachments,economicsBookFilter());
   const ready=extraEconomicsBookRows.filter(x=>x.calc.ready),total=ready.reduce((sum,x)=>sum+x.calc.total,0),incomplete=extraEconomicsBookRows.length-ready.length;
   $('extraEconomicsBookSummary').innerHTML=`<div><strong>${esc(model.money(total))}</strong><span>Totale di ${ready.length} extra con dati completi</span></div><div><strong>${incomplete}</strong><span>Da completare, verificare o approvare</span></div>`;
   $('extraEconomicsBookStatus').textContent=extraEconomicsBookRows.length?`${extraEconomicsBookRows.length} extra · preventivi non accettati e voci da verificare esclusi dal totale complessivo.`:'Nessun extra in questa categoria. Seleziona Tutti per vedere tutti gli extra.';
@@ -160,7 +160,7 @@ async function exportExtraEconomics(){
   const b=$('extraEconomicsBookExport');if(b.disabled)return;b.disabled=true;
   try{
     await loadAll();if(!admin())return;if(extraEconomicsError)throw new Error(extraEconomicsError);
-    const rows=window.OvergreenEconomics.filterRows(extras,extraEconomicsRecords,attachments,economicsBookFilter());if(!rows.length)throw new Error('Nessun extra da esportare.');
+    const rows=window.OvergreenEconomics.filterRows(extras.filter(workspaceMatches),extraEconomicsRecords,attachments,economicsBookFilter());if(!rows.length)throw new Error('Nessun extra da esportare.');
     for(let i=0;i<rows.length;i++){
       if(!admin())return;
       $('extraEconomicsBookStatus').textContent=`Lettura numeri chiusura ${i+1}/${rows.length}…`;
@@ -205,7 +205,7 @@ async function exportEconomicsZip(){
   try{
     status.textContent='Controllo documenti e dati economici…';
     await loadAll();if(!admin())return;if(extraEconomicsError)throw Error(extraEconomicsError);
-    const rows=window.OvergreenEconomics.filterRows(extras,extraEconomicsRecords,attachments,filter).filter(x=>ids.has(x.extra.id));
+    const rows=window.OvergreenEconomics.filterRows(extras.filter(workspaceMatches),extraEconomicsRecords,attachments,filter).filter(x=>ids.has(x.extra.id));
     if(rows.length!==ids.size)throw Error('Gli extra selezionati sono cambiati. Aggiorna la lista e riprova.');
     const issues=economicsZipIssues(rows);if(issues.length)throw Error('Completa questi extra prima di generare lo ZIP:\n'+issues.join('\n'));
     await ensureLibraries('JSZip','ExcelJS','PDFLib');

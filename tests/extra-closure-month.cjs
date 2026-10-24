@@ -15,7 +15,7 @@ function setup(){
  const c={document,Intl,Date,extras,$:id=>document.getElementById(id),admin:()=>false,extraClientFilter:'all',extraCompletedMonthFilter:'',extraHideIncludedCompleted:false,extraGroupOpenState:{todo:true,scheduled:true,completed:true},pendingExtraFocusId:null,
   clientType:e=>e.client_type,extraCategory:e=>e.categoria_target,extraSearchText:e=>e.id,extraRequestDate:()=>'',extraIsScheduled:e=>e.stato==='programmato',esc:s=>s,
   extraCard(e){const p=document.createElement('article');p.dataset.id=e.id;p.textContent=e.id;return p},setView(){c.renderExtras()},setTimeout(){}};
- vm.createContext(c);vm.runInContext(code.slice(code.indexOf('function closureProfile('),code.indexOf('function deadlineLabel(')),c);vm.runInContext(code.slice(code.indexOf('function extraClosureMonth('),code.indexOf('function openExtraEdit(')),c);
+ Object.assign(c,{activeClient:'eurospin',clientLabel:c.clientLabel||((v)=>typeof v==='string'?v:v?.client_type||'eurospin'),workspaceMatches:r=>(r?.client_type||'eurospin')===c.activeClient,workspaceStoreMatches:id=>!c.stores?.length||c.stores.some(st=>st.id===id&&(st.client_type||'eurospin')===c.activeClient),syncClientWorkspace(){},activateClient(client){c.activeClient=client;c.extraClientFilter=client;c.storeClientFilter=client;c.scheduleClientFilter=client;}});vm.createContext(c);vm.runInContext(code.slice(code.indexOf('function closureProfile('),code.indexOf('function deadlineLabel(')),c);vm.runInContext(code.slice(code.indexOf('function extraClosureMonth('),code.indexOf('function openExtraEdit(')),c);
  vm.runInContext(code.slice(code.indexOf('function openExtraById('),code.indexOf('function extraSearchText(')),c);
  c.renderExtras();return c;
 }

@@ -4,8 +4,8 @@
  const G=window.OvergreenLocations;
  let map,layer,dialog,selected=null,filter='all',query='',leafletPromise,origin,opener;
  const labels={all:'Tutte',due:'Da fare',scheduled:'Programmate',reminder:'Sollecitate',missing:'Senza posizione'};
- const color=s=>activeStoreReminder(s)?'#be3946':isOverdueStore(s)?'#d97706':isStoreProgrammed(s.id)?'#3976d4':'#168263';
- const state=s=>activeStoreReminder(s)?'Sollecitata':isOverdueStore(s)?'Oltre intervallo / da avviare':isStoreProgrammed(s.id)?'In programma':storeHasInterval(s)?'Nei tempi':'Su richiesta';
+ const color=s=>isStoreProgrammed(s.id)?'#3976d4':activeStoreReminder(s)?'#be3946':isOverdueStore(s)?'#d97706':'#168263';
+ const state=s=>isStoreProgrammed(s.id)?(activeStoreReminder(s)?'In programma · Sollecitata':'In programma'):activeStoreReminder(s)?'Sollecitata':isOverdueStore(s)?'Oltre intervallo / da avviare':storeHasInterval(s)?'Nei tempi':'Su richiesta';
  const rows=()=>stores.filter(s=>clientType(s)==='eurospin');
  function filtered(){return rows().filter(s=>(`${s.nome} ${s.citta||''} ${s.indirizzo||''}`).toLocaleLowerCase('it').includes(query)).filter(s=>filter==='due'?isOverdueStore(s):filter==='scheduled'?isStoreProgrammed(s.id):filter==='reminder'?!!activeStoreReminder(s):filter==='missing'?!G.confirmedPoint(s):true)}
  function leaflet(){
@@ -39,6 +39,10 @@
   for(const {s,p} of points){
    const marker=L.marker([p.lat,p.lon],{title:s.nome,icon:L.divIcon({className:'ogm-marker',html:`<span class="ogm-pin ${selected===s.id?'selected':''}" style="--pin:${color(s)}"></span>`,iconSize:[40,40],iconAnchor:[20,20]})}).addTo(layer);
    marker.on('click',()=>choose(s,false));
+   if(map.getZoom()>=12){
+    const label=document.createElement('span');label.textContent=s.nome;
+    marker.bindTooltip(label,{permanent:true,direction:'top',offset:[0,-12],className:'ogm-store-label',opacity:1,interactive:false});
+   }
   }
  }
  function fit(){if(!map)return;const p=filtered().map(G.confirmedPoint).filter(Boolean);if(p.length)map.fitBounds(p.map(x=>[x.lat,x.lon]),{padding:[45,45],maxZoom:13});else map.setView([45,9.5],6)}

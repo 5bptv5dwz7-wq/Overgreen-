@@ -39,7 +39,7 @@
   for(const {s,p} of points){
    const marker=L.marker([p.lat,p.lon],{title:s.nome,icon:L.divIcon({className:'ogm-marker',html:`<span class="ogm-pin ${selected===s.id?'selected':''}" style="--pin:${color(s)}"></span>`,iconSize:[40,40],iconAnchor:[20,20]})}).addTo(layer);
    marker.on('click',()=>choose(s,false));
-   if(map.getZoom()>=12){
+   if(map.getZoom()>=9){
     const label=document.createElement('span');label.textContent=s.nome;
     marker.bindTooltip(label,{permanent:true,direction:'top',offset:[0,-12],className:'ogm-store-label',opacity:1,interactive:false});
    }

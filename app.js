@@ -1,4 +1,4 @@
-const APP_VERSION='V292';
+const APP_VERSION='V293';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -5905,7 +5905,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=292').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=293').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);
@@ -5972,5 +5972,6 @@ window.OvergreenVoice?.init({
  async confirm(draft){if(!admin())throw Error('Accesso riservato');await adminOperation('schedule_create',draft);await loadAll()}
 });
 window.OvergreenVoice?.sync();
+
 
 

@@ -57,5 +57,16 @@ vm.runInContext(`(async()=>{
  $('newExtraBtn').click();$('extraIntesaOrdinaryMode').checked=true;$('extraIntesaOrdinaryMode').dispatchEvent(new window.Event('change'));assert.equal($('extraClosureProfile').value,'intesa_ordinario');$('extraDialog').close();
  // A PDF for the other client must not overwrite the selected client.
  $('newExtraBtn').click();const file={};Object.defineProperty($('extraPdf'),'files',{configurable:true,value:[file]});readPdfText=async()=> 'EUROSPIN SPESA INTELLIGENTE Richiesta intervento n. 123 del 08/09/2026 Buongiorno, potatura siepe.';await autoFillExtraFromPdf(file);assert.equal($('extraClient').value,'intesa');assert.match($('extraPdfAutoReadStatus').textContent,/altro cliente/);
+ // Employee navigation and registry permissions, including team assignments.
+ $('extraDialog').close();profile=realProfile={id:'worker',nome:'Worker',ruolo:'dipendente',attivo:true};profiles.push(profile);
+ extras.forEach(e=>e.stato='programmato');extraWorkers=[{extra_id:'ee',profile_id:'worker'}];scheduleMembers=[{schedule_id:'mixed',profile_id:'worker'}];extras.find(e=>e.id==='ei').schedule_item_id='isi';
+ syncImpersonationUi();
+ for(const el of document.querySelectorAll('[data-view="stores"],[data-view="schedule"],[data-bottom-view="schedule"],[data-more-view="stores"]'))assert(el.classList.contains('hidden'));
+ for(const view of ['stores','schedule']){setView(view);assert.equal(currentView,'dashboard')}
+ enterClient('eurospin','extras');assert.equal(currentView,'extras');assert(!canWorkOnExtra(extras[0]));assert.equal($('extrasList').querySelector('[data-close-extra]'),null);assert($('extrasList').textContent.includes('Sola lettura'));
+ openExtraById('ee');assert.equal(currentView,'extras');assert(!canWorkOnExtra(extras[0]));
+ setView('dashboard');assert(canWorkOnExtra(extras[0]));assert(canWorkOnExtra(extras[1]));assert(assignedExtraIds().has('ei'));assert($('dashboardNext').querySelector('[data-close-extra-dashboard]'));
+ assert(!canWorkOnExtra({id:'unassigned',stato:'programmato'}));
+ profile=realProfile={id:'admin',nome:'Admin',ruolo:'admin',attivo:true};syncImpersonationUi();setView('stores');assert.equal(currentView,'stores');assert(!document.querySelector('[data-view="stores"]').classList.contains('hidden'));
  console.log('PASS workspace navigation, forms, reports, search, mixed schedules, routes, PDF isolation and dashboard');
 })()`,c).catch(error=>{console.error(error);process.exitCode=1});

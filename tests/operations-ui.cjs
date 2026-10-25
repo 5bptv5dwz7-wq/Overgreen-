@@ -32,7 +32,7 @@ function setup() {
   };
   for (const name of ['renderDashboard', 'renderStores', 'renderSchedules', 'renderExtras', 'renderDailyReport', 'renderStats', 'openSignatureSheetsView', 'openCompanyArchive', 'renderWorkContacts', 'auditViewOpen', 'renderSchedulePicker', 'openHistoryEdit', 'openDone', 'openPendingDialog', 'openActivityConsuntivoDialog', 'openExtraEdit', 'openSchedulePdfDialog']) c[name] = (...args) => calls.push([name, ...args]);
   Object.assign(c,{activeClient:'eurospin',mixedScheduleMode:false,clientType:r=>r?.client_type||'eurospin',clientLabel:c.clientLabel||((v)=>typeof v==='string'?v:v?.client_type||'eurospin'),workspaceMatches:r=>(r?.client_type||'eurospin')===c.activeClient,workspaceStoreMatches:id=>!c.stores?.length||c.stores.some(st=>st.id===id&&(st.client_type||'eurospin')===c.activeClient),syncClientWorkspace(){},activateClient(client){c.activeClient=client;c.extraClientFilter=client;c.storeClientFilter=client;c.scheduleClientFilter=client;}});vm.createContext(c);
-  vm.runInContext(source('function setView(', 'function syncImpersonationUi'), c);
+  vm.runInContext(source('function syncEmployeeNavigation(', 'function syncImpersonationUi'), c);
   vm.runInContext(source('function openExtraById', 'function extraSearchText'), c);
   vm.runInContext(source('function openScheduleDate', 'function contactStoreNames'), c);
   vm.runInContext(ui, c);

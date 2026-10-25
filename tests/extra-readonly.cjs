@@ -4,7 +4,7 @@ const src=fs.readFileSync(__dirname+'/../app.js','utf8');
 function block(a,b){return src.slice(src.indexOf(a),src.indexOf(b,src.indexOf(a)+a.length))}
 function setup(){
  const {document}=parseHTML('<div id="extraWorkProgressList"></div><input id="extraWorkProgressExtraId"><h2 id="extraWorkProgressTitle"></h2><div id="extraWorkProgressInfo"></div><button id="saveExtraWorkProgress"></button>');
- const c={document,$:id=>document.getElementById(id),profile:{id:'worker'},isAdmin:false,admin:()=>c.isAdmin,extraWorkers:[],scheduleItems:[],scheduleMembers:[],stores:[],workItemsForExtra:()=>[{id:'item',titolo:'Lavorazione',stato:'da_fare'}],workNotesForItem:()=>[],workPhotosForItem:()=>[],esc:s=>s||'',workStateIcon:()=>'',workStateLabel:s=>s,hydrateWorkProgressPhotos:()=>{}};
+ const c={currentView:"dashboard",document,$:id=>document.getElementById(id),profile:{id:'worker'},isAdmin:false,admin:()=>c.isAdmin,extraWorkers:[],scheduleItems:[],scheduleMembers:[],stores:[],workItemsForExtra:()=>[{id:'item',titolo:'Lavorazione',stato:'da_fare'}],workNotesForItem:()=>[],workPhotosForItem:()=>[],esc:s=>s||'',workStateIcon:()=>'',workStateLabel:s=>s,hydrateWorkProgressPhotos:()=>{}};
  vm.createContext(c);vm.runInContext(block('function canWorkOnExtra(','function assignedExtraIds('),c);vm.runInContext(block('function renderWorkProgressDialog(','function openExtraWorkProgress('),c);return c;
 }
 test('read access never authorizes unassigned work; direct and ordinary-team assignments remain supported',()=>{
@@ -31,4 +31,10 @@ test('unassigned closure/delete calls stop before touching forms or database',as
   vm.runInContext(guard+'\n throw Error("guard bypassed");}',c);c[name]({id:'extra',stato:'ricevuto'});
  }
  vm.runInContext(block('async function deleteExtra(','async function openAttachment('),c);await c.deleteExtra({id:'extra'});
+});
+
+test('assigned employees can write only from dashboard; extra register is read only',()=>{
+ const c=setup(),e={id:'extra',stato:'ricevuto',titolo:'Extra'};c.extraWorkers.push({extra_id:e.id,profile_id:'worker'});
+ for(const view of ['extras','stores','schedule','settings']){c.currentView=view;assert.equal(c.canWorkOnExtra(e),false);c.renderWorkProgressDialog(e);assert(c.$('saveExtraWorkProgress').hidden);assert.equal(c.document.querySelector('[data-progress-note]'),null)}
+ c.currentView='dashboard';assert(c.canWorkOnExtra(e));c.currentView='extras';c.isAdmin=true;assert(c.canWorkOnExtra(e));
 });

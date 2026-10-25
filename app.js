@@ -1,4 +1,4 @@
-const APP_VERSION='V289';
+const APP_VERSION='V290';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -374,7 +374,7 @@ function activateClient(client){
  if(changed){renderedViews.clear();resetSchedulePickerSelection();for(const id of ['searchInput','extraSearchInput','scheduleSearch','contactsSearch','operationsSearch','globalSearch','globalSearchEverywhere'])if($(id))$(id).value='';}
  syncClientWorkspace();
 }
-function enterClient(client,view=currentView){if(client!==activeClient&&schedulePickerSelected.size&&!confirm('Hai lavori selezionati non ancora salvati. Cambiare sezione e azzerare questa selezione? Per aggiungere altri clienti allo stesso giro usa il pulsante Giro misto.'))return;activateClient(client);setView(view==='dashboard'?'stores':view)}
+function enterClient(client,view=currentView){if(client!==activeClient&&schedulePickerSelected.size&&!confirm('Hai lavori selezionati non ancora salvati. Cambiare sezione e azzerare questa selezione? Per aggiungere altri clienti allo stesso giro usa il pulsante Giro misto.'))return;activateClient(client);setView(view==='dashboard'?(admin()?'stores':'extras'):view)}
 function syncClientWorkspace(){
  storeClientFilter=extraClientFilter=activeClient;scheduleClientFilter=mixedScheduleMode?'all':activeClient;
  for(const id of ['reportClient','statsClient','operationsClient','bulkIntervalClient']){const el=$(id);if(el){el.value=activeClient;(el.closest('label')||el).classList.add('workspace-fixed-client')}}
@@ -394,9 +394,15 @@ const CURRENT_VIEW_KEY='overgreen_current_view';
 let currentView=localStorage.getItem(CURRENT_VIEW_KEY)||'dashboard';
 const renderedViews=new Map();let viewDataVersion=0;
 function viewRevision(){return activeClient+':'+mixedScheduleMode+':'+viewDataVersion+':'+dataSync.revision()+':'+attachmentMediaScope()+':'+today()}
+function syncEmployeeNavigation(){
+  document.querySelectorAll('[data-view="stores"],[data-view="schedule"],[data-bottom-view="stores"],[data-bottom-view="schedule"],[data-more-view="stores"],[data-more-view="schedule"]').forEach(button=>button.classList.toggle('hidden',!admin()));
+  $('app')?.classList.toggle('employee-navigation',!admin());
+}
 function setView(name,options={}){
   if(name!=='schedule'&&mixedScheduleMode){mixedScheduleMode=false;renderedViews.delete('schedule');}
   if(name==='signatures'&&activeClient!=='eurospin')name='stores';
+  if(!admin()&&['stores','schedule'].includes(name))name='dashboard';
+  syncEmployeeNavigation();
   syncClientWorkspace();
   if(!$(name+'View')||(name==='operations'&&!admin()))name='dashboard';
   const shouldRender=!options.reuse||renderedViews.get(name)!==viewRevision();
@@ -407,6 +413,7 @@ function setView(name,options={}){
 
 
 function syncImpersonationUi(){
+  syncEmployeeNavigation();
   window.OvergreenVoice?.sync();
   if(typeof closeExtraHoursForRole==='function')closeExtraHoursForRole();
   if(typeof syncExtraEconomicsRole==='function')syncExtraEconomicsRole();
@@ -1029,12 +1036,16 @@ window.addEventListener('pageshow',()=>{if(session)runScheduleRollover().catch((
 function canWorkOnExtra(extra){
   if(!extra)return false;
   if(admin())return true;
-  if(!profile?.id||!['ricevuto','programmato','da_integrare'].includes(extra.stato))return false;
+  if(currentView!=='dashboard'||!profile?.id||!['ricevuto','programmato','da_integrare'].includes(extra.stato))return false;
   const scheduleId=extra.schedule_id||scheduleItems.find(i=>i.id===extra.schedule_item_id)?.schedule_id;
   return extraWorkers.some(w=>w.extra_id===extra.id&&w.profile_id===profile.id)||
     !!scheduleId&&scheduleMembers.some(m=>m.schedule_id===scheduleId&&m.profile_id===profile.id);
 }
-function assignedExtraIds(){return new Set(extraWorkers.filter(w=>w.profile_id===profile?.id).map(w=>w.extra_id))}
+function assignedExtraIds(){
+ const ids=new Set(extraWorkers.filter(w=>w.profile_id===profile?.id).map(w=>w.extra_id));
+ for(const extra of extras){const scheduleId=extra.schedule_id||scheduleItems.find(i=>i.id===extra.schedule_item_id)?.schedule_id;if(scheduleId&&scheduleMembers.some(m=>m.schedule_id===scheduleId&&m.profile_id===profile?.id))ids.add(extra.id)}
+ return ids;
+}
 function openExtraJobs(){return extras.filter(e=>!['completato','annullato'].includes(e.stato))}
 function linkedExtrasForScheduleItem(itemId){return extras.filter(e=>e.schedule_item_id===itemId&&!['completato','annullato'].includes(e.stato))}
 function extraIsDone(e){return e?.stato==='completato'}
@@ -1250,14 +1261,15 @@ function renderDashboard(){window.OvergreenVoice?.sync();renderDashboardSmart();
           }
           c.querySelectorAll('[data-open-linked-extra]').forEach(el=>{
             const open=()=>openExtraById(el.dataset.openLinkedExtra);
-            el.addEventListener('click',ev=>{if(ev.target.closest('[data-open-linked-pdf]'))return;open()});
-            el.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();open()}});
+            el.addEventListener('click',ev=>{if(ev.target.closest('[data-open-linked-pdf],[data-dashboard-work-progress]'))return;open()});
+            el.addEventListener('keydown',ev=>{if(ev.target.closest('button'))return;if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();open()}});
           });
           c.querySelectorAll('[data-open-linked-pdf]').forEach(btn=>btn.addEventListener('click',ev=>{
             ev.preventDefault();ev.stopPropagation();
             const ex=linked.find(e=>e.id===btn.dataset.openLinkedPdf),pdf=attachments.find(a=>a.extra_id===ex?.id&&a.tipo==='pdf_richiesta');
             if(pdf)openAttachment(pdf);
           }));
+          for(const extra of linked.filter(e=>isStructuredExtra(e)&&canWorkOnExtra(e))){const host=[...c.querySelectorAll('[data-open-linked-extra]')].find(el=>el.dataset.openLinkedExtra===extra.id);if(host){const button=document.createElement('button');button.type='button';button.className='secondary';button.dataset.dashboardWorkProgress=extra.id;button.textContent='Lavorazioni';button.onclick=ev=>{ev.stopPropagation();openExtraWorkProgress(extra)};host.appendChild(button)}}
           c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,row.item.id));
           c.querySelector('[data-reopen]')?.addEventListener('click',()=>reopenOrdinaryIntervention(row.item,st));
           list.appendChild(c)
@@ -1267,13 +1279,14 @@ function renderDashboard(){window.OvergreenVoice?.sync();renderDashboardSmart();
           c.className=`dashboard-line-job standalone-extra ${extraCategoryClass(e)} ${done?'is-done':pending?'is-pending':urgent?'is-urgent is-open':'is-open'}`;
           const extraNotes=[e.descrizione,e.note_lorenzo].filter(v=>String(v||'').trim());
           const requestPdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');
-          const canClose=!done&&!isIntesaOrdinaryTicket(e)&&['programmato','ricevuto','da_integrare'].includes(e.stato)&&(admin()||myExtraIds.has(e.id));
+          const canClose=!done&&!isIntesaOrdinaryTicket(e)&&['programmato','ricevuto','da_integrare'].includes(e.stato)&&canWorkOnExtra(e);
           const hasMap=!!extraMapsDestination(e,st);
           c.innerHTML=`<div class="job-main"><span class="job-kind">EXTRA</span>${clientBadge(e)}<span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span><strong>${esc(st?.nome||e.nome_esterno||'Extra')}</strong>${(st?.indirizzo||st?.citta||e.indirizzo_esterno)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo||e.indirizzo_esterno,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${esc(e.titolo)} · ${done?'Completato':urgent?'Urgente':'Da eseguire'}</small>${dashboardExtraDocumentsMarkup(e)}${deadlineLabel(e)}${extraNotes.length?`<div class="dashboard-job-notes"><strong>${done?'Descrizione / note':'Descrizione'}</strong>${extraNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}</div><div class="actions">${hasMap?'<button class="secondary" data-map-extra>Maps</button>':''}${requestPdf?'<button class="secondary" data-pdf-extra>Apri PDF</button>':''}${canClose?'<button data-close-extra-dashboard>✓ Eseguito</button>':''}<button class="secondary" data-open-extra>Apri extra</button></div>`;
           c.dataset.routeAddress=routeAddressForExtra(e,st);if(st)c.dataset.weatherStore=st.id;
           c.querySelector('[data-map-extra]')?.addEventListener('click',()=>openExtraMaps(e,st));
           c.querySelector('[data-pdf-extra]')?.addEventListener('click',()=>openAttachment(requestPdf));
           c.querySelector('[data-close-extra-dashboard]')?.addEventListener('click',()=>openExtraClosureDialog(e));
+          if(isStructuredExtra(e)&&canWorkOnExtra(e)){const progress=document.createElement('button');progress.type='button';progress.className='secondary';progress.dataset.dashboardWorkProgress=e.id;progress.textContent='Lavorazioni';progress.onclick=()=>openExtraWorkProgress(e);c.querySelector('.actions').appendChild(progress)}
           c.querySelector('[data-open-extra]').onclick=()=>openExtraById(e.id);list.appendChild(c)
         }else{
           const a=job.activity,st=stores.find(x=>x.id===a.store_id),ct=workContacts.find(x=>x.id===a.contact_id),done=a.stato==='completato',meta=activityTypeMeta(a.tipo),c=document.createElement('article');
@@ -5857,7 +5870,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=289').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=290').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

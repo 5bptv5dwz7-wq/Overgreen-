@@ -35,6 +35,11 @@
   function initNavigation(){
     const nav=document.querySelector('.header-actions');if(!nav||nav.querySelector('.nav-more'))return;
     const more=disclosure('••• Altro','nav-more');const body=document.createElement('div');body.className='nav-more-body';
+    const clients=document.querySelector('.client-workspaces');
+    if(clients){
+      const label=document.createElement('strong');label.className='workspace-menu-title';label.textContent='Cambia cliente';
+      clients.prepend(label);body.append(clients);clients.classList.remove('hidden');
+    }
     [...nav.children].filter(b=>!['dashboard','stores','schedule','extras'].includes(b.dataset.view)).forEach(b=>body.append(b));
     more.append(body);nav.append(more);
     body.addEventListener('click',e=>{if(e.target.closest('button'))more.open=false});

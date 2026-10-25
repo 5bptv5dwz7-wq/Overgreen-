@@ -1,4 +1,4 @@
-const APP_VERSION='V296';
+const APP_VERSION='V297';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -3295,7 +3295,7 @@ let schedulePickerMode='all';
 let schedulePickerLetter='';
 function selectedScheduleStoreIds(){return [...schedulePickerSelected]}
 function setSchedulePickerValue(value,checked){if(checked)schedulePickerSelected.add(value);else schedulePickerSelected.delete(value);updateScheduleSelectedCount()}
-function updateScheduleSelectedCount(){renderScheduleItemNoteDrafts();const count=schedulePickerSelected.size;if($('scheduleSelectedCount'))$('scheduleSelectedCount').textContent=`${count} selezionat${count===1?'o':'i'}`;if($('scheduleSubmitBtn'))$('scheduleSubmitBtn').textContent=count?`Aggiungi ${count} lavor${count===1?'o':'i'} alla giornata`:'Aggiungi lavori alla giornata'}
+function updateScheduleSelectedCount(){renderScheduleItemNoteDrafts();const count=schedulePickerSelected.size;if($('scheduleSelectedCount'))$('scheduleSelectedCount').textContent=`${count} selezionat${count===1?'o':'i'}`;if($('scheduleSubmitBtn'))$('scheduleSubmitBtn').textContent=count?`Aggiungi ${count} lavor${count===1?'o':'i'} alla giornata`:'Aggiungi lavori alla giornata';window.OvergreenStoreMap?.sync()}
 function resetSchedulePickerSelection(){scheduleItemNoteDrafts.clear();schedulePickerSelected.clear();schedulePickerMode='all';schedulePickerLetter='';if($('scheduleSearch'))$('scheduleSearch').value='';updateScheduleSelectedCount()}
 function schedulePickerMatchesStore(st,q,pickerClient){
   if(pickerClient!=='all'&&String(st.client_type||'eurospin')!==pickerClient)return false;
@@ -5905,7 +5905,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=296').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=297').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

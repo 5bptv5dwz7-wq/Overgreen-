@@ -1,33 +1,32 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
-const src=fs.readFileSync('app.js','utf8').split('function hasJourneyEndpoints(schedule){')[1].split('async function hydrateScheduleTravel')[0];
+const app=fs.readFileSync('app.js','utf8'),source=app.slice(app.indexOf('function addJourneyEndpointCards('),app.indexOf('function historyStatusLabel('));
 class El{
- constructor(){this.children=[];this.nodes={};this.textContent=''}
- set innerHTML(v){this.html=v}
+ constructor(){this.dataset={};this.nodes={};this.textContent=''}
+ before(e){const siblings=this.siblings;siblings.splice(siblings.indexOf(this),0,e);e.siblings=siblings}
+ after(e){const siblings=this.siblings;siblings.splice(siblings.indexOf(this)+1,0,e);e.siblings=siblings}
  querySelector(s){return this.nodes[s]||=new El()}
- appendChild(e){this.children.push(e)}
- insertBefore(e){this.children.push(e)}
- after(e){this.afterNode=e}
 }
-function setup(overrides={}){
- const ctx={stores:[{id:'a',nome:'A'},{id:'b',nome:'B'}],scheduleItems:[{id:'2',schedule_id:'s',store_id:'b',tipo:'ordinario',posizione:4},{id:'1',schedule_id:'s',store_id:'a',tipo:'ordinario',posizione:1,stato:'completato'},{id:'3',schedule_id:'other',store_id:'a',tipo:'ordinario'},{id:'4',schedule_id:'s',store_id:'a',tipo:'ordinario',stato:'riportato'}],scheduleActivities:[],allExtraOccurrences:()=>[],routeAddressForStore:s=>s?'store:'+s.id:'',routeAddressForExtra:e=>e.address,activityRouteAddress:a=>a.indirizzo,extraRoutePosition:e=>e.posizione_giro,document:{createElement:()=>new El()},window:{},formatTravelMinutes:n=>n+' min',renderTravelError:el=>el.textContent='errore',routeBetweenAddresses:async()=>({km:10,minutes:15}),...overrides};vm.createContext(ctx);vm.runInContext('function hasJourneyEndpoints(schedule){'+src,ctx);return ctx;
+const schedule={route_endpoints:{start:{label:'Casa',lat:44,lon:9},end:{label:'Genova',lat:44.4,lon:8.9}}};
+function setup(n=2,route){
+ const cards=Array.from({length:n},(_,i)=>Object.assign(new El(),{dataset:{routeAddress:'store:'+i}})),head=new El(),siblings=[head,...cards];siblings.forEach(e=>e.siblings=siblings);
+ const section={querySelectorAll:()=>cards,querySelector:()=>head},calls=[];
+ const ctx={document:{createElement:()=>new El()},esc:s=>s.replaceAll('<','&lt;'),travelRenderToken:1,scheduleTravelRenderToken:1,formatTravelMinutes:n=>n+' min',renderTravelError:el=>el.textContent='errore',routeBetweenAddresses:async(a,b)=>{calls.push([a,b]);return route?route(a,b):{km:10,minutes:15}}};vm.createContext(ctx);vm.runInContext(source,ctx);return {ctx,section,cards,head,siblings,calls};
 }
-const schedule={id:'s',route_endpoints:{start:{label:'Casa',lat:44,lon:9},end:{label:'Genova',lat:44.4,lon:8.9}}};
-test('full order includes completed stops, endpoints, mixed work; excludes other schedules and rolled items',()=>{
- const c=setup({allExtraOccurrences:()=>[{id:'e',schedule_id:'s',posizione_giro:2,titolo:'Extra',address:'E'},{id:'linked',schedule_id:'s',schedule_item_id:'1'}],scheduleActivities:[{id:'act',schedule_id:'s',posizione:3,titolo:'Attività',indirizzo:'C'}]});
- assert.deepEqual(Array.from(c.scheduleJourneyStops(schedule),s=>s.address),['44,9','store:a','E','C','store:b','44.4,8.9']);
- assert.equal(c.hasJourneyEndpoints({}),false);
+test('dashboard keeps inline distances, departure first and arrival last',async()=>{
+ const {ctx,section,siblings,calls}=setup();await ctx.hydrateWorkerTravel(section,1,schedule);
+ assert.deepEqual(calls,[['44,9','store:0'],['store:0','store:1'],['store:1','44.4,8.9']]);
+ assert.deepEqual(siblings.slice(2).map(e=>e.dataset.routeAddress||'distance'),['44,9','distance','store:0','distance','store:1','distance','44.4,8.9']);
+ assert.match(siblings[1].querySelector('span').textContent,/30 km · 45 min/);
 });
-test('road total includes start and return; endpoint legs are visible',async()=>{
- const c=setup(),section=new El();await c.hydrateJourneyTravel(section,schedule,()=>true);const panel=section.querySelector('.schedule-card-head').afterNode;
- assert.match(panel.querySelector('[data-total]').textContent,/30.0 km · 45 min/);assert.equal(panel.children.length,2);assert.equal(panel.querySelector('[data-legs]').children.length,1);
+test('planning uses the same inline layout with one job and return only',async()=>{
+ const {ctx,section,calls,siblings}=setup(1);await ctx.hydrateScheduleTravel(section,1,{route_endpoints:{end:schedule.route_endpoints.end}});assert.deepEqual(calls,[['store:0','44.4,8.9']]);assert.equal(siblings.at(-1).dataset.routeAddress,'44.4,8.9');
 });
-test('failed leg yields partial total, never a fabricated complete route',async()=>{
- let n=0;const c=setup({routeBetweenAddresses:async()=>{if(++n===2)throw Error('offline');return {km:8,minutes:10,approximate:true}}}),section=new El();await c.hydrateJourneyTravel(section,schedule,()=>true);
- const text=section.querySelector('.schedule-card-head').afterNode.querySelector('[data-total]').textContent;assert.match(text,/Totale parziale: ≈ 16.0 km · 20 min/);assert.match(text,/posizioni indicative/);
+test('no endpoints preserves existing travel between jobs',async()=>{
+ const {ctx,section,calls,siblings}=setup();await ctx.hydrateWorkerTravel(section,1);assert.deepEqual(calls,[['store:0','store:1']]);assert.equal(siblings.filter(e=>e.className==='journey-endpoint-card').length,0);
 });
-test('single work stop with return only still calculates',async()=>{
- const c=setup({scheduleItems:[{id:'1',schedule_id:'s',store_id:'a',tipo:'ordinario'}]}),section=new El();await c.hydrateJourneyTravel(section,{id:'s',route_endpoints:{end:schedule.route_endpoints.end}},()=>true);assert.match(section.querySelector('.schedule-card-head').afterNode.querySelector('[data-total]').textContent,/10.0 km/);
+test('failed boundary leg marks total partial',async()=>{
+ const {ctx,section,siblings}=setup(2,async(a)=>{if(a==='44,9')throw Error('offline');return {km:8,minutes:10}});await ctx.hydrateWorkerTravel(section,1,schedule);assert.match(siblings[1].querySelector('span').textContent,/16 km · 20 min di guida · parziale/);
 });
-test('stale async result cannot overwrite refreshed view',async()=>{
- let active=true;const c=setup({routeBetweenAddresses:async()=>{active=false;return {km:1,minutes:1}}}),section=new El();await c.hydrateJourneyTravel(section,schedule,()=>active);assert.match(section.querySelector('.schedule-card-head').afterNode.querySelector('[data-total]').textContent,/^$/);
+test('no work cards does not calculate a phantom direct home trip',async()=>{
+ const {ctx,section,calls}=setup(0);await ctx.hydrateWorkerTravel(section,1,schedule);assert.equal(calls.length,0);
 });

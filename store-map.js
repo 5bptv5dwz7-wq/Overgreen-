@@ -2,7 +2,7 @@
 (()=>{
  'use strict';
  const G=window.OvergreenLocations;
- let map,layer,dialog,selected=null,filter='all',query='',leafletPromise,origin,opener,planning=false,routeView=false;
+ let map,layer,dialog,selected=null,filter='all',query='',leafletPromise,origin,opener,planning=false,routeView=false,baseLayer=null,baseMode='satellite';
  const labels={all:'Tutte',due:'Da fare',scheduled:'Programmate',reminder:'Sollecitate',missing:'Senza posizione'};
  const color=s=>isStoreProgrammed(s.id)?'#3976d4':activeStoreReminder(s)?'#be3946':isOverdueStore(s)?'#d97706':'#168263';
  const state=s=>isStoreProgrammed(s.id)?(activeStoreReminder(s)?'In programma · Sollecitata':'In programma'):activeStoreReminder(s)?'Sollecitata':isOverdueStore(s)?'Oltre intervallo / da avviare':storeHasInterval(s)?'Nei tempi':'Su richiesta';
@@ -18,6 +18,18 @@
    const timer=setTimeout(()=>reject(new Error('Caricamento mappa scaduto. Chiudi e riprova.')),12000);
    js.onload=()=>{clearTimeout(timer);resolve(window.L)};js.onerror=()=>{clearTimeout(timer);reject(new Error('Mappa non disponibile. Controlla la connessione e riprova.'))};document.head.append(js);
   }).catch(e=>{leafletPromise=null;throw e});return leafletPromise;
+ }
+ function applyBasemap(mode){
+  baseMode=mode==='map'?'map':'satellite';
+  dialog.querySelectorAll('[data-basemap]').forEach(b=>{const active=b.dataset.basemap===baseMode;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active))});
+  try{localStorage.setItem('overgreen-map-base',baseMode)}catch{}
+  if(!map)return;if(baseLayer)baseLayer.remove();
+  const satellite=baseMode==='satellite';
+  baseLayer=window.L.tileLayer(satellite?'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}':'https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+   maxZoom:19,attribution:satellite?'Imagery © Esri, Vantor, Earthstar Geographics, GIS User Community':'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'
+  }).addTo(map);
+  const msg=dialog.querySelector('.ogm-message');msg.hidden=true;
+  baseLayer.on('tileerror',()=>{if(!dialog.open)return;msg.hidden=false;msg.textContent='Sfondo non disponibile. Controlla la connessione o cambia tra Mappa e Satellite.'});
  }
  function leave(action){dialog.close();if(action)action()}
  function choose(s,fly=true){if(planning){toggleStop(s);return}selected=s.id;renderDetail(s);if(map&&fly){const p=G.confirmedPoint(s);if(p)map.setView([p.lat,p.lon],Math.max(13,map.getZoom()))}drawPins();renderList()}
@@ -48,11 +60,15 @@
  function renderPlanSummary(){
   if(!planning)return;
   const route=routeStores(),extraCount=selectedScheduleStoreIds().filter(id=>id.startsWith('extra:')).length,missing=route.filter(s=>!G.confirmedPoint(s)).length;
-  dialog.querySelector('.ogm-plan-count').textContent=`${route.length} tappe selezionate`;
+  const ep=window.OvergreenRouteEndpoints?.get()||{};
+  dialog.querySelector('.ogm-plan-count').textContent=`${route.length} tappe selezionate${ep.start?' · P':''}${ep.end?' · R':''}`;
   dialog.querySelector('.ogm-plan-note').textContent='Linea indicativa, non percorso stradale'+(missing?` · ${missing} senza posizione`:'')+(extraCount?` · ${extraCount} extra conservati nel modulo, dopo le sedi`:'');
   dialog.querySelector('[data-route-list]').textContent=`Giro (${route.length})`;
   const chips=dialog.querySelector('.ogm-plan-chips');chips.replaceChildren();
+  function endpointChip(p,title){if(!p)return;const b=document.createElement('button');b.type='button';b.textContent=title+' · '+p.label;b.onclick=()=>{if(map)map.setView([p.lat,p.lon],12)};chips.append(b)}
+  endpointChip(ep.start,'Partenza');
   route.forEach((s,i)=>{const chip=document.createElement('button');chip.type='button';chip.textContent=`${i+1} · ${s.nome}`;chip.onclick=showRoute;chips.append(chip)});
+  endpointChip(ep.end,'Ritorno');
  }
  function renderDetail(s){
   const box=dialog.querySelector('.ogm-detail');box.hidden=!s;if(!s)return;
@@ -72,10 +88,19 @@
  function drawPins(){
   if(!map)return;layer.clearLayers();const L=window.L;
   const route=planning?routeStores():[],order=new Map(route.map((s,i)=>[s.id,i+1]));
-  // A missing position breaks the line rather than suggesting a direct leg past it.
-  if(planning)for(let i=1;i<route.length;i++){
-   const a=G.confirmedPoint(route[i-1]),b=G.confirmedPoint(route[i]);
+  const endpoints=planning?(window.OvergreenRouteEndpoints?.get()||{}):{};
+  const path=[...(endpoints.start?[endpoints.start]:[]),...route.map(G.confirmedPoint),...(endpoints.end?[endpoints.end]:[])];
+  // Preserve gaps where work stops have no coordinates.
+  if(planning)for(let i=1;i<path.length;i++){
+   const a=path[i-1],b=path[i];
    if(a&&b){const segment=[[a.lat,a.lon],[b.lat,b.lon]];L.polyline(segment,{color:'#fff',weight:7,opacity:.9,interactive:false}).addTo(layer);L.polyline(segment,{color:'#2563eb',weight:4,opacity:.9,interactive:false}).addTo(layer)}
+  }
+  const same=endpoints.start&&endpoints.end&&endpoints.start.lat===endpoints.end.lat&&endpoints.start.lon===endpoints.end.lon;
+  for(const [key,title] of [['start',same?'P/R':'P'],['end','R']]){
+   const p=endpoints[key];if(!p||(same&&key==='end'))continue;
+   const marker=L.marker([p.lat,p.lon],{title:p.label,zIndexOffset:1100,icon:L.divIcon({className:'ogm-marker',html:`<span class="ogm-endpoint-pin">${title}</span>`,iconSize:[40,40],iconAnchor:[20,20]})}).addTo(layer);
+   const label=document.createElement('span');label.textContent=(same?'Partenza e ritorno':key==='start'?'Partenza':'Ritorno')+' · '+p.label;
+   marker.bindTooltip(label,{permanent:map.getZoom()>=9,direction:'top',offset:[0,-14],className:'ogm-store-label',opacity:1});
   }
   const visible=planning?[...new Map([...filtered(),...route].map(s=>[s.id,s])).values()]:filtered();
   const points=visible.map(s=>({s,p:G.confirmedPoint(s)})).filter(x=>x.p);
@@ -89,7 +114,7 @@
    }
   }
  }
- function fit(){if(!map)return;const p=filtered().map(G.confirmedPoint).filter(Boolean);if(p.length)map.fitBounds(p.map(x=>[x.lat,x.lon]),{padding:[45,45],maxZoom:13});else map.setView([45,9.5],6)}
+ function fit(){if(!map)return;const ep=planning?(window.OvergreenRouteEndpoints?.get()||{}):{};const p=[...filtered().map(G.confirmedPoint),...(planning?routeStores().map(G.confirmedPoint):[]),ep.start,ep.end].filter(Boolean);if(p.length)map.fitBounds(p.map(x=>[x.lat,x.lon]),{padding:[45,45],maxZoom:13});else map.setView([45,9.5],6)}
  function refresh(fitMap=false){
   const list=filtered(),mapped=list.filter(G.confirmedPoint).length;
   dialog.querySelector('.ogm-count').textContent=`${mapped} sulla mappa · ${list.length} sedi`;
@@ -108,9 +133,11 @@
   footer.innerHTML='<div class="ogm-plan-top"><div><strong class="ogm-plan-count" aria-live="polite"></strong><small>Tocca un puntino per aggiungerlo o toglierlo dal giro.</small></div><button type="button" data-plan-done>Continua →</button></div><div class="ogm-plan-chips"></div><small class="ogm-plan-note"></small>';
   dialog.querySelector('.ogm-shell').append(footer);
   footer.querySelector('[data-plan-done]').onclick=()=>leave(()=>{document.getElementById('scheduleForm').scrollIntoView({behavior:'smooth',block:'start'});});
+  const bases=document.createElement('div');bases.className='ogm-basemap';bases.innerHTML='<button type="button" data-basemap="map">Mappa</button><button type="button" data-basemap="satellite">Satellite</button>';dialog.querySelector('.ogm-stage').append(bases);bases.querySelectorAll('button').forEach(b=>b.onclick=()=>applyBasemap(b.dataset.basemap));
+  const epPanel=document.createElement('details');epPanel.className='route-endpoints-panel';epPanel.innerHTML='<summary>Partenza e ritorno</summary>';const epContent=document.createElement('div');epPanel.append(epContent);footer.prepend(epPanel);window.OvergreenRouteEndpoints?.createEditor(epContent,'draft');
   document.body.append(dialog);
   dialog.querySelector('.ogm-close').onclick=()=>leave();
-  dialog.addEventListener('close',()=>{if(map){map.remove();map=null;layer=null}origin=null;document.body.classList.remove('ogm-open');opener?.focus()});
+  dialog.addEventListener('close',()=>{if(map){map.remove();map=null;layer=null;baseLayer=null}origin=null;document.body.classList.remove('ogm-open');opener?.focus()});
   dialog.querySelector('input').oninput=e=>{query=e.target.value.trim().toLocaleLowerCase('it');refresh(true)};
   dialog.querySelectorAll('[data-map-filter]').forEach(b=>b.onclick=()=>{filter=b.dataset.mapFilter;refresh(true)});
   dialog.querySelector('.ogm-missing').onclick=()=>{filter='missing';routeView=false;dialog.classList.add('ogm-show-list');dialog.querySelector('.ogm-list-toggle').setAttribute('aria-expanded','true');refresh()};
@@ -132,8 +159,7 @@
   dialog.showModal();document.body.classList.add('ogm-open');refresh();
   const msg=dialog.querySelector('.ogm-message');msg.hidden=false;msg.textContent='Caricamento mappa…';
   try{const L=await leaflet();if(!dialog.open||map)return;map=L.map('ogm-canvas',{zoomControl:false}).setView([45,9.5],6);L.control.zoom({position:'bottomright'}).addTo(map);
-   const tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(map);
-   tiles.on('tileerror',()=>{msg.hidden=false;msg.textContent='Sfondo non disponibile: verifica la connessione. L’elenco resta utilizzabile.'});
+   try{baseMode=localStorage.getItem('overgreen-map-base')||'satellite'}catch{}applyBasemap(baseMode);
    layer=L.layerGroup().addTo(map);map.on('zoomend',drawPins);msg.hidden=true;map.invalidateSize();refresh(true);
   }catch(e){msg.hidden=false;msg.textContent=e.message}
  }

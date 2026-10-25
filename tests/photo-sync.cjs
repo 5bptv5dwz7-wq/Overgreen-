@@ -29,3 +29,10 @@ test('another account cannot view or send an existing local queue',async t=>{con
 test('concurrent triggers share one worker and a single upload per photo',async t=>{const h=fixture(t);await h.q.prepare(attempt());await Promise.all([h.q.run(),h.q.run(),h.q.run()]);assert.equal(h.submits.length,1);assert.equal(h.uploads.length,2)});
 test('new recovery files can attach to an already-approved intervention',async t=>{const h=fixture(t);await h.q.attach('approved',[new File(['late'],'late.jpg',{type:'image/jpeg'})],[randomUUID()]);await h.q.run();assert.equal(h.submits.length,0);assert.equal(h.receipts.size,1)});
 test('restoring a Blob backup preserves its original file name and bytes',async t=>{const h=fixture(t),id=randomUUID();await h.q.attach('approved',[new File(['unique-photo'],'camera-original.jpg',{type:'image/jpeg'})],[id]);const backup=await h.store.get('photos',id);await h.store.tx(['jobs'],'readwrite',t=>t.objectStore('jobs').delete(id));await h.q.restore([backup]);const restored=(await h.q.snapshot()).jobs[0];assert.equal(restored.fileName,'camera-original.jpg');assert.equal(await restored.file.text(),'unique-photo');await h.q.run();assert.equal(h.receipts.size,1)});
+test('explicitly discarded Sarzana photos are removed and never restored or uploaded',async t=>{
+ const h=fixture(t),id='7875cffc-217a-4081-bf35-015385fada0c',row={id,interventionId:'sarzana',actorProfileId:'worker',callerId:'worker',file:new Blob(['failed']),fileName:'failed.jpg',nextAttemptAt:0};
+ await h.store.put('jobs',row);await h.store.put('photos',row);
+ await h.q.run();assert.equal(h.uploads.length,0);assert.equal(await h.store.get('jobs',id),undefined);assert.equal(await h.store.get('photos',id),undefined);
+ await h.q.restore([row]);assert.equal((await h.q.snapshot()).jobs.length,0);
+ const good={...row,id:'good-photo',uploadedAt:123};await h.store.put('photos',good);await h.q.snapshot();assert.equal((await h.store.get('photos','good-photo')).uploadedAt,123);
+});

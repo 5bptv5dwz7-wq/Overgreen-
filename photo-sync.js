@@ -3,6 +3,10 @@
   'use strict';
   const DB='overgreen-photo-outbox-v206',STORES=['submissions','jobs','photos','receipts'];
   const RETENTION=7*24*60*60*1000;
+  // Six failed Sarzana uploads explicitly discarded by the owner on 25 October 2026.
+  const DISCARDED_IDS=new Set(['7875cffc-217a-4081-bf35-015385fada0c','710dcb03-7a4f-4fec-90dc-1c460caba574','c4a5d226-399d-4ae2-b5c0-6ffd3af8e04e','957f7aa3-02dd-40a3-9449-46a8e8a248f9','8ccc8521-20f5-4785-a911-16a3e981c1f0','8287f236-5f8d-4c0f-844a-dedae64aed77']);
+  const isDiscarded=id=>DISCARDED_IDS.has(id);
+
   function errorText(e){return String(e?.message||e||'Errore sconosciuto').slice(0,500)}
   function temporary(e){const status=Number(e?.status||e?.statusCode);return !(['LOCAL_FILE_MISSING','INVALID_PHOTO'].includes(e?.code)||[400,403,404,413,415,422].includes(status)||['42501','23514','P0001','22P02'].includes(e?.code))}
   function backoff(n){return Math.min(300000,3000*2**Math.min(7,Math.max(0,n-1)))}
@@ -131,7 +135,9 @@
       }
       await acknowledge(job,receipt);
     }
+    async function discardCancelled(){await db.tx(['jobs','photos'],'readwrite',t=>{for(const id of DISCARDED_IDS){t.objectStore('jobs').delete(id);t.objectStore('photos').delete(id)}})}
     async function pass(){
+      await discardCancelled();
       const who=actor();if(!who||stopped)return;
       lastError='';
       for(const row of (await db.all('submissions')).filter(r=>belongs(r,who)&&!r.result&&!r.blocked&&r.nextAttemptAt<=now()).sort((a,b)=>a.createdAt-b.createdAt)){
@@ -156,7 +162,7 @@
     async function resume(){const who=actor();if(!who)return;for(const name of ['submissions','jobs'])for(const r of await db.all(name))if(belongs(r,who)&&!r.blocked&&!(name==='submissions'&&r.result)){r.nextAttemptAt=0;await db.put(name,r)}return run()}
     async function restore(rows){
       const who=actor();if(!who)return;
-      for(const original of rows){if(!belongs(original,who)||!original.interventionId)continue;if(await db.get('receipts',original.id)||await db.get('jobs',original.id))continue;
+      for(const original of rows){if(isDiscarded(original.id)||!belongs(original,who)||!original.interventionId)continue;if(await db.get('receipts',original.id)||await db.get('jobs',original.id))continue;
         // Already-acknowledged backups are never resurrected after an intentional deletion.
         if(original.uploadedAt)continue;
         const backup=await db.get('photos',original.id);if(backup?.uploadedAt)continue;
@@ -176,9 +182,9 @@
       const photos=t.objectStore('photos').openCursor();photos.onsuccess=()=>{const c=photos.result;if(c){if(c.value.uploadedAt&&c.value.uploadedAt<cut)c.delete();c.continue()}};
       const submissions=t.objectStore('submissions').openCursor();submissions.onsuccess=()=>{const c=submissions.result;if(c){const r=c.value;if(r.result&&r.createdAt<cut){const pending=t.objectStore('jobs').getAll();pending.onsuccess=()=>{if(!pending.result.some(j=>j.requestId===r.id))t.objectStore('submissions').delete(r.id)}}c.continue()}};
     })}
-    async function snapshot(){return {jobs:(await db.all('jobs')).filter(r=>belongs(r)),submissions:(await db.all('submissions')).filter(r=>belongs(r)),running:!!running,error:lastError}}
+    async function snapshot(){await discardCancelled();return {jobs:(await db.all('jobs')).filter(r=>belongs(r)),submissions:(await db.all('submissions')).filter(r=>belongs(r)),running:!!running,error:lastError}}
     function stop(){stopped=true;clearTimeout(timer);timer=null}
     return {prepare,run,retry,resume,restore,attach,snapshot,cleanup,stop,db,getSubmission:id=>db.get('submissions',id)};
   }
-  return {create,storage,temporary,backoff,timeout,connectionLost,retryLocal,DB};
+  return {isDiscarded,create,storage,temporary,backoff,timeout,connectionLost,retryLocal,DB};
 });

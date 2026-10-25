@@ -270,3 +270,40 @@
 .schedule-item-note>strong{display:block;font-size:12px;letter-spacing:.03em}.schedule-item-note>p{margin:7px 0 0!important;font-size:16px!important;font-weight:650;line-height:1.5!important;white-space:pre-wrap}
 .schedule-item-notes-drafts{margin:14px 0;padding:14px;border:1px solid #e8d699;border-radius:12px;background:#fffcf2}.schedule-item-notes-drafts h3{margin:0;font-size:16px}.schedule-note-draft{border-top:1px solid #e8dfc4;padding:10px 0}.schedule-note-draft summary{cursor:pointer;font-weight:700;font-size:14px}.schedule-note-draft summary span{display:inline-block;margin-left:8px;color:#896300;font-size:12px}.schedule-note-draft label{margin-top:12px;display:grid;gap:6px}.schedule-note-draft textarea{width:100%;box-sizing:border-box}
 #scheduleItemNoteDialog{width:min(520px,calc(100vw - 24px));padding:22px;box-sizing:border-box}#scheduleItemNoteForm{display:grid;gap:14px}#scheduleItemNoteForm label{display:grid;gap:7px}#scheduleItemNoteText{width:100%;box-sizing:border-box;font-size:16px}
+
+/* V288: compact daily overview, explicit counts, inline sync notices. */
+#app main #dashboardView>.dashboard-grid{margin:0;gap:8px}
+#app main #dashboardView .dash-card{border:1px solid #dce8df;border-radius:14px;box-shadow:none;min-height:80px;padding:12px;background:#fff}
+#app main #dashboardView .dash-card:first-child{background:#175c40;color:#fff;border-color:#175c40}
+#app main #dashboardView .dash-card:first-child span{color:#e5f2eb}
+#app main #dashboardView .dash-card strong{font-size:27px}
+#app main #dashboardProgram{border-top:1px solid #d4e3d9;padding:12px;margin-top:12px}
+#app main #dashboardProgram>.panel-head{flex-wrap:wrap;gap:8px;margin-bottom:10px}
+#app main #dashboardProgram h2{font-size:17px}
+#app main #dashboardNext{padding:0;gap:0}
+#app main #dashboardNext .dashboard-day{margin:0;border:0;border-bottom:1px solid #e6ede8;border-radius:0}
+#app main #dashboardNext .dashboard-day:last-child{border-bottom:0}
+#app main #dashboardNext .dashboard-day>summary{min-height:62px;padding:10px 4px;gap:8px}
+#app main #dashboardNext .dashboard-day-title{display:flex;flex-direction:column;gap:4px}
+#app main #dashboardNext .dashboard-day-title strong{font-size:14px;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+#app main #dashboardNext .dashboard-day-title strong small{font-size:11px;font-weight:400;margin:0}
+#dashboardNext .dashboard-day-mix{font-size:11px;color:#64766b;line-height:1.3}
+#dashboardNext .dashboard-day-total{display:flex;flex-direction:column;align-items:flex-end;gap:4px;max-width:45%;text-align:right}
+#dashboardNext .dashboard-day-total b{font-size:13px;white-space:nowrap;color:#245c42}
+#dashboardNext .dashboard-day-total small{font-size:10px;line-height:1.35}
+#app main #dashboardNext .dashboard-day-progress-label{font-size:11px;padding:8px}
+#app main #dashboardNext .dashboard-day.is-today>summary{border-radius:8px;padding-left:8px;padding-right:8px}
+#app main #syncFloatingBadge{position:static;transform:none;width:100%;margin:0 0 12px;padding:12px;text-align:left;box-shadow:none;border:1px solid #e6d3a1;background:#fff7e3;color:#725615;border-radius:12px;font-size:12px;line-height:1.4}
+@media(max-width:600px){
+ #app>header{position:relative;padding:calc(8px + env(safe-area-inset-top)) 12px 8px;gap:8px}
+ #app>header .eyebrow{margin:0 0 3px;font-size:9px}
+ #app>header h1{font-size:21px;line-height:1.2}
+ #app>header .header-user-row{margin-top:3px;font-size:10px}
+ #app>header .header-actions>button.icon:is([data-view=dashboard],[data-view=stores],[data-view=schedule],[data-view=extras]){min-height:44px;height:44px;padding:5px 2px;gap:2px;border-radius:10px;font-size:15px}
+ #app>header .nav-more>summary{min-height:44px;height:44px;border-radius:10px}
+ #app>header .nav-label{font-size:10px}
+ #app main{padding:12px 12px 28px}
+ #app main #dashboardView .dash-card{min-height:78px;padding:10px;gap:4px}
+ #app main #dashboardView .dash-card span{font-size:11px}
+ #dashDoneDetails{font-size:10px;line-height:1.4;margin:6px 2px 10px}
+}

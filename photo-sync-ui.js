@@ -52,6 +52,11 @@ async function legacyPhotoRows(){
   const results=await Promise.allSettled([legacyPhotoDb('overgreen-upload-queue-v1','jobs',s=>s.getAll()),legacyPhotoDb('overgreen-photo-recovery-v1','photos',s=>s.getAll())]);
   const byId=new Map();for(const r of results)if(r.status==='fulfilled')for(const row of r.value){const old=byId.get(row.id);if(!old||(!old.file&&row.file))byId.set(row.id,row)}
   if(results.some(r=>r.status==='rejected'))photoRemoteError='Una vecchia coda non è leggibile: riprova il recupero su questo telefono.';
+  for(const id of byId.keys())if(OvergreenPhotoSync.isDiscarded?.(id)){
+    await legacyPhotoDb('overgreen-upload-queue-v1','jobs',s=>s.delete(id),true);
+    await legacyPhotoDb('overgreen-photo-recovery-v1','photos',s=>s.delete(id),true);
+    byId.delete(id);
+  }
   return [...byId.values()];
 }
 async function acknowledgeLegacyPhoto(job){

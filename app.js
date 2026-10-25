@@ -1,4 +1,4 @@
-const APP_VERSION='V287';
+const APP_VERSION='V288';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -137,7 +137,7 @@ function ensureCloudSettingsUi(){
   <form id="cloudAddEmployeeForm" class="settings-form"><input id="cloudEmployeeName" placeholder="Nome" required><input id="cloudEmployeeEmail" type="email" placeholder="Email di accesso" required><input id="cloudEmployeePassword" type="password" minlength="8" placeholder="Password iniziale" required><button type="submit">Crea dipendente</button></form></div>`;
   const usage=document.createElement('section');usage.id='supabaseUsageCard';usage.className='settings-card admin-only';usage.innerHTML=`<div class="settings-section-head"><div><h3>📊 Utilizzo Supabase</h3><p>Spazio occupato dai file e dimensione del database del progetto.</p></div></div><div class="usage-grid"><div class="usage-metric"><span>Storage</span><strong id="usageStorage">—</strong><small id="usageStorageDetail" class="muted">Calcolo in corso…</small></div><div class="usage-metric"><span>Database</span><strong id="usageDatabase">—</strong><small id="usageDatabaseDetail" class="muted">Calcolo in corso…</small></div></div><p id="usageError" class="error hidden"></p><button id="refreshUsageBtn" type="button" class="secondary">Aggiorna utilizzo</button><hr><div class="settings-section-head"><div><h3>🗜️ Ottimizza immagini Storage</h3><p>Controlla le immagini già salvate e stima quanto spazio può essere recuperato. L’analisi non modifica alcun file.</p></div></div><div id="storageOptimizeResult" class="storage-optimize-result muted">Premi “Analizza immagini” per iniziare.</div><div class="actions storage-optimize-actions"><button id="analyzeStorageBtn" type="button" class="secondary">Analizza immagini</button><button id="optimizeStorageBtn" type="button" class="hidden">Comprimi file ottimizzabili</button></div>`;wrap.appendChild(usage);
   const sync=document.createElement('section');sync.className='settings-card';sync.innerHTML=`<h3>☁️ Sincronizzazione</h3><p id="backgroundSyncStatus">Controllo…</p><button id="retryUploadsBtn" type="button" class="secondary">Riprova caricamenti</button>`;wrap.appendChild(sync);
-  const badge=document.createElement('button');badge.id='syncFloatingBadge';badge.type='button';badge.className='sync-floating hidden';badge.onclick=()=>{setView?.('settings');};document.body.appendChild(badge);
+  const badge=document.createElement('button');badge.id='syncFloatingBadge';badge.type='button';badge.className='sync-floating hidden';badge.onclick=()=>{setView?.('settings');};$('app').querySelector('main').prepend(badge);
   $('selfPasswordForm').onsubmit=async e=>{e.preventDefault();const pw=$('selfNewPassword').value;const {error}=await sb.auth.updateUser({password:pw});if(error)return alert(error.message);e.target.reset();toast('Password aggiornata')};
   $('cloudAddEmployeeForm').onsubmit=async e=>{e.preventDefault();const payload={action:'create',nome:$('cloudEmployeeName').value.trim(),email:$('cloudEmployeeEmail').value.trim(),password:$('cloudEmployeePassword').value};const {data,error}=await sb.functions.invoke('manage-user',{body:payload});if(error||data?.error)return alert(data?.error||error.message);e.target.reset();toast('Dipendente creato');cloudUsersLoadedAt=0;await loadAll()};
   $('retryUploadsBtn').onclick=retryUploads;const repairBtn=$('repairPhotoSyncBtn');if(repairBtn)repairBtn.onclick=()=>repairEmployeePhotoSync(repairBtn);$('refreshUsageBtn').onclick=loadSupabaseUsage;$('analyzeStorageBtn').onclick=analyzeStorageImages;$('optimizeStorageBtn').onclick=optimizeStorageImages;
@@ -1184,9 +1184,11 @@ function renderDashboard(){window.OvergreenVoice?.sync();renderDashboardSmart();
     const allJobsCount=ordinary.length+dayExtras.length+dayActivities.length;
     const completedCount=ordinary.filter(x=>itemDone(x.item)).length+dayExtras.filter(extraIsDone).length+dayActivities.filter(a=>a.stato==='completato').length;
     const percent=allJobsCount?Math.round(completedCount/allJobsCount*100):0;
-    const details=document.createElement('details');details.className='dashboard-day'+(offset===0?' is-today':'');details.open=offset===0;
+    const details=document.createElement('details');details.className='dashboard-day'+(offset===0?' is-today':'');details.open=offset===0&&allJobsCount>0;
     const dayName=new Intl.DateTimeFormat('it-IT',{weekday:'long'}).format(d);
-    details.innerHTML=`<summary><span class="dashboard-day-title"><strong>${offset===0?'Oggi · ':''}${esc(dayName.charAt(0).toUpperCase()+dayName.slice(1))}</strong><small>${fmt(date)}</small></span><span class="dashboard-day-summary"><span class="day-type-count"><b>${ordinary.length}</b> ordinari</span><span class="day-type-count extra"><b>${dayExtras.length}</b> extra</span><span class="day-type-count"><b>${dayActivities.length}</b> attività</span><span class="dashboard-day-count">${allJobsCount}</span></span></summary><div class="dashboard-day-progress"><div style="width:${percent}%"></div></div><div class="dashboard-day-progress-label"><strong>${percent}%</strong><span>${completedCount} completati su ${allJobsCount} in programma · ${ordinary.length} ordinari, ${dayExtras.length} extra, ${dayActivities.length} attività</span></div><div class="dashboard-day-jobs"></div>`;
+    const mix=[['eurospin','Eurospin'],['intesa','Intesa'],['privato','Altri']].map(([key,label])=>{const n=ordinary.filter(x=>clientType(stores.find(s=>s.id===x.item.store_id))===key).length+dayExtras.filter(e=>clientType(e)===key).length;return n?`${label} ${n}`:''}).filter(Boolean).join(' · ');
+    const kinds=[ordinary.length?`${ordinary.length} ${ordinary.length===1?'ordinario':'ordinari'}`:'',dayExtras.length?`${dayExtras.length} extra/ticket`:'',dayActivities.length?`${dayActivities.length} attività`:''].filter(Boolean).join(' · ');
+    details.innerHTML=`<summary><span class="dashboard-day-title"><strong>${offset===0?'Oggi · ':''}${esc(dayName.charAt(0).toUpperCase()+dayName.slice(1))}<small>${esc(fmt(date).slice(0,5))}</small></strong><span class="dashboard-day-mix">${esc(mix|| (allJobsCount?'Attività aziendali':'Nessun lavoro'))}</span></span><span class="dashboard-day-total"><b>${allJobsCount} ${allJobsCount===1?'lavoro':'lavori'}</b><small>${esc(kinds)}</small></span></summary><div class="dashboard-day-progress"><div style="width:${percent}%"></div></div><div class="dashboard-day-progress-label"><strong>${percent}%</strong><span>${completedCount} completati su ${allJobsCount} in programma</span></div><div class="dashboard-day-jobs"></div>`;
     const box=details.querySelector('.dashboard-day-jobs');
     const groups=new Map();
     const addToGroup=(key,label,job)=>{if(!groups.has(key))groups.set(key,{label,jobs:[]});groups.get(key).jobs.push(job)};
@@ -5843,7 +5845,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=287').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=288').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

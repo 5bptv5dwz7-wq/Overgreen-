@@ -44,6 +44,12 @@ vm.runInContext(`(async()=>{
  assert.match($('dashboardNext').querySelector('summary').textContent,/4 lavori/);
  assert.match($('dashboardNext').querySelector('summary').textContent,/Eurospin 2 · Intesa 2/);
  ensureCloudSettingsUi();assert.equal($('syncFloatingBadge')?.parentElement?.tagName,'MAIN');
+ const job=$('dashboardNext').querySelector('.ordinary');
+ assert.equal(job.querySelector('.dashboard-job-tags .client-badge')?.textContent.includes('Eurospin'),true);
+ assert(job.querySelector(':scope > .actions [data-done]'));assert(job.querySelector(':scope > .actions [data-map]'));
+ assert(job.querySelector('.dashboard-job-more [data-share]'));assert(!job.querySelector('.dashboard-job-more').hasAttribute('open'));
+ let selectedNote=null;openScheduleItemNote=item=>selectedNote=item.id;
+ [...job.querySelectorAll('.dashboard-job-more button')].find(b=>b.textContent.includes('Appunto')).click();assert.equal(selectedNote,'ise');
  // Deep links select the record's workspace and invalidate a cached opposite view.
  openExtraById('ee');assert.equal(activeClient,'eurospin');assert.equal(currentView,'extras');assert(!$('extrasList').textContent.includes('INTESA'));
  openExtraById('ei');assert.equal(activeClient,'intesa');assert(!$('extrasList').textContent.includes('EURO'));

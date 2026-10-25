@@ -78,9 +78,20 @@
    if(node.dataset.started)return;node.dataset.started='1';
    try{
     // Start the independent history request while the forecast is loading.
-    if(options.loadGrowth)void options.loadGrowth(store).catch(()=>{});
+    if(options.loadGrowth&&!options.compact)void options.loadGrowth(store).catch(()=>{});
     const result=await options.load(store);if(!node.isConnected)return;
     const w=summarize(result.forecast,date);if(!w)throw new Error('Previsione non ancora disponibile');
+    if(options.compact){
+     node.className='store-weather weather-compact'+(w.condition.rank>=3?' has-rain':'');node.innerHTML='';
+     const button=document.createElement('button');button.type='button';button.className='weather-compact-button';
+     const label=document.createElement('span');label.textContent=`${w.condition.icon} ${w.min}–${w.max} °C${w.rain==null?'':` · ≈ ${w.rain.toLocaleString('it-IT')} mm`}`;
+     const hint=document.createElement('span');hint.textContent='Dettagli ›';button.append(label,hint);
+     button.setAttribute('aria-label',`${w.condition.label}. ${label.textContent}. Apri meteo e crescita erba per ${store.nome||'questa sede'}`);
+     button.onclick=event=>{event.stopPropagation();openBands(store,date,result,options)};node.appendChild(button);
+     const caveats=[w.partial?'Ore disponibili':null,result.approximate?'Zona stimata':null,result.stale?'Ultimo dato disponibile':null].filter(Boolean);
+     if(caveats.length){const info=document.createElement('small');info.textContent=caveats.join(' · ');node.appendChild(info)}
+     return;
+    }
     node.className='store-weather'+(w.condition.rank>=3?' has-rain':'');
     node.innerHTML='';
     const title=document.createElement('strong');title.textContent=`${w.condition.icon} ${w.condition.label}`;node.appendChild(title);

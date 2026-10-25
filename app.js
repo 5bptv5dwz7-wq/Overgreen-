@@ -1,4 +1,4 @@
-const APP_VERSION='V288';
+const APP_VERSION='V289';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -1121,6 +1121,17 @@ function renderGlobalSearchEverywhere(){const i=$("globalSearchEverywhere"),r=$(
 function anomalyCounts(){const orphan=attachments.filter(a=>(a.intervention_id&&!interventions.some(i=>i.id===a.intervention_id))||(a.extra_id&&!extras.some(e=>e.id===a.extra_id))).length,noWorker=interventions.filter(i=>["in_attesa","convalidato"].includes(i.stato)&&!interventionWorkers.some(w=>w.intervention_id===i.id)).length,noTarget=extras.filter(e=>clientType(e)==="eurospin"&&!["completato","annullato"].includes(e.stato)&&!String(e.numero_target||"").trim()).length;return{orphan,noWorker,noTarget,total:orphan+noWorker+noTarget}}
 function renderHealthCenter(){if(!$("healthSummary")||!admin())return;const h=anomalyCounts();$("healthSummary").innerHTML=`<div class="health-kpi"><strong>${h.total}</strong><span>Anomalie</span></div><div class="health-kpi"><strong>${attachments.length}</strong><span>Allegati</span></div><div class="health-kpi"><strong>${interventions.length+extras.length}</strong><span>Lavori</span></div>`;$("healthDetails").innerHTML=[["Allegati orfani",h.orphan],["Chiusure senza operatore",h.noWorker],["Extra Eurospin senza target",h.noTarget]].map(x=>`<div class="health-issue"><strong>${x[1]?"⚠️":"✓"} ${x[0]} · ${x[1]}</strong></div>`).join("")}
 function renderDashboardSmart(){const r=$("dashboardSmart");if(!r)return;if(!admin()){r.innerHTML="";r.classList.add("hidden");return}r.classList.remove("hidden");const h=anomalyCounts(),p=interventions.filter(i=>i.stato==="in_attesa").length+extras.filter(e=>e.stato==="in_attesa").length,o=extras.filter(e=>!["completato","annullato"].includes(e.stato)).length;r.innerHTML=`<button class="smart-chip ${p?"warn":"good"}" data-s="p"><strong>${p}</strong><span>Da convalidare</span></button><button class="smart-chip ${o?"warn":"good"}" data-s="e"><strong>${o}</strong><span>Extra aperti</span></button>`;r.querySelector('[data-s="p"]').onclick=()=>p?openPendingDialog():toast("Nessuna convalida");r.querySelector('[data-s="e"]').onclick=()=>setView("extras")}
+function compactDashboardJob(card){
+  const main=card.querySelector('.job-main'),tags=main?[...main.children].filter(el=>el.matches('.job-kind,.client-badge,.extra-category-badge')):[];
+  if(tags.length){const row=document.createElement('div');row.className='dashboard-job-tags';main.prepend(row);tags.forEach(tag=>row.appendChild(tag))}
+  const actions=card.querySelector(':scope > .actions');if(!actions)return;
+  const primary=actions.querySelector('[data-done],[data-close-extra-dashboard],[data-done-activity]');if(primary)actions.prepend(primary);
+  const secondary=[...actions.children].filter(el=>!el.matches('[data-map],[data-map-extra],[data-map-activity],[data-done],[data-close-extra-dashboard],[data-done-activity],[data-open-extra],button:disabled'));
+  if(!secondary.length)return;
+  const more=document.createElement('details');more.className='dashboard-job-more';
+  const summary=document.createElement('summary');summary.textContent='Altre azioni';more.appendChild(summary);
+  const body=document.createElement('div');body.className='actions';secondary.forEach(button=>body.appendChild(button));more.appendChild(body);card.appendChild(more);
+}
 function renderDashboard(){window.OvergreenVoice?.sync();renderDashboardSmart();renderStoreReminderPanels();renderExtraDateAlerts();
   if(typeof renderOperationsShortcut==='function')renderOperationsShortcut();
   if(currentView==='operations'&&typeof renderOperations==='function')renderOperations();
@@ -1271,12 +1282,13 @@ function renderDashboard(){window.OvergreenVoice?.sync();renderDashboardSmart();
           c.querySelector('[data-map-activity]')?.addEventListener('click',()=>openActivityMaps(a,st));c.querySelector('[data-done-activity]')?.addEventListener('click',()=>completeScheduleActivity(a));list.appendChild(c)
         }
       }
+      list.querySelectorAll('.dashboard-line-job').forEach(compactDashboardJob);
       box.appendChild(section);
       hydrateWorkerTravel(section,currentTravelToken);
     }
     if(!allJobsCount)box.innerHTML='<p class="muted dashboard-day-empty">Nessun lavoro programmato.</p>';
     next.appendChild(details);
-    details.querySelectorAll('[data-weather-store]').forEach(card=>OvergreenWeather.mount(card,stores.find(st=>st.id===card.dataset.weatherStore),date,{load:loadStoreWeather,loadGrowth:loadGrowthHistory,canEdit:admin,saveGrowth:saveGrassSettings}));
+    details.querySelectorAll('[data-weather-store]').forEach(card=>OvergreenWeather.mount(card,stores.find(st=>st.id===card.dataset.weatherStore),date,{compact:true,load:loadStoreWeather,loadGrowth:loadGrowthHistory,canEdit:admin,saveGrowth:saveGrassSettings}));
   }
   const attribution=document.createElement('p');attribution.className='weather-attribution';attribution.innerHTML='Meteo: <a href="https://www.met.no/en" target="_blank" rel="noopener">MET Norway</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> · riepilogo giornaliero elaborato da Overgreen';next.appendChild(attribution);
 }
@@ -5845,7 +5857,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=288').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=289').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

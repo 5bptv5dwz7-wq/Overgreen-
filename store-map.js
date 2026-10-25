@@ -36,16 +36,9 @@
  function drawPins(){
   if(!map)return;layer.clearLayers();const L=window.L;
   const points=filtered().map(s=>({s,p:G.confirmedPoint(s)})).filter(x=>x.p);
-  const groups=new Map();
-  for(const x of points){const px=map.project([x.p.lat,x.p.lon],map.getZoom());const key=Math.floor(px.x/52)+':'+Math.floor(px.y/52);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(x)}
-  for(const group of groups.values()){
-   const first=group[0],multi=group.length>1,lat=group.reduce((a,x)=>a+x.p.lat,0)/group.length,lon=group.reduce((a,x)=>a+x.p.lon,0)/group.length;
-   const marker=L.marker([lat,lon],{title:multi?group.length+' punti vendita':first.s.nome,icon:L.divIcon({className:'ogm-marker',html:multi?`<span class="ogm-cluster">${group.length}</span>`:`<span class="ogm-pin ${selected===first.s.id?'selected':''}" style="--pin:${color(first.s)}"></span>`,iconSize:[40,40],iconAnchor:[20,20]})}).addTo(layer);
-   marker.on('click',()=>{
-    if(!multi){choose(first.s,false);return}
-    if(map.getZoom()<18)map.fitBounds(group.map(x=>[x.p.lat,x.p.lon]),{padding:[60,60],maxZoom:Math.min(18,map.getZoom()+3)});
-    else{const box=document.createElement('div');box.className='ogm-coincident';for(const x of group){const b=document.createElement('button');b.textContent=x.s.nome;b.onclick=()=>{map.closePopup();choose(x.s,false)};box.append(b)}marker.bindPopup(box).openPopup()}
-   });
+  for(const {s,p} of points){
+   const marker=L.marker([p.lat,p.lon],{title:s.nome,icon:L.divIcon({className:'ogm-marker',html:`<span class="ogm-pin ${selected===s.id?'selected':''}" style="--pin:${color(s)}"></span>`,iconSize:[40,40],iconAnchor:[20,20]})}).addTo(layer);
+   marker.on('click',()=>choose(s,false));
   }
  }
  function fit(){if(!map)return;const p=filtered().map(G.confirmedPoint).filter(Boolean);if(p.length)map.fitBounds(p.map(x=>[x.lat,x.lon]),{padding:[45,45],maxZoom:13});else map.setView([45,9.5],6)}

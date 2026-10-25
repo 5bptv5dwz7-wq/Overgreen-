@@ -2,7 +2,7 @@
 (()=>{
  'use strict';
  const G=window.OvergreenLocations;
- let map,layer,dialog,selected=null,filter='all',query='',leafletPromise,origin,opener,planning=false,routeView=false,baseLayer=null,referenceLayers=[],baseMode='hybrid';
+ let map,layer,dialog,selected=null,filter='all',query='',leafletPromise,origin,opener,planning=false,routeView=false,baseLayer=null,baseMode='satellite';
  const labels={all:'Tutte',due:'Da fare',scheduled:'Programmate',reminder:'Sollecitate',missing:'Senza posizione'};
  const color=s=>isStoreProgrammed(s.id)?'#3976d4':activeStoreReminder(s)?'#be3946':isOverdueStore(s)?'#d97706':'#168263';
  const state=s=>isStoreProgrammed(s.id)?(activeStoreReminder(s)?'In programma · Sollecitata':'In programma'):activeStoreReminder(s)?'Sollecitata':isOverdueStore(s)?'Oltre intervallo / da avviare':storeHasInterval(s)?'Nei tempi':'Su richiesta';
@@ -20,21 +20,16 @@
   }).catch(e=>{leafletPromise=null;throw e});return leafletPromise;
  }
  function applyBasemap(mode){
-  baseMode=mode==='map'?'map':'hybrid';
+  baseMode=mode==='map'?'map':'satellite';
   dialog.querySelectorAll('[data-basemap]').forEach(b=>{const active=b.dataset.basemap===baseMode;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active))});
   try{localStorage.setItem('overgreen-map-base',baseMode)}catch{}
-  if(!map)return;if(baseLayer)baseLayer.remove();referenceLayers.forEach(layer=>layer.remove());referenceLayers=[];
-  const satellite=baseMode==='hybrid';
+  if(!map)return;if(baseLayer)baseLayer.remove();
+  const satellite=baseMode==='satellite';
   baseLayer=window.L.tileLayer(satellite?'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}':'https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
    maxZoom:19,zIndex:1,attribution:satellite?'Imagery © Esri, Vantor, Earthstar Geographics, GIS User Community':'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'
   }).addTo(map);
-  if(satellite){
-   for(const [index,name] of ['World_Transportation','World_Boundaries_and_Places'].entries()){
-    referenceLayers.push(window.L.tileLayer(`https://services.arcgisonline.com/ArcGIS/rest/services/Reference/${name}/MapServer/tile/{z}/{y}/{x}`,{maxZoom:19,maxNativeZoom:19,zIndex:2+index,attribution:'Reference © Esri, HERE, Garmin, OpenStreetMap contributors'}).addTo(map));
-   }
-  }
   const msg=dialog.querySelector('.ogm-message');msg.hidden=true;
-  [baseLayer,...referenceLayers].forEach(layer=>layer.on('tileerror',()=>{if(!dialog.open)return;msg.hidden=false;msg.textContent='Una parte della mappa non è disponibile. Controlla la connessione o cambia tra Mappa e Ibrida.'}));
+  baseLayer.on('tileerror',()=>{if(!dialog.open)return;msg.hidden=false;msg.textContent='Una parte della mappa non è disponibile. Controlla la connessione o cambia tra Mappa e Satellite.'});
  }
  function leave(action){dialog.close();if(action)action()}
  function choose(s,fly=true){if(planning){toggleStop(s);return}selected=s.id;renderDetail(s);if(map&&fly){const p=G.confirmedPoint(s);if(p)map.setView([p.lat,p.lon],Math.max(13,map.getZoom()))}drawPins();renderList()}
@@ -138,7 +133,7 @@
   footer.innerHTML='<div class="ogm-plan-top"><div><strong class="ogm-plan-count" aria-live="polite"></strong><small>Tocca un puntino per aggiungerlo o toglierlo dal giro.</small></div><button type="button" data-plan-done>Continua →</button></div><div class="ogm-plan-chips"></div><small class="ogm-plan-note"></small>';
   dialog.querySelector('.ogm-shell').append(footer);
   footer.querySelector('[data-plan-done]').onclick=()=>leave(()=>{document.getElementById('scheduleForm').scrollIntoView({behavior:'smooth',block:'start'});});
-  const bases=document.createElement('div');bases.className='ogm-basemap';bases.innerHTML='<button type="button" data-basemap="map">Mappa</button><button type="button" data-basemap="hybrid">Ibrida</button>';dialog.querySelector('.ogm-stage').append(bases);bases.querySelectorAll('button').forEach(b=>b.onclick=()=>applyBasemap(b.dataset.basemap));
+  const bases=document.createElement('div');bases.className='ogm-basemap';bases.innerHTML='<button type="button" data-basemap="map">Mappa</button><button type="button" data-basemap="satellite">Satellite</button>';dialog.querySelector('.ogm-stage').append(bases);bases.querySelectorAll('button').forEach(b=>b.onclick=()=>applyBasemap(b.dataset.basemap));
   const epPanel=document.createElement('details');epPanel.className='route-endpoints-panel';epPanel.innerHTML='<summary>Partenza e ritorno</summary>';const epContent=document.createElement('div');epPanel.append(epContent);footer.prepend(epPanel);window.OvergreenRouteEndpoints?.createEditor(epContent,'draft');
   document.body.append(dialog);
   dialog.querySelector('.ogm-close').onclick=()=>leave();
@@ -164,7 +159,7 @@
   dialog.showModal();document.body.classList.add('ogm-open');refresh();
   const msg=dialog.querySelector('.ogm-message');msg.hidden=false;msg.textContent='Caricamento mappa…';
   try{const L=await leaflet();if(!dialog.open||map)return;map=L.map('ogm-canvas',{zoomControl:false}).setView([45,9.5],6);L.control.zoom({position:'bottomright'}).addTo(map);
-   try{baseMode=localStorage.getItem('overgreen-map-base')||'hybrid'}catch{}applyBasemap(baseMode);
+   try{baseMode=localStorage.getItem('overgreen-map-base')||'satellite'}catch{}applyBasemap(baseMode);
    layer=L.layerGroup().addTo(map);map.on('zoomend',drawPins);msg.hidden=true;map.invalidateSize();refresh(true);
   }catch(e){msg.hidden=false;msg.textContent=e.message}
  }

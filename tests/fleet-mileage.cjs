@@ -1,0 +1,10 @@
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const {summarize,actualDistance}=require('../fleet.js');
+const team=[{id:'a',name:'Lorenzo'},{id:'b',name:'Operatore'}];
+const trip=(extra={})=>({id:'t',member_names:team,vehicle_id:'van',vehicle_label:'Ducato',estimated_km:100,missing_legs:0,dirty:false,completed:true,actual_km:null,...extra});
+test('team distance counts once for company/vehicle and fully for each person',()=>{const s=summarize([trip()]);assert.equal(s.estimated,100);assert.equal(s.vehicles.get('van').estimated,100);assert.equal(s.people.get('a').estimated,100);assert.equal(s.people.get('b').estimated,100)});
+test('actual km replaces estimate, including zero',()=>{const s=summarize([trip({actual_km:120}),trip({id:'zero',actual_km:0})]);assert.equal(s.actual,120);assert.equal(s.estimated,0);assert.equal(s.people.get('a').trips,2)});
+test('future and open trips stay outside completed totals',()=>{const s=summarize([trip({completed:false})]);assert.equal(s.planned,100);assert.equal(s.estimated,0);assert.equal(s.people.size,0)});
+test('missing and stale estimates excluded, actual corrections still count',()=>{const s=summarize([trip({missing_legs:1}),trip({dirty:true}),trip({dirty:true,actual_km:30})]);assert.equal(s.missing,2);assert.equal(s.estimated,0);assert.equal(s.actual,30)});
+test('manually confirmed interrupted trip included exactly once',()=>{const s=summarize([trip({completed:false,actual_km:43,confirmed_at:'2026-10-26'})]);assert.equal(s.actual,43);assert.equal(s.planned,0)});
+test('odometer validates readings and uses difference instead of direct input',()=>{assert.deepEqual(actualDistance('1000','1140','500'),{actual_km:140,odometer_start:1000,odometer_end:1140});assert.equal(actualDistance('','','0').actual_km,0);for(const args of [['100','90',''],['','100',''],['-1','3',''],['','','NaN']])assert.throws(()=>actualDistance(...args))});

@@ -1,4 +1,4 @@
-const APP_VERSION='V298';
+const APP_VERSION='V299';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -1225,7 +1225,7 @@ function renderDashboard(){window.OvergreenVoice?.sync();renderDashboardSmart();
     details.innerHTML=`<summary><span class="dashboard-day-title"><strong>${offset===0?'Oggi · ':''}${esc(dayName.charAt(0).toUpperCase()+dayName.slice(1))}<small>${esc(fmt(date).slice(0,5))}</small></strong><span class="dashboard-day-mix">${esc(mix|| (allJobsCount?'Attività aziendali':'Nessun lavoro'))}</span></span><span class="dashboard-day-total"><b>${allJobsCount} ${allJobsCount===1?'lavoro':'lavori'}</b><small>${esc(kinds)}</small></span></summary><div class="dashboard-day-progress"><div style="width:${percent}%"></div></div><div class="dashboard-day-progress-label"><strong>${percent}%</strong><span>${completedCount} completati su ${allJobsCount} in programma</span></div><div class="dashboard-day-jobs"></div>`;
     const box=details.querySelector('.dashboard-day-jobs');
     const groups=new Map();
-    const addToGroup=(key,label,job)=>{if(!groups.has(key))groups.set(key,{label,jobs:[]});groups.get(key).jobs.push(job)};
+    const addToGroup=(key,label,job)=>{const schedule=job.row?.schedule||job.schedule||schedules.find(s=>s.id===job.extra?.schedule_id);if(hasJourneyEndpoints(schedule))key+=':journey:'+schedule.id;if(!groups.has(key))groups.set(key,{label,jobs:[],journey:hasJourneyEndpoints(schedule)?schedule:null});groups.get(key).jobs.push(job)};
     for(const row of ordinary){
       const members=scheduleMembers.filter(m=>m.schedule_id===row.schedule.id).map(m=>profiles.find(p=>p.id===m.profile_id)).filter(Boolean);
       const label=members.length?members.map(p=>p.nome).join(' + '):'Da assegnare';
@@ -1309,7 +1309,8 @@ function renderDashboard(){window.OvergreenVoice?.sync();renderDashboardSmart();
       }
       list.querySelectorAll('.dashboard-line-job').forEach(compactDashboardJob);
       box.appendChild(section);
-      hydrateWorkerTravel(section,currentTravelToken);
+      if(group.journey)hydrateJourneyTravel(section,group.journey,()=>currentTravelToken===travelRenderToken);
+      else hydrateWorkerTravel(section,currentTravelToken);
     }
     if(!allJobsCount)box.innerHTML='<p class="muted dashboard-day-empty">Nessun lavoro programmato.</p>';
     next.appendChild(details);
@@ -1855,7 +1856,44 @@ function renderTravelError(separator,err,from,to){
   separator.querySelector('.travel-error-details')?.addEventListener('click',()=>alert(`Dettagli calcolo viaggio\n\nDa:\n${routeDisplayAddress(from)||'Indirizzo mancante'}\n\nA:\n${routeDisplayAddress(to)||'Indirizzo mancante'}\n\nErrore:\n${technical}`));
 }
 
-async function hydrateScheduleTravel(section,token){
+function hasJourneyEndpoints(schedule){return !!(schedule?.route_endpoints?.start||schedule?.route_endpoints?.end)}
+function scheduleJourneyStops(schedule){
+  const storeStop=(id,fallback)=>{const st=stores.find(s=>s.id===id);return {label:st?.nome||fallback||'Punto vendita',address:routeAddressForStore(st)}};
+  const rows=[
+    ...scheduleItems.filter(i=>i.schedule_id===schedule.id&&i.tipo==='ordinario'&&!['annullato','riportato'].includes(i.stato)).map(i=>({...storeStop(i.store_id),id:i.id,position:Number(i.posizione)||999999})),
+    ...allExtraOccurrences().filter(e=>e.schedule_id===schedule.id&&!e.schedule_item_id&&!['annullato','riportato'].includes(e.stato)).map(e=>({id:e.id,position:extraRoutePosition(e),label:e.titolo||e.nome_esterno||'Extra',address:routeAddressForExtra(e,stores.find(s=>s.id===e.store_id))})),
+    ...scheduleActivities.filter(a=>a.schedule_id===schedule.id&&!['annullato','riportato'].includes(a.stato)).map(a=>({id:a.id,position:Number(a.posizione)||999999,label:a.titolo||'Attività',address:activityRouteAddress(a,stores.find(s=>s.id===a.store_id))}))
+  ].sort((a,b)=>a.position-b.position||String(a.id).localeCompare(String(b.id)));
+  const endpoint=(p,label)=>({label:label+': '+p.label,address:`${p.lat},${p.lon}`});
+  if(schedule.route_endpoints?.start)rows.unshift(endpoint(schedule.route_endpoints.start,'Partenza'));
+  if(schedule.route_endpoints?.end)rows.push(endpoint(schedule.route_endpoints.end,'Ritorno'));
+  return rows;
+}
+async function hydrateJourneyTravel(section,schedule,isCurrent){
+  const stops=scheduleJourneyStops(schedule),panel=document.createElement('div');panel.className='journey-travel';
+  panel.innerHTML=`<strong>🚗 Giro completo programmato</strong>${window.OvergreenRouteEndpoints?.summary(schedule.route_endpoints)||''}<p data-total aria-live="polite">Calcolo chilometri e tempo…</p><small>Tempo stimato di guida · traffico e soste esclusi · incluse le tappe già completate</small><details><summary>Dettaglio tragitti</summary><div data-legs></div></details>`;
+  (section.querySelector('.schedule-card-head')||section.querySelector('h3'))?.after(panel);
+  const total=panel.querySelector('[data-total]'),legs=panel.querySelector('[data-legs]');
+  let km=0,minutes=0,count=0,approximate=false;
+  for(let i=0;i<stops.length-1;i++){
+    if(!isCurrent())return;
+    const from=stops[i],to=stops[i+1],row=document.createElement('div');row.className='journey-leg';
+    const label=document.createElement('small');label.textContent=from.label+' → '+to.label;row.appendChild(label);
+    const result=document.createElement('div');result.textContent='Calcolo…';row.appendChild(result);
+    if((i===0&&schedule.route_endpoints?.start)||(i===stops.length-2&&schedule.route_endpoints?.end))panel.insertBefore(row,panel.querySelector('details'));else legs.appendChild(row);
+    try{
+      if(!from.address||!to.address)throw Error('Indirizzo mancante');
+      const route=await routeBetweenAddresses(from.address,to.address);if(!isCurrent())return;
+      km+=route.km;minutes+=route.minutes;count++;approximate||=route.approximate;
+      result.textContent=`${route.approximate?'≈ ':''}${route.km.toFixed(1)} km · ${formatTravelMinutes(route.minutes)}`;
+    }catch(err){if(!isCurrent())return;renderTravelError(result,err,from.address,to.address)}
+  }
+  if(!isCurrent())return;
+  total.textContent=stops.length<2?'Aggiungi una tappa per calcolare il viaggio':count?`${count<stops.length-1?'Totale parziale':'Totale giro'}: ${approximate?'≈ ':''}${km.toFixed(1)} km · ${formatTravelMinutes(minutes)}${count<stops.length-1?' · alcuni tragitti non disponibili':''}${approximate?' · posizioni indicative':''}`:'Viaggio non calcolabile: controlla gli indirizzi nei dettagli';
+}
+
+async function hydrateScheduleTravel(section,token,schedule){
+  if(hasJourneyEndpoints(schedule))return hydrateJourneyTravel(section,schedule,()=>token===scheduleTravelRenderToken);
   const cards=[...section.querySelectorAll('.schedule-item[data-route-address]')];if(cards.length<2)return;
   const summary=document.createElement('div');summary.className='worker-travel-summary schedule-travel-summary';summary.innerHTML='<strong>🚗 Percorso</strong><span>Calcolo in corso…</span>';
   section.querySelector('.schedule-card-head')?.after(summary);
@@ -3572,7 +3610,7 @@ function renderSchedules(){
     }
     enableScheduleOrder(c,s);
     $('scheduleList').appendChild(c);
-    hydrateScheduleTravel(c,currentScheduleTravelToken);
+    hydrateScheduleTravel(c,currentScheduleTravelToken,s);
   }
 
   const assignedIds=assignedExtraIds();
@@ -5907,7 +5945,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=298').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=299').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

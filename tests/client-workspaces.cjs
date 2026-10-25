@@ -68,5 +68,15 @@ vm.runInContext(`(async()=>{
  setView('dashboard');assert(canWorkOnExtra(extras[0]));assert(canWorkOnExtra(extras[1]));assert(assignedExtraIds().has('ei'));assert($('dashboardNext').querySelector('[data-close-extra-dashboard]'));
  assert(!canWorkOnExtra({id:'unassigned',stato:'programmato'}));
  profile=realProfile={id:'admin',nome:'Admin',ruolo:'admin',attivo:true};syncImpersonationUi();setView('stores');assert.equal(currentView,'stores');assert(!document.querySelector('[data-view="stores"]').classList.contains('hidden'));
+ // An extra can occur on another date without creating another extra or ordinary visit.
+ const baseExtra=extras[0];baseExtra.schedule_id='mixed';baseExtra.stato='programmato';baseExtra.closed_at=null;
+ schedules.push({id:'next-day',giorno:tomorrow()});scheduleMembers.push({schedule_id:'next-day',profile_id:'worker'});scheduleItems.push({id:'extra-day-item',tipo:'extra',extra_id:baseExtra.id,schedule_id:'next-day',stato:'da_fare',posizione:1});
+ assert.equal(extras.length,2);assert.equal(extraPlannedDates(baseExtra).length,2);assert.equal(extrasForSchedule('next-day')[0].id,baseExtra.id);
+ activateClient('eurospin');scheduleDateFilter='all';scheduleWorkerFilter='all';setView('schedule');assert($('scheduleList').querySelector('[data-schedule-item-id="extra-day-item"]'));assert($('scheduleList').querySelector('[data-add-extra-day]'));
+ const pdfNext=schedulePdfGroups(tomorrow(),tomorrow());assert.equal(pdfNext.length,1);assert.equal(pdfNext[0].jobs.length,1);assert.equal(pdfNext[0].jobs[0].kind,'extra');
+ setView('dashboard');assert($('dashboardNext').querySelectorAll('.standalone-extra').length>=2);openExtraDayDialog(baseExtra);assert($('extraDayDate').value>tomorrow());$('extraDayDialog').close();
+ profile={id:'worker',ruolo:'dipendente',attivo:true};assert(canWorkOnExtra(baseExtra));assert(extraOccurrenceVisible(extrasForSchedule('next-day')[0]));
+ profile={id:'someone-else',ruolo:'dipendente',attivo:true};assert(!extraOccurrenceVisible(extrasForSchedule('next-day')[0]));
+ baseExtra.stato='completato';baseExtra.closed_at=today()+'T12:00:00Z';assert.equal(extrasForSchedule('next-day').length,0);assert.equal(extraOccurrences(baseExtra).length,1);
  console.log('PASS workspace navigation, forms, reports, search, mixed schedules, routes, PDF isolation and dashboard');
 })()`,c).catch(error=>{console.error(error);process.exitCode=1});

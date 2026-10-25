@@ -57,6 +57,28 @@ test('planning transaction: retry, stale edits, full rollback, mixed positions, 
  const planned=await op('extra',standalone,r);await op('extra',standalone,r);
  assert.notEqual(planned.schedule_id,sid);assert.equal((await db.query('select count(*)::int n from schedules')).rows[0].n,before+1);
  assert.equal((await db.query('select profile_id from extra_workers')).rows[0].profile_id,admin);
+
+ // Additional dates use one extra and independent schedule items, with atomic retries.
+ await db.exec(`reset role;alter table schedule_items add column extra_id uuid references extras;`);
+ await db.exec(fs.readFileSync('supabase/migrations/20261025010143_extra_multiday_v291.sql','utf8'));
+ await db.exec(`set role authenticated`);
+ const dayOp=async(operation,payload,id=uuid())=>(await db.query('select overgreen_extra_day_v291($1,$2,$3) result',[id,operation,JSON.stringify(payload)])).rows[0].result;
+ await assert.rejects(dayOp('add_day',{id:extra,day:'2026-10-21',members:[worker]}),/Data fissa/);
+ await db.exec(`update extras set execution_date_mode=null,execution_date=null`);
+ const reqDay=uuid(),payloadDay={id:extra,day:'2026-10-21',members:[worker]};
+ const addedDay=await dayOp('add_day',payloadDay,reqDay);assert.deepEqual(await dayOp('add_day',payloadDay,reqDay),addedDay);
+ assert.equal((await db.query('select count(*)::int n from extras')).rows[0].n,1);
+ assert.equal((await db.query('select giorno_intervento::text from extras')).rows[0].giorno_intervento,'2026-10-20');
+ await assert.rejects(dayOp('add_day',payloadDay),/già programmato/);
+ await assert.rejects(dayOp('add_day',{...payloadDay,day:'2026-10-25',members:[uuid()]}),/Operatore/);
+ await assert.rejects(dayOp('add_day',{...payloadDay,day:'2026-10-25',expected_updated_at:'2000-01-01'}),/modificato/);
+ await db.exec(`select set_config('app.actor','${worker}',false)`);
+ assert.equal((await db.query('select can_access_extra($1) allowed',[extra])).rows[0].allowed,true);
+ await assert.rejects(dayOp('add_day',{...payloadDay,day:'2026-10-22'}),/amministratori/);
+ await db.exec(`select set_config('app.actor','${admin}',false)`);
+ await dayOp('remove_day',{id:extra,item_id:addedDay.item.id});
+ assert.equal((await db.query('select count(*)::int n from schedule_items where extra_id=$1',[extra])).rows[0].n,0);
+ assert.equal((await db.query('select count(*)::int n from extras')).rows[0].n,1);
  await db.exec(`select set_config('app.actor','${worker}',false)`);await assert.rejects(op('add',add),/amministratori/);
  await db.exec(`set role anon`);await assert.rejects(op('add',add),/permission denied/);
  }finally{await db.close()}

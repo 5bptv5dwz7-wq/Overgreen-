@@ -29,7 +29,7 @@ test('sorting puts urgent first and on-request last; scheduling cannot hide over
 test('program denominator stays 15 before and after its two linked targets close',()=>{
  const c={date,itemVisible:()=>true,itemDate:()=>date,scheduleForItem:()=>({}),isExtraVisible:()=>true,isScheduleVisible:()=>true,extraIsDone:e=>e.stato==='completato',itemDone:i=>i.stato==='completato',activeExtraStates:['programmato','ricevuto','da_integrare','in_attesa'],scheduleActivities:[],schedules:[],scheduleItems:Array.from({length:14},(_,n)=>({id:'s'+n,tipo:'ordinario',stato:n<11?'completato':'da_fare'})),extras:[{id:'a',schedule_item_id:'s1',giorno_intervento:date,stato:'programmato'},{id:'b',schedule_item_id:'s2',giorno_intervento:date,stato:'programmato'},{id:'c',giorno_intervento:date,stato:'completato'}]};
  const code=block('    const ordinary=scheduleItems.filter','    const details=document.createElement')+'\nresult={allJobsCount,completedCount};';
- function run(){const ctx={...c};vm.createContext(ctx);vm.runInContext(code,ctx);return ctx.result}
+ function run(){const ctx={...c,allExtraOccurrences:()=>c.extras};vm.createContext(ctx);vm.runInContext(code,ctx);return ctx.result}
  assert.equal(run().allJobsCount,15);c.extras.forEach(e=>e.stato='completato');assert.equal(run().allJobsCount,15);assert.equal(run().completedCount,12);
  c.scheduleItems.push({id:'cancelled',tipo:'ordinario',stato:'annullato'},{id:'rollover',tipo:'ordinario',stato:'riportato'},{id:'extraItem',tipo:'extra',stato:'da_fare'});assert.equal(run().allJobsCount,15);
 });

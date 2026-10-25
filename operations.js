@@ -92,7 +92,7 @@
       if (reasons.length && !reasons.some(r => r.category === 'plan')) reasons.push(reason('plan', Math.max(2, reasons[0].severity), 'Non ancora inserito in una programmazione.'));
       add('store', st.id, st.nome || 'Sede', [st.citta, st.indirizzo].filter(Boolean).join(' · '), c.client(st), Number.isFinite(dayMs(st.ultimo_passaggio)) ? addDays(st.ultimo_passaggio, Number(st.intervallo_giorni)) : '', reasons, 'planStore');
     }
-    for (const item of data.scheduleItems || []) {
+    for (const item of (data.scheduleItems || []).filter(i=>i.tipo!=='extra')) {
       const sch = c.schedules.get(item.schedule_id), st = c.stores.get(item.store_id);
       if (!sch || c.state(item) !== 'da_fare' || ['annullato', 'riportato'].includes(item.stato) || ongoing.has(item.store_id)) continue;
       const reasons = [];
@@ -126,15 +126,16 @@
       const team = day.get(key), bucket = state === 'in_attesa' ? 'pending' : closed.has(state) || state === 'convalidato' ? 'done' : 'open';
       team.jobs.push({ id: row.id, kind, title, state: bucket }); team[bucket]++;
     }
-    for (const i of data.scheduleItems || []) {
+    for (const i of (data.scheduleItems || []).filter(i=>i.tipo!=='extra')) {
       if (['annullato', 'riportato'].includes(i.stato) || ['annullato', 'riportato'].includes(c.state(i))) continue;
       const sch = c.schedules.get(i.schedule_id), st = c.stores.get(i.store_id);
       if (sch) add('ordinary', i, sch.giorno, c.team(sch.id), st?.nome || 'Sede non attiva', c.client(i), c.state(i), [st?.citta, st?.indirizzo].join(' '));
     }
-    for (const e of data.extras || []) {
+    const occurrences=(data.extras||[]).flatMap(e=>[e,...(data.scheduleItems||[]).filter(i=>i.tipo==='extra'&&i.extra_id===e.id&&!['annullato','riportato'].includes(i.stato)&&!closed.has(e.stato)).map(i=>({...e,schedule_id:i.schedule_id,schedule_item_id:null,giorno_intervento:c.schedules.get(i.schedule_id)?.giorno,_dayItem:i}))]);
+    for (const e of occurrences) {
       if (['annullato', 'riportato'].includes(e.stato)) continue;
       const st = c.stores.get(e.store_id);
-      add('extra', e, c.extraDay(e), c.extraTeam(e), st?.nome || e.nome_esterno || e.titolo || 'Extra', c.client(e), e.stato, [e.titolo, e.numero_target, st?.citta].join(' '));
+      add('extra', e, c.extraDay(e), e._dayItem?c.team(e.schedule_id):c.extraTeam(e), st?.nome || e.nome_esterno || e.titolo || 'Extra', c.client(e), e.stato, [e.titolo, e.numero_target, st?.citta].join(' '));
     }
     for (const a of data.scheduleActivities || []) {
       if (['annullato', 'riportato'].includes(a.stato)) continue;

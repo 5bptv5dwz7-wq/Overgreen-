@@ -22,7 +22,7 @@
     const dates=card.querySelector('.extra-date-summary');
     const meta=document.createElement('div');meta.className='extra-overview';
     if(dates){const execution=dates.querySelector('p:last-child');if(execution)meta.append(execution.cloneNode(true));const age=dates.querySelector('.elapsed-days');if(age)meta.append(age.cloneNode(true))}
-    const keep=new Set([card.querySelector('.extra-card-heading'),title,card.querySelector('.target-number'),card.querySelector('.deadline'),card.querySelector('.extra-partial-badge'),card.querySelector('.extra-cancelled-badge'),card.querySelector('.extra-readonly-label'),card.querySelector('.linked-extra-reminder'),card.querySelector('.linked-ordinary-label')]);
+    const keep=new Set([card.querySelector('.extra-card-heading'),title,card.querySelector('.extra-description'),card.querySelector('.target-number'),card.querySelector('.deadline'),card.querySelector('.extra-partial-badge'),card.querySelector('.extra-cancelled-badge'),card.querySelector('.extra-readonly-label'),card.querySelector('.linked-extra-reminder'),card.querySelector('.linked-ordinary-label')]);
     [...card.children].filter(n=>!keep.has(n)&&n!==actions).forEach(n=>body.append(n));
     const primary=document.createElement('div');primary.className='actions extra-primary';
     const action=actions.querySelector('[data-close-extra],[data-approve-extra]')||actions.querySelector('[data-program-extra],[data-work-progress],[data-generate-closure]');

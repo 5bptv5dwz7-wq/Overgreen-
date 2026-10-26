@@ -338,3 +338,13 @@
 #app main #dashboardNext .dashboard-travel-leg strong{font-size:11px;font-weight:600}
 #app main #dashboardNext .dashboard-travel-leg span{font-size:14px}
 @media(max-width:699px){#app.employee-navigation>header .header-actions{grid-template-columns:repeat(3,minmax(0,1fr))}}
+/* Pulizie: compact touch controls, independently scrollable visit content. */
+#cleaningView .actions{flex-wrap:wrap;gap:8px;margin:10px 0}
+#cleaningView .actions input{max-width:100%;min-width:0}
+#cleaningView .cleaning-due p{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;font-size:13px}
+#cleaningView .cleaning-due span{color:var(--muted,#68766b);margin-left:auto}
+#cleaningView .cleaning-summary{font-weight:700;color:#256b45}
+.cleaning-choice{display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #dde5df}
+.cleaning-choice input{width:auto;flex:none}.cleaning-choice small{display:block;color:#68766b}
+#cleaningRequestMatchWrap input,#cleaningContractActive{width:auto}
+#cleaningEditDialog,#cleaningContractDialog{max-height:90dvh;overflow-y:auto}

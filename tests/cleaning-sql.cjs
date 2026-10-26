@@ -1,0 +1,47 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
+const {PGlite}=require('@electric-sql/pglite');
+const admin='00000000-0000-0000-0000-000000000001',worker='00000000-0000-0000-0000-000000000002',site='10000000-0000-0000-0000-000000000001';
+test('cleaning SQL: atomic slots, retry, cancellation, renewal, closure, contracts and permissions',async()=>{
+ const db=new PGlite();try{
+ await db.exec(`create role authenticated;create role anon;create schema auth;
+ create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('app.actor',true),'')::uuid$$;
+ create function is_admin() returns boolean language sql stable as $$select auth.uid()='${admin}'::uuid$$;
+ create table stores(id uuid primary key,client_type text,attivo boolean);
+ create table extras(id uuid primary key,store_id uuid references stores,titolo text,descrizione text,client_type text,categoria_target text,closure_profile text,data_richiesta date,stato text,creato_da uuid,created_at timestamptz default now(),giorno_intervento date,con_ordinario boolean default false);
+ create table extra_work_items(id uuid default gen_random_uuid(),extra_id uuid references extras,titolo text,posizione integer,stato text);
+ create table extra_labor_hours(extra_id uuid);
+ alter table extras enable row level security;
+ create policy extras_read on extras for select to authenticated using(true);
+ create policy extras_insert on extras for insert to authenticated with check(is_admin());
+ create policy extras_update on extras for update to authenticated using(true) with check(true);
+ alter table stores enable row level security;
+ create policy stores_read on stores for select to authenticated using(true);
+ create policy stores_update on stores for update to authenticated using(is_admin()) with check(is_admin());
+ grant usage on schema auth,public to authenticated;grant all on all tables in schema public to authenticated;
+ insert into stores values('${site}','eurospin',true);
+ `);
+ await db.exec(fs.readFileSync(__dirname+'/../docs/v308-pulizie.sql','utf8'));
+ await db.exec(`set role authenticated;select set_config('app.actor','${admin}',false);`);
+ let seq=1;const uuid=()=>`20000000-0000-0000-0000-${String(seq++).padStart(12,'0')}`;
+ const create=(id,day='2026-10-27',codes=['D/2'],existing=null)=>db.query('select overgreen_cleaning_create_v308($1,$2,$3,$4,null,$5) e',[id,site,day,codes,existing]);
+ await assert.rejects(create(uuid()),/non attive/);
+ await db.exec(`update stores set cleaning_enabled=true,cleaning_start='2026-01-01' where id='${site}'`);
+ const a=uuid(),b=uuid();await create(a);await create(a);assert.equal((await db.query('select count(*)::int n from extras')).rows[0].n,1);
+ assert.equal((await create(uuid())).rows[0].e.id,a);await create(b,'2026-11-01');
+ await assert.rejects(create(uuid(),'2026-12-01'),/Entrambe/);
+ await assert.rejects(db.exec(`update extras set stato='in_attesa' where id='${a}'`),/Completa/);
+ await db.exec(`update extra_work_items set stato='completata' where extra_id='${a}';update extras set stato='completato' where id='${a}';update extras set stato='annullato' where id='${b}'`);
+ await assert.rejects(db.exec(`insert into extra_labor_hours values('${a}')`),/Visita contrattuale/);
+ const c=uuid();await create(c,'2026-12-01');assert.equal((await db.query('select cleaning_slot from extras where id=$1',[c])).rows[0].cleaning_slot,2);
+ await create(uuid(),'2027-02-01');
+ const multi=uuid();await create(multi,'2026-10-28',['A/1','A/2','C/1','C/2']);assert.equal((await db.query('select count(*)::int n from extra_work_items where extra_id=$1',[multi])).rows[0].n,4);
+ const added=await create(uuid(),'2026-10-28',['C/2']);assert.equal(added.rows[0].e.id,multi);
+ const target=uuid();await create(target,'2026-10-28',['TARGET']);
+ await db.exec(`select set_config('app.actor','${worker}',false);`);await assert.rejects(create(uuid()),/riservato/);
+ await assert.rejects(db.exec(`update extras set cleaning_codes=array['TARGET'] where id='${multi}'`),/riservata/);
+ await db.exec(`update extra_work_items set stato='completata' where extra_id='${multi}';update extras set stato='in_attesa' where id='${multi}'`);
+ await db.exec(`select set_config('app.actor','${admin}',false);update stores set cleaning_enabled=false where id='${site}'`);
+ await assert.rejects(create(uuid(),'2026-12-20',['A/1']),/non attive/);await create(uuid(),'2026-12-20',['TARGET']);
+ assert.equal((await db.query("select has_function_privilege('anon','overgreen_cleaning_create_v308(uuid,uuid,date,text[],text,uuid)','execute') ok")).rows[0].ok,false);
+ }finally{await db.close()}
+});

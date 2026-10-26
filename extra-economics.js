@@ -12,6 +12,7 @@
   function rates(category,equipment=false){return category==='verde'?{hourly_rate:20,exit_rate:100}:category==='pulizie'?{hourly_rate:equipment?23:18,night_hourly_rate:equipment?30:25,exit_rate:50}:category==='manutenzioni'?{hourly_rate:equipment?33:28,night_hourly_rate:equipment?41:36,exit_rate:50}:{hourly_rate:null,exit_rate:null}}
   function isBillableExtra(extra){
     if(!extra)return false;
+    if(extra.cleaning_codes?.length&&!extra.cleaning_codes.includes('TARGET'))return false;
     const client=extra?.client_type||'eurospin';
     const profiles=['eurospin','eurospin_ordinario','intesa','intesa_ordinario','privato'];
     const profile=profiles.includes(extra?.closure_profile)?extra.closure_profile:client;

@@ -1,4 +1,4 @@
-const APP_VERSION='V307';
+const APP_VERSION='V308';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -312,7 +312,7 @@ function elapsedDaysLabel(e){
   return d===null?'Giorni trascorsi non disponibili':d===0?'Richiesto oggi':d===1?'1 giorno trascorso':`${d} giorni trascorsi`;
 }
 function extraCategory(e){return ['verde','pulizie','manutenzioni'].includes(e?.categoria_target)?e.categoria_target:null}
-function extraCategoryLabel(e){return extraCategory(e)==='verde'?'🌿 Verde':extraCategory(e)==='pulizie'?'🧹 Pulizie':extraCategory(e)==='manutenzioni'?'🔧 Manutenzioni':'Categoria non indicata'}
+function extraCategoryLabel(e){return extraCategory(e)==='verde'?'🌿 Verde':extraCategory(e)==='pulizie'?'🧹 Pulizie'+(e.cleaning_codes?' · '+e.cleaning_codes.join(' + '):''):extraCategory(e)==='manutenzioni'?'🔧 Manutenzioni':'Categoria non indicata'}
 function extraCategoryClass(e){return extraCategory(e)?`category-${extraCategory(e)}`:'category-unknown'}
 function clientType(row){
   if(typeof row==='string'&&['eurospin','intesa','privato'].includes(row))return row;
@@ -400,6 +400,7 @@ function syncEmployeeNavigation(){
 }
 function setView(name,options={}){
   if(name!=='schedule'&&mixedScheduleMode){mixedScheduleMode=false;renderedViews.delete('schedule');}
+  if(name==='cleaning'&&activeClient!=='eurospin')activateClient('eurospin');
   if(name==='signatures'&&activeClient!=='eurospin')name='stores';
   if(!admin()&&['stores','schedule','fleet'].includes(name))name='dashboard';
   syncEmployeeNavigation();
@@ -409,7 +410,7 @@ function setView(name,options={}){
   renderedViews.set(name,viewRevision());
   currentView=name;localStorage.setItem(CURRENT_VIEW_KEY,name);syncClientWorkspace();
   document.querySelectorAll('header [data-view]').forEach(b=>{const active=b.dataset.view===name;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
-  document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');document.querySelectorAll('[data-bottom-view]').forEach(b=>b.classList.toggle('active',b.dataset.bottomView===name));$('pageTitle').textContent={dashboard:'Dashboard',operations:'Da gestire',stores:'Sedi e clienti',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',fleet:'Mezzi',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'}[name];if(!['dashboard','fleet'].includes(name))$('pageTitle').textContent=(name==='extras'?(activeClient==='intesa'?'Ticket':'Extra'):name==='stores'?(activeClient==='intesa'?'Filiali':'Sedi'):$('pageTitle').textContent)+' · '+clientLabel(activeClient);if(name==='operations'&&shouldRender&&typeof renderOperations==='function')renderOperations();if(name==='dashboard'&&shouldRender)renderDashboard();if(name==='stores'&&shouldRender)renderStores();if(name==='schedule'&&shouldRender){renderSchedulePicker();renderSchedules()}if(name==='extras'&&shouldRender)renderExtras();if(name==='reports'&&shouldRender)renderDailyReport();if(name==='stats'&&shouldRender)renderStats();if(name==='fleet')window.OvergreenFleet?.renderVehicles();if(name==='signatures')openSignatureSheetsView();if(name==='archive')openCompanyArchive();if(name==='contacts'&&shouldRender)renderWorkContacts();if(name==='audit'&&admin())openAuditView();if(name!=='audit')auditViewOpen(name);if(name==='settings'){void renderRemoteReloadPanel();ensureCloudSettingsUi();refreshPhotoDeliveryStatus().catch(()=>{});ensurePushSettingsUi();refreshPushSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin()){loadSupabaseUsage();renderHealthCenter();}}}
+  document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');document.querySelectorAll('[data-bottom-view]').forEach(b=>b.classList.toggle('active',b.dataset.bottomView===name));$('pageTitle').textContent={dashboard:'Dashboard',operations:'Da gestire',stores:'Sedi e clienti',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',cleaning:'Pulizie',reports:'Report attività',stats:'Statistiche',fleet:'Mezzi',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'}[name];if(!['dashboard','fleet'].includes(name))$('pageTitle').textContent=(name==='extras'?(activeClient==='intesa'?'Ticket':'Extra'):name==='stores'?(activeClient==='intesa'?'Filiali':'Sedi'):$('pageTitle').textContent)+' · '+clientLabel(activeClient);if(name==='operations'&&shouldRender&&typeof renderOperations==='function')renderOperations();if(name==='dashboard'&&shouldRender)renderDashboard();if(name==='stores'&&shouldRender)renderStores();if(name==='schedule'&&shouldRender){renderSchedulePicker();renderSchedules()}if(name==='extras'&&shouldRender)renderExtras();if(name==='cleaning'&&shouldRender)renderCleaning();if(name==='reports'&&shouldRender)renderDailyReport();if(name==='stats'&&shouldRender)renderStats();if(name==='fleet')window.OvergreenFleet?.renderVehicles();if(name==='signatures')openSignatureSheetsView();if(name==='archive')openCompanyArchive();if(name==='contacts'&&shouldRender)renderWorkContacts();if(name==='audit'&&admin())openAuditView();if(name!=='audit')auditViewOpen(name);if(name==='settings'){void renderRemoteReloadPanel();ensureCloudSettingsUi();refreshPhotoDeliveryStatus().catch(()=>{});ensurePushSettingsUi();refreshPushSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin()){loadSupabaseUsage();renderHealthCenter();}}}
 
 
 function syncImpersonationUi(){
@@ -811,7 +812,7 @@ function auditHumanDescription(r){
   return r.description||`${auditActionLabel(action)} · ${auditEntityLabel(t)}`;
 }
 async function writeClientAudit(action,section,description,details={}){try{if(!session?.user?.id)return;const auditDetails={workspace:currentView==='dashboard'?null:activeClient,...details};if(impersonating()){auditDetails.impersonated_user_id=profile.id;auditDetails.impersonated_user_name=profile.nome||profile.email||profile.id;auditDetails.real_admin_id=realProfile.id;auditDetails.real_admin_name=realProfile.nome||realProfile.email||realProfile.id}await sb.rpc('write_client_audit',{p_action:action,p_section:section,p_description:description,p_details:auditDetails,p_client:{url:location.href,user_agent:navigator.userAgent,app_version:APP_VERSION}})}catch(e){console.warn('audit',e)}}
-function auditViewOpen(name){if(!session?.user?.id)return;const labels={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:'Programmazione',extras:'Lavori extra',reports:'Report attività',stats:'Statistiche',fleet:'Mezzi',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'};if(labels[name])writeClientAudit('VIEW','navigation',`Aperta pagina ${labels[name]}`,{view:name})}
+function auditViewOpen(name){if(!session?.user?.id)return;const labels={dashboard:'Dashboard',stores:'Sedi e clienti',schedule:'Programmazione',extras:'Lavori extra',cleaning:'Pulizie',reports:'Report attività',stats:'Statistiche',fleet:'Mezzi',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'};if(labels[name])writeClientAudit('VIEW','navigation',`Aperta pagina ${labels[name]}`,{view:name})}
 function renderAuditUsers(){const sel=$('auditUser');if(!sel)return;const cur=sel.value||'all';sel.innerHTML='<option value="all">Tutti gli utenti</option>';[...profiles].sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.nome||p.email||p.id;sel.appendChild(o)});if([...sel.options].some(o=>o.value===cur))sel.value=cur}
 async function openAuditView(){if(!admin())return setView('dashboard');renderAuditUsers();await loadAuditLogs(true)}
 async function loadAuditLogs(reset=true){if(!admin())return;const box=$('auditList');if(reset){auditPage=0;auditLogs=[];if(box)box.innerHTML='<p class="muted">Caricamento log…</p>'}const from=$('auditFrom')?.value||'',to=$('auditTo')?.value||'',user=$('auditUser')?.value||'all',section=$('auditSection')?.value||'all',search=($('auditSearch')?.value||'').trim();const size=80,offset=auditPage*size;let q=sb.from('audit_log').select('*').order('created_at',{ascending:false}).range(offset,offset+size);if(from)q=q.gte('created_at',`${from}T00:00:00`);if(to)q=q.lte('created_at',`${to}T23:59:59.999`);if(user!=='all')q=q.eq('actor_id',user);if(section!=='all')q=q.eq('section',section);if(search){const safe=search.replace(/[%_,()]/g,' ');q=q.or(`description.ilike.%${safe}%,action.ilike.%${safe}%,actor_name.ilike.%${safe}%,actor_email.ilike.%${safe}%,entity_type.ilike.%${safe}%`)}const {data,error}=await q;if(error){box.innerHTML=`<p class="error">${esc(error.message)}</p><p class="muted">Esegui MIGRAZIONE-V93.sql su Supabase.</p>`;return}let rows=data||[];auditHasMore=rows.length>size;if(auditHasMore)rows=rows.slice(0,size);auditLogs=reset?rows:[...auditLogs,...rows];renderAuditLogs()}
@@ -951,7 +952,7 @@ function dataLoadScope(){return (session?.user?.id||'')+':'+(sessionStorage.getI
 const PLAN_SECTIONS=['schedules','schedule_members','schedule_items','extras','extra_workers','store_reminders'];
 function renderLoadedView(){
  renderWorkers();if(currentView==='schedule')renderSchedulePicker();renderReportFilters();renderScheduleFilters();
- const renderers={dashboard:renderDashboard,stores:renderStores,schedule:renderSchedules,extras:renderExtras,reports:renderDailyReport,stats:renderStats,contacts:renderWorkContacts,operations:()=>typeof renderOperations==='function'&&renderOperations()};
+ const renderers={dashboard:renderDashboard,stores:renderStores,schedule:renderSchedules,extras:renderExtras,cleaning:()=>typeof renderCleaning==='function'&&renderCleaning(),reports:renderDailyReport,stats:renderStats,contacts:renderWorkContacts,operations:()=>typeof renderOperations==='function'&&renderOperations()};
  renderers[currentView]?.();renderedViews.set(currentView,viewRevision());if($('pendingDialog')?.open)renderPending();
  if(currentView==='settings'){ensureCloudSettingsUi();renderCloudEmployeeList()}
 }
@@ -1142,7 +1143,7 @@ function dashboardJobCompare(a,b){
 }
 function globalSearchMatches(q){q=String(q||'').trim().toLowerCase();if(q.length<2)return [];const out=[],add=(k,t,s,a)=>{if((t+" "+s).toLowerCase().includes(q))out.push({k,t,s,a})};stores.filter(workspaceSearchMatches).forEach(x=>add("Sede",x.nome||"Sede",[x.indirizzo,x.citta].filter(Boolean).join(" · "),()=>{activateClient(clientType(x));setView("stores");$("searchInput").value=x.nome||"";renderStores()}));extras.filter(workspaceSearchMatches).forEach(x=>{const st=stores.find(s=>s.id===x.store_id);add("Extra",x.titolo||"Extra",[x.numero_target?"Target "+x.numero_target:"",st?.nome||x.nome_esterno||""].filter(Boolean).join(" · "),()=>openExtraById(x.id))});profiles.forEach(x=>add("Operatore",x.nome||x.email||"Operatore",x.email||"",()=>setView("schedule")));return out.slice(0,40)}
 function renderGlobalSearchEverywhere(){const i=$("globalSearchEverywhere"),r=$("globalResultsEverywhere");if(!i||!r)return;r.innerHTML="";const rows=globalSearchMatches(i.value);if(i.value.trim().length<2)return;if(!rows.length){r.innerHTML='<p class="muted">Nessun risultato.</p>';return}rows.forEach(x=>{const b=document.createElement("button");b.type="button";b.className="card";b.innerHTML=`<strong>${esc(x.k)} · ${esc(x.t)}</strong><small>${esc(x.s)}</small>`;b.onclick=()=>{x.a();$("globalSearchDialog").close()};r.appendChild(b)})}
-function anomalyCounts(){const orphan=attachments.filter(a=>(a.intervention_id&&!interventions.some(i=>i.id===a.intervention_id))||(a.extra_id&&!extras.some(e=>e.id===a.extra_id))).length,noWorker=interventions.filter(i=>["in_attesa","convalidato"].includes(i.stato)&&!interventionWorkers.some(w=>w.intervention_id===i.id)).length,noTarget=extras.filter(e=>clientType(e)==="eurospin"&&!["completato","annullato"].includes(e.stato)&&!String(e.numero_target||"").trim()).length;return{orphan,noWorker,noTarget,total:orphan+noWorker+noTarget}}
+function anomalyCounts(){const orphan=attachments.filter(a=>(a.intervention_id&&!interventions.some(i=>i.id===a.intervention_id))||(a.extra_id&&!extras.some(e=>e.id===a.extra_id))).length,noWorker=interventions.filter(i=>["in_attesa","convalidato"].includes(i.stato)&&!interventionWorkers.some(w=>w.intervention_id===i.id)).length,noTarget=extras.filter(e=>clientType(e)==="eurospin"&&!(e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET'))&&!["completato","annullato"].includes(e.stato)&&!String(e.numero_target||"").trim()).length;return{orphan,noWorker,noTarget,total:orphan+noWorker+noTarget}}
 function renderHealthCenter(){if(!$("healthSummary")||!admin())return;const h=anomalyCounts();$("healthSummary").innerHTML=`<div class="health-kpi"><strong>${h.total}</strong><span>Anomalie</span></div><div class="health-kpi"><strong>${attachments.length}</strong><span>Allegati</span></div><div class="health-kpi"><strong>${interventions.length+extras.length}</strong><span>Lavori</span></div>`;$("healthDetails").innerHTML=[["Allegati orfani",h.orphan],["Chiusure senza operatore",h.noWorker],["Extra Eurospin senza target",h.noTarget]].map(x=>`<div class="health-issue"><strong>${x[1]?"⚠️":"✓"} ${x[0]} · ${x[1]}</strong></div>`).join("")}
 function renderDashboardSmart(){const r=$("dashboardSmart");if(!r)return;if(!admin()){r.innerHTML="";r.classList.add("hidden");return}r.classList.remove("hidden");const h=anomalyCounts(),p=interventions.filter(i=>i.stato==="in_attesa").length+extras.filter(e=>e.stato==="in_attesa").length,o=extras.filter(e=>!["completato","annullato"].includes(e.stato)).length;r.innerHTML=`<button class="smart-chip ${p?"warn":"good"}" data-s="p"><strong>${p}</strong><span>Da convalidare</span></button><button class="smart-chip ${o?"warn":"good"}" data-s="e"><strong>${o}</strong><span>Extra aperti</span></button>`;r.querySelector('[data-s="p"]').onclick=()=>p?openPendingDialog():toast("Nessuna convalida");r.querySelector('[data-s="e"]').onclick=()=>setView("extras")}
 function compactDashboardJob(card){
@@ -1442,7 +1443,7 @@ async function showStoreDetail(s){
 }
 function renderStoreDetail(s,archive,archiveOnly=false){
   const rows=interventions.filter(i=>i.store_id===s.id&&!i.multi_day_open).sort((a,b)=>String(interventionEndDate(b)).localeCompare(String(interventionEndDate(a))));
-  const ex=extras.filter(e=>e.store_id===s.id).sort((a,b)=>String(b.giorno_intervento).localeCompare(String(a.giorno_intervento)));
+  const ex=extras.filter(e=>e.store_id===s.id&&!(e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET'))).sort((a,b)=>String(b.giorno_intervento).localeCompare(String(a.giorno_intervento)));
   const plans=archive.filter(a=>archiveKind(a)==='planimetria');
   const manualPhotos=archive.filter(a=>archiveKind(a)==='foto');
   const interventionIds=new Set(rows.map(i=>i.id));
@@ -4567,7 +4568,7 @@ function renderExtras(){
   const search=($('extraSearchInput')?.value||'').trim().toLocaleLowerCase('it');
   const categoryFilter=$('extraCategoryFilter')?.value||'all';
   $('clearExtraSearch')?.classList.toggle('hidden',!search);
-  const visible=extras.filter(e=>(extraClientFilter==='all'||clientType(e)===extraClientFilter)&&(categoryFilter==='all'||extraCategory(e)===categoryFilter)&&(!search||extraSearchText(e).includes(search)));
+  const visible=extras.filter(e=>(!(e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET'))||e.id===pendingExtraFocusId)&&(extraClientFilter==='all'||clientType(e)===extraClientFilter)&&(categoryFilter==='all'||extraCategory(e)===categoryFilter)&&(!search||extraSearchText(e).includes(search)));
   const byRequest=(a,b)=>String(extraRequestDate(a)||'').localeCompare(String(extraRequestDate(b)||''));
   const putFocusedFirst=list=>pendingExtraFocusId?[...list].sort((a,b)=>(a.id===pendingExtraFocusId?-1:b.id===pendingExtraFocusId?1:0)):list;
   const todo=putFocusedFirst(visible.filter(e=>!['completato','annullato'].includes(e.stato)&&e.stato!=='in_attesa'&&!extraIsScheduled(e)).sort(byRequest));
@@ -5570,7 +5571,7 @@ function openExtraClosureDialog(extra,fromOrdinary=false){
   renderExtraClosureDetails(extra);
   window.ExtraClosureDocuments.reset();
   $('closeExtraForm').dataset.profile=closureProfile(extra);
-  const euro=closureProfile(extra)==='eurospin',intesa=closureProfile(extra)==='intesa';
+  const euro=closureProfile(extra)==='eurospin'&&!(extra.cleaning_codes?.length&&!extra.cleaning_codes.includes('TARGET')),intesa=closureProfile(extra)==='intesa';
   $('closeEurospinFields').classList.toggle('hidden',!euro);
   $('closeIntesaFields').classList.toggle('hidden',!intesa);
   $('closeExtraPhotoRequirement').textContent=intesa?'(almeno una foto)':'(facoltative)';
@@ -5820,8 +5821,8 @@ $('closeExtraForm').onsubmit=async e=>{
     const newEurospin=profileMode==='eurospin'?window.ExtraClosureDocuments.get('eurospin'):null;
     const newOvergreen=profileMode==='eurospin'?window.ExtraClosureDocuments.get('overgreen'):null;
     const reports=profileMode==='eurospin'?[['rapportino_eurospin',newEurospin],['rapportino_overgreen',newOvergreen]].filter(([,file])=>!!file):profileMode==='intesa'&&($('closeExtraGenericDoc').files[0]||recoveredGenericFile)?[['verbale_cliente',$('closeExtraGenericDoc').files[0]||recoveredGenericFile]]:[];
-    if(profileMode==='eurospin'&&!newEurospin&&!existingEurospin)throw new Error('Per la chiusura definitiva serve il rapportino Eurospin.');
-    if(profileMode==='eurospin'&&!newOvergreen&&!existingOvergreen)throw new Error('Per la chiusura definitiva serve anche il file Overgreen. Se lo hai già caricato in un parziale non devi ricaricarlo.');
+    if(profileMode==='eurospin'&&!(extra.cleaning_codes?.length&&!extra.cleaning_codes.includes('TARGET'))&&!newEurospin&&!existingEurospin)throw new Error('Per la chiusura definitiva serve il rapportino Eurospin.');
+    if(profileMode==='eurospin'&&!(extra.cleaning_codes?.length&&!extra.cleaning_codes.includes('TARGET'))&&!newOvergreen&&!existingOvergreen)throw new Error('Per la chiusura definitiva serve anche il file Overgreen. Se lo hai già caricato in un parziale non devi ricaricarlo.');
     if(profileMode==='intesa'&&!ticket)throw new Error('Inserisci il numero ticket o ordine.');
     const structuredHasPhotos=workItemsForExtra(id).some(w=>workPhotosForItem(w.id).length>0)||structuredCloseRows().some(r=>r.before.length||r.after.length);
     const existingGenericPhotos=attachments.some(a=>a.extra_id===id&&a.tipo==='foto_generica');
@@ -5939,7 +5940,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=307').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=308').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

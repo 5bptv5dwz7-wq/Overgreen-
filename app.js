@@ -1,4 +1,4 @@
-const APP_VERSION='V305';
+const APP_VERSION='V306';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -2669,6 +2669,16 @@ function syncStoreTypeUi(){const atm=$('storeSiteType')?.value==='atm';$('storeF
 function openStore(s=null){if(s)activateClient(clientType(s));$('storeForm').reset();$('storeId').value=s?.id||'';$('storeClient').value=s?clientType(s):activeClient;$('storeSiteType').value=s?.site_type||'punto_vendita';$('storeFixedAmount').value=s?.importo_fisso??'';$('storeName').value=s?.nome||'';$('storeAddress').value=s?.indirizzo||'';$('storeCity').value=s?.citta||'';$('storeAddress').dataset.originalValue=s?.indirizzo||'';$('storeCity').dataset.originalValue=s?.citta||'';$('storeAddress').dataset.lookupLat='';$('storeAddress').dataset.lookupLon='';$('storeAddress').dataset.lookupLabel='';if($('storeAddressLookupStatus')){$('storeAddressLookupStatus').textContent='';$('storeAddressLookupStatus').classList.add('hidden')}$('storeLast').value=s?.ultimo_passaggio||'';const noInterval=!!s&&!storeHasInterval(s);$('storeNoInterval').checked=noInterval;$('storeInterval').value=storeHasInterval(s)?Number(s.intervallo_giorni):15;$('storeNotes').value=s?.note||'';syncStoreTypeUi();syncStoreIntervalUi();locationEditor().open(s);openDialog('storeDialog')}
 $('storeNoInterval')?.addEventListener('change',syncStoreIntervalUi);
 $('storeSiteType')?.addEventListener('change',syncStoreTypeUi);
+function ordinaryAssignedWorkerIds(scheduleItemId){
+  const item=scheduleItems.find(i=>i.id===scheduleItemId);
+  if(!item)return [];
+  const activeIds=new Set(profiles.filter(p=>p.attivo).map(p=>p.id));
+  return [...new Set(scheduleMemberIds(item.schedule_id))].filter(id=>activeIds.has(id));
+}
+function ordinaryDefaultWorkerIds(scheduleItemId){
+  const assigned=ordinaryAssignedWorkerIds(scheduleItemId);
+  return assigned.length?assigned:(admin()?[]:[profile.id]);
+}
 async function openDone(s,scheduleItemId=''){
   if(ordinarySaveBusy)return;
   try{const pending=(await photoQueue().snapshot()).submissions.find(r=>!r.result&&r.args.p_store_id===s.id&&(r.args.p_item_id||'')===(scheduleItemId||''));if(pending){setView('settings');await renderPhotoDeliveryDetails();return alert('Una chiusura per questa sede è già conservata su questo telefono. Controlla Sincronizzazione foto: riprenderà lo stesso invio senza duplicare il lavoro.')}}catch(e){return recoverPhotoStorage(e)}
@@ -2681,13 +2691,15 @@ async function openDone(s,scheduleItemId=''){
     if(existing?.length){await loadAll();return alert(existing[0].stato==='in_attesa'?'Questo passaggio è già stato inviato ed è in attesa di convalida.':'Questo passaggio risulta già completato.')}
   }
   $('doneForm').reset();let visitNote=$('doneScheduledNote');if(!visitNote){visitNote=document.createElement('div');visitNote.id='doneScheduledNote';$('doneTitle').closest('.dialog-head').after(visitNote)}visitNote.innerHTML=scheduleItemNoteMarkup(scheduleItems.find(i=>i.id===scheduleItemId))+visitPhotosMarkup(scheduleItems.find(i=>i.id===scheduleItemId));donePhotoFiles=[];renderDonePhotoSelection();$('doneStoreId').value=s.id;$('doneScheduleItemId').value=scheduleItemId;const openMulti=openMultiDayIntervention(s.id);$('doneTitle').textContent=(openMulti?'Continua intervento · ':'Ordinario · ')+s.nome;$('doneDate').value=today();$('doneNextVisitWrap').classList.add('hidden');const currentNextNote=String(s.next_visit_note||'').trim();if(openMulti){$('doneNextVisitCurrent').innerHTML=`<strong>↪ Intervento già in corso</strong><p>Iniziato il ${esc(fmt(openMulti.data_intervento))}. Questa giornata verrà aggiunta allo stesso intervento.</p>`;$('doneNextVisitCurrent').classList.remove('hidden')}if(!openMulti){$('doneNextVisitCurrent').innerHTML=nextVisitNoteMarkup(s);$('doneNextVisitCurrent').classList.toggle('hidden',!currentNextNote);}const linked=scheduleItemId?linkedExtrasForScheduleItem(scheduleItemId):[];$('doneLinkedExtras').innerHTML=linked.length?`<strong>⚠ Indicazioni collegate a questo passaggio</strong>${linked.map(e=>{const intesaTicket=isIntesaOrdinaryTicket(e),eurospinTarget=isEurospinOrdinaryTarget(e),included=intesaTicket||eurospinTarget,pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');return `<div class="linked-extra-category ${extraCategoryClass(e)}"><b>${intesaTicket?'🎫 Ticket Intesa':eurospinTarget?'🎯 Target Eurospin':esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}${e.numero_target?` <small>· Target ${esc(e.numero_target)}</small>`:''}${deadlineLabel(e)}${e.descrizione?`<small style="display:block;margin-top:4px">${esc(e.descrizione)}</small>`:''}${included&&pdf?`<button type="button" class="secondary compact-btn" data-linked-ticket-pdf="${e.id}" style="margin-top:7px">Apri PDF ${intesaTicket?'ticket':'target'}</button>`:''}</div>`}).join('')}`:'';$('doneLinkedExtras').classList.toggle('hidden',!linked.length);$('doneLinkedExtras').querySelectorAll('[data-linked-ticket-pdf]').forEach(b=>{const ex=linked.find(e=>e.id===b.dataset.linkedTicketPdf),pdf=attachments.find(a=>a.extra_id===ex?.id&&a.tipo==='pdf_richiesta');if(pdf)b.onclick=()=>openAttachment(pdf)});
+  renderWorkers();
   const fieldset=$('doneWorkersFieldset'),checks=[...$('doneWorkers').querySelectorAll('input')];
-  if(admin()){
-    fieldset?.classList.remove('hidden');
-  }else{
-    fieldset?.classList.add('hidden');
-    checks.forEach(x=>x.checked=x.value===profile.id);
-  }
+  const selectedWorkers=new Set(ordinaryDefaultWorkerIds(scheduleItemId));
+  checks.forEach(x=>x.checked=selectedWorkers.has(x.value));
+  fieldset?.classList.toggle('hidden',!admin());
+  let teamSummary=$('doneAssignedTeam');
+  if(!teamSummary){teamSummary=document.createElement('p');teamSummary.id='doneAssignedTeam';teamSummary.className='muted';fieldset.before(teamSummary)}
+  teamSummary.textContent=selectedWorkers.size?'Esecutori: '+profiles.filter(p=>selectedWorkers.has(p.id)).map(p=>p.nome).join(', '):'';
+  teamSummary.classList.toggle('hidden',admin()||!selectedWorkers.size);
   openDialog('doneDialog')
 }
 async function compressImage(file){
@@ -4882,7 +4894,7 @@ async function saveOrdinaryIntervention(continueAnotherDay,btn){
   buttons.forEach(b=>b.disabled=true);btn.textContent='Salvataggio…';
   try{
     if(!ordinarySaveAttempt){
-      const workers=admin()?[...$('doneWorkers').querySelectorAll('input:checked')].map(x=>x.value):[profile.id];
+      const workers=admin()?[...$('doneWorkers').querySelectorAll('input:checked')].map(x=>x.value):ordinaryDefaultWorkerIds($('doneScheduleItemId').value);
       if(!workers.length)throw new Error('Seleziona chi ha eseguito.');
       const storeId=$('doneStoreId').value,itemId=$('doneScheduleItemId').value||null;
       const nextNote=continueAnotherDay?'':($('doneHasNextVisitNote').checked?$('doneNextVisitNote').value.trim():'');
@@ -5927,7 +5939,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=305').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=306').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

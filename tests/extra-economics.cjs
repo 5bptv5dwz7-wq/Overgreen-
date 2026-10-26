@@ -172,3 +172,10 @@ test('V281 totals separate green, ordinary VAT and reverse without including inc
  const green=excelBook();c.addEconomicsWorksheet(green,[row('verde',null,12345),row('verde',null,55)]);
  const total=green.sheets[0].rows.at(-1);assert.equal(total.values[16].result,124);assert.equal(total.values[16].formula,'SUM(Q3,Q4)');
 });
+
+test('maintenance Excel separates base labor, tools, night/holiday hours and VAT',()=>{
+ const c=uiSetup(),book=excelBook(),extra={...c.extras[0],categoria_target:'manutenzioni',night_hours:2};
+ const row={pricing_category:'manutenzioni',pricing_mode:'tariffa',total_hours:6,night_hours:2,operator_count:2,dedicated_trip:true,equipment:true,...model.rates('manutenzioni',true)};
+ c.addEconomicsWorksheet(book,[{extra,row,calc:model.review(row,extra)}]);
+ const sheet=book.sheets[0],v=sheet.rows[2].values;assert.equal(sheet.name,'Manutenzioni');assert.equal(v[7],4);assert.equal(v[8],28);assert.equal(v[9],2);assert.equal(v[10],36);assert.equal(v[11],184);assert.equal(v[13],30);assert.equal(v[17],314);assert.equal(v[18],69.08);assert.equal(v[19],383.08);assert.match(v[20],/IVA 22%/);assert.doesNotMatch(v[20],/Reverse/);
+});

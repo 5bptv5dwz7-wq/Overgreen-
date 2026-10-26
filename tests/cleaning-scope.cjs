@@ -39,3 +39,13 @@ h.$('extraHoursClose').click();await h.open();assert.equal(h.$('extraEconomicsCl
 h.$('extraEconomicsCleaningScope').value='esterni';await h.save();assert.equal(h.db.row.cleaning_scope,'esterni');
 const g=setup({category:'verde'});await g.open();assert.equal(g.$('extraEconomicsCleaningWrap').hidden,true);await g.save();assert.equal(g.db.row.cleaning_scope,null);
 });
+
+test('maintenance saves day/night equipment prices, no cleaning scope, and displays 22% VAT',async()=>{
+ const h=setup({category:'manutenzioni',nightHours:2});await h.open();
+ assert.equal(h.$('extraEconomicsCleaningWrap').hidden,true);assert.equal(h.$('extraEconomicsNightWrap').hidden,false);assert.equal(h.$('extraEconomicsEquipmentWrap').hidden,false);
+ h.$('extraEconomicsMode').value='tariffa';h.$('extraEconomicsOperators').value='2';h.$('extraEconomicsTrip').value='yes';h.$('extraHoursInput').value='6';h.$('extraEconomicsEquipment').checked=true;
+ h.$('extraHoursForm').dispatchEvent(new h.c.document.defaultView.Event('input'));
+ assert.match(h.$('extraEconomicsSummary').textContent,/IVA 22%/);
+ await h.save();assert.equal(h.db.row.cleaning_scope,null);assert.equal(h.db.row.hourly_rate,33);assert.equal(h.db.row.night_hourly_rate,41);assert.equal(h.db.row.night_hours,2);assert.equal(model.calculate(h.db.row).total,31400);
+ h.$('extraHoursClose').click();await h.open();assert.equal(h.$('extraEconomicsEquipment').checked,true);
+});

@@ -9,7 +9,7 @@
   }
   const cents=value=>decimal(value);
   const money=value=>value==null?'Da completare':new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(value/100);
-  function rates(category,equipment=false){return category==='verde'?{hourly_rate:20,exit_rate:100}:category==='pulizie'?{hourly_rate:equipment?23:18,night_hourly_rate:equipment?30:25,exit_rate:50}:{hourly_rate:null,exit_rate:null}}
+  function rates(category,equipment=false){return category==='verde'?{hourly_rate:20,exit_rate:100}:category==='pulizie'?{hourly_rate:equipment?23:18,night_hourly_rate:equipment?30:25,exit_rate:50}:category==='manutenzioni'?{hourly_rate:equipment?33:28,night_hourly_rate:equipment?41:36,exit_rate:50}:{hourly_rate:null,exit_rate:null}}
   function isBillableExtra(extra){
     if(!extra)return false;
     const client=extra?.client_type||'eurospin';
@@ -19,7 +19,7 @@
   }
   function calculate(row={}){
     const missing=[];if(!modes[row.pricing_mode])missing.push('modalità');
-    if(!['verde','pulizie'].includes(row.pricing_category))missing.push('categoria');
+    if(!['verde','pulizie','manutenzioni'].includes(row.pricing_category))missing.push('categoria');
     if(typeof row.dedicated_trip!=='boolean')missing.push('scelta addebito uscita');
     if(!Number.isInteger(Number(row.operator_count))||Number(row.operator_count)<1||Number(row.operator_count)>99)missing.push('numero operatori');
     const quoted=row.pricing_mode==='preventivo';
@@ -29,7 +29,7 @@
     if(!quoted&&hours==null)missing.push('ore');
     if(hourly==null||exitRate==null)missing.push('tariffe');
     const night=decimal(row.night_hours??0,5),nightRate=cents(row.night_hourly_rate);
-    if(night>0&&row.pricing_category!=='pulizie')missing.push('notturno solo per pulizie');
+    if(night>0&&!['pulizie','manutenzioni'].includes(row.pricing_category))missing.push('notturno/festivo solo per pulizie e manutenzioni');
     if(hours!=null&&night>hours)missing.push('ore notturne superiori al totale');
     if(night>0&&nightRate==null)missing.push('tariffa notturna');
     const validHours=hours!=null&&night<=hours;
@@ -50,12 +50,13 @@
     return {complete,missing:[...new Set(missing)],labor,laborDay,laborNight,dayHours:dayHours==null?null:dayHours/100,nightHours:night/100,base,exit,exitIncluded,expenses,subtotal,discount,total,quotePending:quoted&&row.quote_status!=='accettato'};
   }
   function cleaningInvoiceLabel(row,category=row?.pricing_category){
+    if(category==='manutenzioni')return 'Manutenzioni · IVA 22%';
     if(category!=='pulizie')return '';
     return row?.cleaning_scope==='interni'?'Pulizie interne · Reverse charge':row?.cleaning_scope==='esterni'?'Pulizie esterne · IVA ordinaria':'Pulizie: interni/esterni da indicare';
   }
   function review(row,extra,report){
     const result=calculate(row||{}),issues=[];
-    if(row?.pricing_category==='pulizie'&&Number(row.night_hours||0)!==Number(extra?.night_hours||0))issues.push('Ore notturne cambiate: ricontrolla Economia');
+    if(['pulizie','manutenzioni'].includes(row?.pricing_category)&&Number(row.night_hours||0)!==Number(extra?.night_hours||0))issues.push('Ore notturne cambiate: ricontrolla Economia');
     if(row?.pricing_category&&extra?.categoria_target&&row.pricing_category!==extra.categoria_target)issues.push('Categoria cambiata: ricontrolla le tariffe');
     if(row?.total_hours!=null&&(row?.source_attachment_id||null)!==(report?.id||null))issues.push('Rapportino cambiato: ricontrolla le ore');
     return {...result,issues,ready:result.complete&&!result.quotePending&&!issues.length};

@@ -65,7 +65,7 @@ window.PackageReview=(()=>{
     const x=item(),e=x.extra,c=context(),r=validReview(c),st=stores.find(v=>v.id===e.store_id),done=s.ids.filter(id=>approved(s.context.get(id))).length;
     $r('progress').textContent=`${done}/${s.ids.length} extra verificati · le conferme sono salvate nel tuo account`;
     $r('overview').replaceChildren();
-    for(const cat of ['verde','pulizie']){const group=s.rows.filter(x=>(x.extra.categoria_target||x.row.pricing_category)===cat);if(group.length)$r('overview').append(text('span',`${cat==='verde'?'Verde':'Pulizie'}: ${group.length} extra · ${window.OvergreenEconomics.money(group.filter(x=>x.calc.ready).reduce((n,x)=>n+x.calc.total,0))}`))}
+    for(const cat of ['verde','pulizie','manutenzioni']){const group=s.rows.filter(x=>(x.extra.categoria_target||x.row.pricing_category)===cat);if(group.length)$r('overview').append(text('span',`${cat==='verde'?'Verde':cat==='manutenzioni'?'Manutenzioni':'Pulizie'}: ${group.length} extra · ${window.OvergreenEconomics.money(group.filter(x=>x.calc.ready).reduce((n,x)=>n+x.calc.total,0))}`))}
     const select=$r('select');select.replaceChildren();s.rows.forEach((x,i)=>{const opt=text('option',`${approved(s.context.get(x.extra.id))?'✓':'○'} ${x.extra.numero_target||'Extra'} · ${stores.find(v=>v.id===x.extra.store_id)?.nome||x.extra.nome_esterno||x.extra.titolo}`);opt.value=i;select.append(opt)});select.value=s.index;
     $r('identity').replaceChildren(text('h3',`${st?.nome||e.nome_esterno||'Sede'} · Target ${e.numero_target||'non indicato'}`),text('p',`${e.titolo||''} · Esecuzione: ${e.giorno_intervento||'non indicata'}`));
     const issues=economicsZipIssues([x]);if(issues.length)$r('identity').append(text('p',issues.join('\n')));
@@ -162,8 +162,8 @@ window.PackageReview=(()=>{
     if(!s.ids.every(id=>approved(s.context.get(id)))){await render();throw Error('Alcuni dati sono cambiati o non ancora verificati. Completa i passaggi.');}
     const issues=economicsZipIssues(s.rows);if(issues.length)throw Error(issues.join('\n'));
     await ensureLibraries('JSZip','ExcelJS','PDFLib');const groups=[];
-    for(const cat of ['verde','pulizie']){const rows=s.rows.filter(x=>(x.extra.categoria_target||x.row.pricing_category)===cat).map(x=>({...x,closureNumber:validReview(s.context.get(x.extra.id)).closure_number}));if(!rows.length)continue;
-      const book=new window.ExcelJS.Workbook();addEconomicsWorksheet(book,rows,s.period);groups.push({folder:cat==='verde'?'Verde':'Pulizie',rows,excel:await book.xlsx.writeBuffer()});}
+    for(const cat of ['verde','pulizie','manutenzioni']){const rows=s.rows.filter(x=>(x.extra.categoria_target||x.row.pricing_category)===cat).map(x=>({...x,closureNumber:validReview(s.context.get(x.extra.id)).closure_number}));if(!rows.length)continue;
+      const book=new window.ExcelJS.Workbook();addEconomicsWorksheet(book,rows,s.period);groups.push({folder:cat==='verde'?'Verde':cat==='manutenzioni'?'Manutenzioni':'Pulizie',rows,excel:await book.xlsx.writeBuffer()});}
     const blob=await buildEconomicsZipUnderLimit(groups,$r('status'));if(!blob||!current(s))return;
     const fresh=await contexts(s.ids);if(!same(s.context,fresh))throw Error('Dati cambiati durante la generazione. Aggiorna e ricontrolla.');
     const zip=await window.JSZip.loadAsync(blob),files=Object.values(zip.files).filter(f=>!f.dir),pdfCount=files.filter(f=>/\.pdf$/i.test(f.name)).length;

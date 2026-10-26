@@ -1,4 +1,4 @@
-const APP_VERSION='V303';
+const APP_VERSION='V304';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -311,8 +311,8 @@ function elapsedDaysLabel(e){
   const d=elapsedDaysFrom(extraRequestDate(e));
   return d===null?'Giorni trascorsi non disponibili':d===0?'Richiesto oggi':d===1?'1 giorno trascorso':`${d} giorni trascorsi`;
 }
-function extraCategory(e){return ['verde','pulizie'].includes(e?.categoria_target)?e.categoria_target:null}
-function extraCategoryLabel(e){return extraCategory(e)==='verde'?'🌿 Verde':extraCategory(e)==='pulizie'?'🧹 Pulizie':'Categoria non indicata'}
+function extraCategory(e){return ['verde','pulizie','manutenzioni'].includes(e?.categoria_target)?e.categoria_target:null}
+function extraCategoryLabel(e){return extraCategory(e)==='verde'?'🌿 Verde':extraCategory(e)==='pulizie'?'🧹 Pulizie':extraCategory(e)==='manutenzioni'?'🔧 Manutenzioni':'Categoria non indicata'}
 function extraCategoryClass(e){return extraCategory(e)?`category-${extraCategory(e)}`:'category-unknown'}
 function clientType(row){
   if(typeof row==='string'&&['eurospin','intesa','privato'].includes(row))return row;
@@ -2341,7 +2341,7 @@ async function appendExtraEconomicsPdf(pdf,extra){
   newPage();paragraph(extra.titolo||'Lavoro extra',16,bold,green);
   if(!row){paragraph('Economia non compilata',11,bold,muted);return}
   const c=model.review(row,extra,latestEconomicsReport(extra.id)),money=model.money,amount=v=>money(model.cents(v));
-  const meta=[model.modes[row.pricing_mode],row.pricing_category==='verde'?'Verde':row.pricing_category==='pulizie'?'Pulizie':null,extra.giorno_intervento?fmt(extra.giorno_intervento):null].filter(Boolean).join('  /  ');
+  const meta=[model.modes[row.pricing_mode],row.pricing_category==='verde'?'Verde':row.pricing_category==='pulizie'?'Pulizie':row.pricing_category==='manutenzioni'?'Manutenzioni':null,extra.giorno_intervento?fmt(extra.giorno_intervento):null].filter(Boolean).join('  /  ');
   if(meta)paragraph(meta,9,regular,muted);
   if(!c.ready)paragraph(economicsStatus(c,row),9,bold,rgb(.60,.36,.09));
   heading();
@@ -2349,7 +2349,7 @@ async function appendExtraEconomicsPdf(pdf,extra){
     entry('Importo a preventivo',[row.quote_reference,c.exitIncluded?'Forfait viaggio incluso':null].filter(Boolean).join(' · '),amount(row.quote_amount));
   }else{
     if(c.dayHours>0||c.labor==null)entry(c.nightHours>0?'Manodopera diurna':'Manodopera',`${c.dayHours??'Ore da compilare'} ore squadra × ${amount(row.hourly_rate)}/h${row.equipment?' · attrezzature incluse':''}`,money(c.laborDay));
-    if(c.nightHours>0)entry('Manodopera notturna',`${c.nightHours} ore squadra × ${amount(row.night_hourly_rate)}/h${row.equipment?' · attrezzature incluse':''}`,money(c.laborNight));
+    if(c.nightHours>0)entry(row.pricing_category==='manutenzioni'?'Manodopera notturna/festiva':'Manodopera notturna',`${c.nightHours} ore squadra × ${amount(row.night_hourly_rate)}/h${row.equipment?' · attrezzature incluse':''}`,money(c.laborNight));
   }
   if(c.exit>0)entry('Forfait viaggio',`${row.operator_count} operatori × ${amount(row.exit_rate)}`,money(c.exit));
   for(const expense of row.expenses||[])entry(expense.description||'Spesa senza descrizione','',amount(expense.amount));
@@ -4046,8 +4046,8 @@ async function buildExtraClosurePdfBlob(e,packageQuality=.68,packageMaxSide=1500
     const margin=42,w=page.getWidth()-margin*2;let y=790;
     page.drawText('OVERGREEN',{x:margin,y,size:22,font:bold,color:green});const targetHeader=e.numero_target?`TARGET N° ${pdfSafeText(e.numero_target)}`:'';if(targetHeader){const targetSize=16,targetWidth=bold.widthOfTextAtSize(targetHeader,targetSize);page.drawText(targetHeader,{x:page.getWidth()-margin-targetWidth,y:y+2,size:targetSize,font:bold,color:green});}page.drawText('REPORT DI CHIUSURA LAVORO EXTRA',{x:margin,y:y-29,size:11,font:bold,color:muted});y-=62;
     const place=st?.nome||e.nome_esterno||'Luogo non indicato',address=st?.indirizzo||[e.indirizzo_esterno,st?.citta].filter(Boolean).join(' · ');
-    const fields=[['LAVORO',e.titolo],['CATEGORIA',extraCategory(e)==='verde'?'Verde':extraCategory(e)==='pulizie'?'Pulizie':'Categoria non indicata'],['LUOGO',place],['INDIRIZZO',address||'Non indicato'],['DATA RICHIESTA',fmt(extraRequestDate(e))],['DATA ESECUZIONE',fmt(e.giorno_intervento)],['ORARIO CHIUSURA',fmtClosedAt(e.closed_at)],['CHIUSO DA',closedByName(e)],['OPERATORI',names.join(', ')||'Non indicati'],['STATO','Chiuso e convalidato']];
-    if(e.categoria_target==='pulizie'&&Number(e.night_hours)>0)fields.push(['ORE NOTTURNE SQUADRA',String(e.night_hours).replace('.',',')]);
+    const fields=[['LAVORO',e.titolo],['CATEGORIA',extraCategory(e)==='verde'?'Verde':extraCategory(e)==='pulizie'?'Pulizie':extraCategory(e)==='manutenzioni'?'Manutenzioni':'Categoria non indicata'],['LUOGO',place],['INDIRIZZO',address||'Non indicato'],['DATA RICHIESTA',fmt(extraRequestDate(e))],['DATA ESECUZIONE',fmt(e.giorno_intervento)],['ORARIO CHIUSURA',fmtClosedAt(e.closed_at)],['CHIUSO DA',closedByName(e)],['OPERATORI',names.join(', ')||'Non indicati'],['STATO','Chiuso e convalidato']];
+    if(['pulizie','manutenzioni'].includes(e.categoria_target)&&Number(e.night_hours)>0)fields.push(['ORE NOTTURNE/FESTIVE SQUADRA',String(e.night_hours).replace('.',',')]);
     const metaGap=22,metaColW=(w-metaGap)/2,metaLabelW=82,metaValueW=metaColW-metaLabelW-6,metaStartY=y,metaRows=Math.ceil(fields.length/2),rowHeights=[];
     for(let r=0;r<metaRows;r++){
       const left=fields[r*2],right=fields[r*2+1],lineCounts=[left,right].filter(Boolean).map(([,value])=>Math.min(2,wrapPdfText(value,regular,10.5,metaValueW).length||1));
@@ -4102,8 +4102,8 @@ async function generateExtraClosurePdf(e,button){
     const margin=42,w=page.getWidth()-margin*2;let y=790;
     page.drawText('OVERGREEN',{x:margin,y,size:22,font:bold,color:green});const targetHeader=e.numero_target?`TARGET N° ${pdfSafeText(e.numero_target)}`:'';if(targetHeader){const targetSize=16,targetWidth=bold.widthOfTextAtSize(targetHeader,targetSize);page.drawText(targetHeader,{x:page.getWidth()-margin-targetWidth,y:y+2,size:targetSize,font:bold,color:green});}page.drawText('REPORT DI CHIUSURA LAVORO EXTRA',{x:margin,y:y-29,size:11,font:bold,color:muted});y-=62;
     const place=st?.nome||e.nome_esterno||'Luogo non indicato',address=st?.indirizzo||[e.indirizzo_esterno,st?.citta].filter(Boolean).join(' · ');
-    const fields=[['LAVORO',e.titolo],['CATEGORIA',extraCategory(e)==='verde'?'Verde':extraCategory(e)==='pulizie'?'Pulizie':'Categoria non indicata'],['LUOGO',place],['INDIRIZZO',address||'Non indicato'],['DATA RICHIESTA',fmt(extraRequestDate(e))],['DATA ESECUZIONE',fmt(e.giorno_intervento)],['ORARIO CHIUSURA',fmtClosedAt(e.closed_at)],['CHIUSO DA',closedByName(e)],['OPERATORI',names.join(', ')||'Non indicati'],['STATO','Chiuso e convalidato']];
-    if(e.categoria_target==='pulizie'&&Number(e.night_hours)>0)fields.push(['ORE NOTTURNE SQUADRA',String(e.night_hours).replace('.',',')]);
+    const fields=[['LAVORO',e.titolo],['CATEGORIA',extraCategory(e)==='verde'?'Verde':extraCategory(e)==='pulizie'?'Pulizie':extraCategory(e)==='manutenzioni'?'Manutenzioni':'Categoria non indicata'],['LUOGO',place],['INDIRIZZO',address||'Non indicato'],['DATA RICHIESTA',fmt(extraRequestDate(e))],['DATA ESECUZIONE',fmt(e.giorno_intervento)],['ORARIO CHIUSURA',fmtClosedAt(e.closed_at)],['CHIUSO DA',closedByName(e)],['OPERATORI',names.join(', ')||'Non indicati'],['STATO','Chiuso e convalidato']];
+    if(['pulizie','manutenzioni'].includes(e.categoria_target)&&Number(e.night_hours)>0)fields.push(['ORE NOTTURNE/FESTIVE SQUADRA',String(e.night_hours).replace('.',',')]);
     const metaGap=22,metaColW=(w-metaGap)/2,metaLabelW=82,metaValueW=metaColW-metaLabelW-6,metaStartY=y,metaRows=Math.ceil(fields.length/2),rowHeights=[];
     for(let r=0;r<metaRows;r++){
       const left=fields[r*2],right=fields[r*2+1],lineCounts=[left,right].filter(Boolean).map(([,value])=>Math.min(2,wrapPdfText(value,regular,10.5,metaValueW).length||1));
@@ -4158,7 +4158,7 @@ function eurospinMonthlyExtras(month,category){
     if(clientType(e)!=='eurospin'||isEurospinOrdinaryTarget(e)||!['completato','annullato'].includes(e.stato))return false;
     const d=eurospinPackageExtraDate(e);if(!d||!d.startsWith(month+'-'))return false;
     if(category&&category!=='both'&&extraCategory(e)!==category)return false;
-    return ['verde','pulizie'].includes(extraCategory(e));
+    return ['verde','pulizie','manutenzioni'].includes(extraCategory(e));
   }).sort((a,b)=>String(eurospinPackageExtraDate(a)).localeCompare(String(eurospinPackageExtraDate(b)))||String(a.numero_target||'').localeCompare(String(b.numero_target||'')))
 }
 function eurospinPackagePrerequisites(e){
@@ -4175,7 +4175,7 @@ function eurospinPackageFilename(e,index){
   return `${pdfSafeName(target)} - ${pdfSafeName(place)} - ${date}.pdf`;
 }
 function eurospinPackageSelectedCategories(){
-  const v=$('eurospinPackageCategory')?.value||'both';return v==='both'?['verde','pulizie']:[v]
+  const v=$('eurospinPackageCategory')?.value||'both';return v==='both'?['verde','pulizie','manutenzioni']:[v]
 }
 function renderEurospinPackageCheck(){
   const month=$('eurospinPackageMonth')?.value,root=$('eurospinPackageSummary'),generate=$('eurospinPackageGenerate'),downloads=$('eurospinPackageDownloads');
@@ -4190,7 +4190,7 @@ function renderEurospinPackageCheck(){
     eurospinPackageState.groups[cat]=rows;total+=rows.length;readyTotal+=rows.filter(r=>r.check.ready).length;
     const missing=rows.filter(r=>!r.check.ready);
     const issues=missing.slice(0,12).map(r=>{const st=stores.find(s=>s.id===r.e.store_id);return `<div class="eurospin-package-issue"><strong>${esc(r.e.numero_target?`Target ${r.e.numero_target}`:r.e.titolo)}</strong> · ${esc(st?.nome||r.e.nome_esterno||'Sede')}<br>Manca: ${esc(r.check.missing.join(', '))}</div>`}).join('');
-    return `<div class="eurospin-package-card"><strong>${cat==='verde'?'🌿 Verde':'🧹 Pulizie'}</strong><div class="package-kpis"><span>${rows.length} chiusure</span><span class="package-ready">${rows.length-missing.length} pronte</span><span class="${missing.length?'package-missing':'package-ready'}">${missing.length} mancanti</span></div>${missing.length?`<div class="eurospin-package-issues">${issues}${missing.length>12?`<div class="muted">…e altre ${missing.length-12}</div>`:''}</div>`:'<div class="package-ready">✓ Tutte le chiusure sono complete</div>'}</div>`
+    return `<div class="eurospin-package-card"><strong>${cat==='verde'?'🌿 Verde':cat==='manutenzioni'?'🔧 Manutenzioni':'🧹 Pulizie'}</strong><div class="package-kpis"><span>${rows.length} chiusure</span><span class="package-ready">${rows.length-missing.length} pronte</span><span class="${missing.length?'package-missing':'package-ready'}">${missing.length} mancanti</span></div>${missing.length?`<div class="eurospin-package-issues">${issues}${missing.length>12?`<div class="muted">…e altre ${missing.length-12}</div>`:''}</div>`:'<div class="package-ready">✓ Tutte le chiusure sono complete</div>'}</div>`
   }).join('');
   root.innerHTML=`<div><strong>${esc(eurospinPackageMonthLabel(month))}</strong> · ${total} extra trovati · ${readyTotal} pronti</div><div class="eurospin-package-grid">${cards}</div>${readyTotal<total?'<p class="muted">Gli ZIP possono essere creati solo quando tutti gli extra della categoria selezionata hanno i tre documenti necessari.</p>':''}`;
   generate.disabled=!total||readyTotal!==total;
@@ -4315,7 +4315,7 @@ async function generateEurospinExcel(){
   const widths=[25,16,16,18,20,30,12,10,18,15,16,16,17,16,14,14,17,30];widths.forEach((w,i)=>ws.getColumn(i+1).width=w);
   ws.views=[{state:'frozen',ySplit:2}];ws.autoFilter={from:'A2',to:`R${Math.max(3,rows.length+2)}`};
   const buf=await wb.xlsx.writeBuffer(),blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),url=URL.createObjectURL(blob),a=document.createElement('a');
-  const category=$('eurospinPackageCategory').value,label=category==='both'?'VERDE + PULIZIE':category.toUpperCase();
+  const category=$('eurospinPackageCategory').value,label=category==='both'?'VERDE + PULIZIE + MANUTENZIONI':category.toUpperCase();
   a.href=url;a.download=`Consuntivo Overgreen - ${eurospinPackageMonthLabel(month)} - ${label}.xlsx`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('✓ Excel Eurospin generato')
 }
 
@@ -4324,14 +4324,14 @@ async function buildEurospinCategoryZip(cat,rows,monthLabel,quality,maxSide,butt
   const zip=new JSZip();
   for(let i=0;i<rows.length;i++){
     const e=rows[i].e;
-    button.textContent=`${cat==='both'?'Verde + Pulizie':cat==='verde'?'Verde':'Pulizie'} · ${i+1}/${rows.length}`;
+    button.textContent=`${cat==='both'?'Verde + Pulizie + Manutenzioni':cat==='verde'?'Verde':cat==='manutenzioni'?'Manutenzioni':'Pulizie'} · ${i+1}/${rows.length}`;
     $('packageProgress')?.remove();
     if(root)root.insertAdjacentHTML('beforeend',`<div class="eurospin-package-progress" id="packageProgress">Ottimizzo ${esc(e.numero_target?`Target ${e.numero_target}`:e.titolo)} · ${i+1}/${rows.length}</div>`);
     const blob=await buildExtraClosurePdfBlob(e,quality,maxSide);
-    zip.file((cat==='both'?(extraCategory(e)==='verde'?'Verde/':'Pulizie/'):'')+eurospinPackageFilename(e,i),blob);
+    zip.file((cat==='both'?(extraCategory(e)==='verde'?'Verde/':extraCategory(e)==='manutenzioni'?'Manutenzioni/':'Pulizie/'):'')+eurospinPackageFilename(e,i),blob);
     await new Promise(r=>setTimeout(r,0));
   }
-  $('packageProgress')?.remove();button.textContent=`Comprimo ZIP ${cat==='both'?'Verde + Pulizie':cat==='verde'?'Verde':'Pulizie'}…`;
+  $('packageProgress')?.remove();button.textContent=`Comprimo ZIP ${cat==='both'?'Verde + Pulizie + Manutenzioni':cat==='verde'?'Verde':cat==='manutenzioni'?'Manutenzioni':'Pulizie'}…`;
   return zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:9}})
 }
 async function generateEurospinMonthlyPackages(){
@@ -4359,23 +4359,23 @@ async function generateEurospinMonthlyPackages(){
       const rows=cat==='both'?allRows:(eurospinPackageState.groups[cat]||[]);if(!rows.length)continue;
       let zipBlob=null,used=null;
       for(let p=0;p<profiles.length;p++){
-        const cfg=profiles[p];btn.textContent=`Ottimizzo ZIP ${cat==='both'?'Verde + Pulizie':cat==='verde'?'Verde':'Pulizie'} · ${cfg.label}`;
+        const cfg=profiles[p];btn.textContent=`Ottimizzo ZIP ${cat==='both'?'Verde + Pulizie + Manutenzioni':cat==='verde'?'Verde':cat==='manutenzioni'?'Manutenzioni':'Pulizie'} · ${cfg.label}`;
         zipBlob=await buildEurospinCategoryZip(cat,rows,monthLabel,cfg.quality,cfg.maxSide,btn,root);
         used=cfg;
         if(zipBlob.size<=TARGET||zipBlob.size<=LIMIT&&p===profiles.length-1)break;
       }
       if(zipBlob.size>LIMIT){
-        throw new Error(`Il pacchetto ${cat==='both'?'Verde + Pulizie':cat==='verde'?'Verde':'Pulizie'} pesa ${(zipBlob.size/1024/1024).toFixed(1)} MB anche con la compressione massima leggibile. Non ho creato più ZIP perché hai scelto di mantenerne uno solo.`);
+        throw new Error(`Il pacchetto ${cat==='both'?'Verde + Pulizie + Manutenzioni':cat==='verde'?'Verde':cat==='manutenzioni'?'Manutenzioni':'Pulizie'} pesa ${(zipBlob.size/1024/1024).toFixed(1)} MB anche con la compressione massima leggibile. Non ho creato più ZIP perché hai scelto di mantenerne uno solo.`);
       }
-      const name=`Eurospin - Chiusure Extra ${cat==='both'?'VERDE + PULIZIE':cat==='verde'?'VERDE':'PULIZIE'} - ${monthLabel}.zip`;
+      const name=`Eurospin - Chiusure Extra ${cat==='both'?'VERDE + PULIZIE + MANUTENZIONI':cat==='verde'?'VERDE':cat==='manutenzioni'?'MANUTENZIONI':'PULIZIE'} - ${monthLabel}.zip`;
       made.push({cat,blob:zipBlob,name,count:rows.length,quality:used.label,size:zipBlob.size});
     }
     eurospinPackageState.downloads={};for(const x of made)eurospinPackageState.downloads[x.cat]=x;
     if(downloads){
-      downloads.innerHTML=made.map(x=>`<button type="button" data-package-download="${x.cat}">⬇️ ZIP ${x.cat==='both'?'Verde + Pulizie':x.cat==='verde'?'Verde':'Pulizie'} · ${(x.size/1024/1024).toFixed(1)} MB</button>`).join('');
+      downloads.innerHTML=made.map(x=>`<button type="button" data-package-download="${x.cat}">⬇️ ZIP ${x.cat==='both'?'Verde + Pulizie + Manutenzioni':x.cat==='verde'?'Verde':x.cat==='manutenzioni'?'Manutenzioni':'Pulizie'} · ${(x.size/1024/1024).toFixed(1)} MB</button>`).join('');
       downloads.querySelectorAll('[data-package-download]').forEach(b=>b.onclick=()=>downloadEurospinPackage(b.dataset.packageDownload));
     }
-    if(root)root.insertAdjacentHTML('beforeend',`<div class="eurospin-package-progress">✓ ${made.map(x=>`${x.cat==='both'?'Verde + Pulizie':x.cat==='verde'?'Verde':'Pulizie'} ${(x.size/1024/1024).toFixed(1)} MB`).join(' · ')} · ciascun ZIP sotto 10 MB</div>`);
+    if(root)root.insertAdjacentHTML('beforeend',`<div class="eurospin-package-progress">✓ ${made.map(x=>`${x.cat==='both'?'Verde + Pulizie + Manutenzioni':x.cat==='verde'?'Verde':x.cat==='manutenzioni'?'Manutenzioni':'Pulizie'} ${(x.size/1024/1024).toFixed(1)} MB`).join(' · ')} · ciascun ZIP sotto 10 MB</div>`);
     toast(`✓ ${made.length===2?'2 ZIP ottimizzati':'ZIP ottimizzato'} sotto 10 MB`);
   }catch(err){console.error(err);alert('Creazione pacchetto non riuscita: '+(err?.message||String(err)))}
   finally{$('packageProgress')?.remove();btn.disabled=false;btn.textContent=old}
@@ -4394,7 +4394,7 @@ function extraCard(e){
   const stateLabel=e.stato==='annullato'?'Target annullato':isIntesaOrdinaryTicket(e)?(e.stato==='completato'?'Ticket chiuso con intervento ordinario':e.stato==='in_attesa'?'In attesa insieme all’intervento ordinario':'Ticket incluso nell’intervento ordinario'):partialOpen?'Parziale · da continuare':e.stato.replaceAll('_',' ');
   c.className=`card extra-card ${extraCategoryClass(e)} ${e.stato}`;
   c.dataset.extraCardId=e.id;
-  c.innerHTML=`<div class="extra-card-heading"><div>${clientBadge(e)}<h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3></div><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span></div><p><strong>${esc(e.titolo)}</strong></p>${e.numero_target?`<p class="target-number"><strong>Numero target:</strong> ${esc(e.numero_target)}</p>`:''}${e.descrizione?`<details class="extra-description"><summary>Descrizione completa</summary><p>${esc(e.descrizione)}</p></details>`:''}${structured?`<div class="linked-extra-reminder"><strong>📋 ${structuredItems.length} lavorazioni</strong><p>${structuredItems.map(w=>`${workStateIcon(w.stato)} ${esc(w.titolo)}`).join(' · ')}</p></div>`:''}${deadlineLabel(e)}${e.categoria_target==='pulizie'&&Number(e.night_hours)>0?`<p><strong>Ore notturne squadra:</strong> ${esc(String(e.night_hours).replace('.',','))}</p>`:''}<div class="extra-date-summary"><p><strong>Richiesta:</strong> ${fmt(extraRequestDate(e))}</p><span class="elapsed-days">⏱ ${esc(elapsedDaysLabel(e))}</span><p><strong>Giornate:</strong> ${extraPlannedDates(e).map(fmt).join(' · ')||'Da programmare'}</p></div>${e.con_ordinario?`<p class="linked-ordinary-label">${isIntesaOrdinaryTicket(e)?'🎫 Ticket incluso nel passaggio ordinario · nessun documento richiesto in chiusura':'🔗 Da fare insieme al passaggio ordinario'}</p>`:''}${e.stato==='annullato'?`<p class="extra-cancelled-badge"><strong>Target annullato</strong> · ${esc(closureText(e))} · ${esc(profiles.find(p=>p.id===e.closed_by)?.nome||'Amministratore')}</p>`:''}${partialOpen?'<span class="extra-partial-badge">↪ Parziale · da continuare</span>':`<p class="muted">${esc(stateLabel)}</p>`}<p class="assignment-label"><strong>${esc(assignmentLabel)}</strong></p>${!admin()&&!canWorkOnExtra(e)?'<p class="extra-readonly-label">🔒 Sola lettura</p>':''}${showProgress?`<div class="extra-closure-details">${showClosure?`<div class="closure-stamp">🕒 Chiuso: ${esc(closureText(e))}</div><strong>Note finali</strong>`:'<strong>Avanzamento parziale</strong>'}<div class="history-note ${e.note_lorenzo?'':'muted'}">${esc(e.note_lorenzo||(partialOpen?'Nessuna nota parziale inserita':'Nessuna nota inserita'))}</div><div class="pending-photo-head"><strong>Foto del lavoro</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-extra-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div>`:''}<div class="actions">${extraMapsDestination(e,st)?'<button class="secondary" data-extra-map>Maps</button>':''}${pdf?'<button class="secondary" data-pdf>Apri PDF richiesta</button>':''}${structured?'<button class="secondary" data-work-progress>📋 Lavorazioni</button>':''}${showClosure&&reportEurospin?'<button class="secondary" data-report-eurospin>File Eurospin</button>':''}${showProgress&&reportOvergreen?'<button class="secondary" data-report-overgreen>File Overgreen</button>':''}${showClosure&&!reportEurospin?'<span class="muted">File Eurospin non presente</span>':''}${showClosure&&!reportOvergreen?'<span class="muted">File Overgreen non presente</span>':''}${admin()&&structured&&['in_attesa','completato'].includes(e.stato)?'<button data-generate-work-report>Genera report lavorazioni</button>':''}${admin()&&e.stato==='completato'&&!isIntesaOrdinaryTicket(e)?'<button data-generate-closure>Genera chiusura</button>':''}${admin()&&e.stato==='completato'?'<button class="secondary" data-edit-closure>Modifica chiusura</button>':''}${!isIntesaOrdinaryTicket(e)&&['programmato','ricevuto','da_integrare'].includes(e.stato)&&canWorkOnExtra(e)?`<button data-close-extra>${structured?'Chiudi definitivamente':(partialOpen?'Continua / chiudi lavoro':'Chiudi lavoro')}</button>`:''}${admin()&&['ricevuto','programmato','da_integrare','in_attesa'].includes(e.stato)?'<button type="button" class="secondary" data-cancel-extra>Annulla target</button>':''}${admin()&&e.stato==='in_attesa'?'<button data-approve-extra>Convalida</button>':''}${admin()&&!e.con_ordinario&&!extraIsScheduled(e)&&!['in_attesa','completato','annullato'].includes(e.stato)?'<button class="secondary" data-program-extra>📅 Programma</button>':''}${admin()?'<button class="secondary" data-edit-extra>Modifica</button><button class="danger-btn" data-delete-extra>Elimina</button>':''}</div>`;
+  c.innerHTML=`<div class="extra-card-heading"><div>${clientBadge(e)}<h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3></div><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span></div><p><strong>${esc(e.titolo)}</strong></p>${e.numero_target?`<p class="target-number"><strong>Numero target:</strong> ${esc(e.numero_target)}</p>`:''}${e.descrizione?`<details class="extra-description"><summary>Descrizione completa</summary><p>${esc(e.descrizione)}</p></details>`:''}${structured?`<div class="linked-extra-reminder"><strong>📋 ${structuredItems.length} lavorazioni</strong><p>${structuredItems.map(w=>`${workStateIcon(w.stato)} ${esc(w.titolo)}`).join(' · ')}</p></div>`:''}${deadlineLabel(e)}${['pulizie','manutenzioni'].includes(e.categoria_target)&&Number(e.night_hours)>0?`<p><strong>Ore notturne/festive squadra:</strong> ${esc(String(e.night_hours).replace('.',','))}</p>`:''}<div class="extra-date-summary"><p><strong>Richiesta:</strong> ${fmt(extraRequestDate(e))}</p><span class="elapsed-days">⏱ ${esc(elapsedDaysLabel(e))}</span><p><strong>Giornate:</strong> ${extraPlannedDates(e).map(fmt).join(' · ')||'Da programmare'}</p></div>${e.con_ordinario?`<p class="linked-ordinary-label">${isIntesaOrdinaryTicket(e)?'🎫 Ticket incluso nel passaggio ordinario · nessun documento richiesto in chiusura':'🔗 Da fare insieme al passaggio ordinario'}</p>`:''}${e.stato==='annullato'?`<p class="extra-cancelled-badge"><strong>Target annullato</strong> · ${esc(closureText(e))} · ${esc(profiles.find(p=>p.id===e.closed_by)?.nome||'Amministratore')}</p>`:''}${partialOpen?'<span class="extra-partial-badge">↪ Parziale · da continuare</span>':`<p class="muted">${esc(stateLabel)}</p>`}<p class="assignment-label"><strong>${esc(assignmentLabel)}</strong></p>${!admin()&&!canWorkOnExtra(e)?'<p class="extra-readonly-label">🔒 Sola lettura</p>':''}${showProgress?`<div class="extra-closure-details">${showClosure?`<div class="closure-stamp">🕒 Chiuso: ${esc(closureText(e))}</div><strong>Note finali</strong>`:'<strong>Avanzamento parziale</strong>'}<div class="history-note ${e.note_lorenzo?'':'muted'}">${esc(e.note_lorenzo||(partialOpen?'Nessuna nota parziale inserita':'Nessuna nota inserita'))}</div><div class="pending-photo-head"><strong>Foto del lavoro</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-extra-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div>`:''}<div class="actions">${extraMapsDestination(e,st)?'<button class="secondary" data-extra-map>Maps</button>':''}${pdf?'<button class="secondary" data-pdf>Apri PDF richiesta</button>':''}${structured?'<button class="secondary" data-work-progress>📋 Lavorazioni</button>':''}${showClosure&&reportEurospin?'<button class="secondary" data-report-eurospin>File Eurospin</button>':''}${showProgress&&reportOvergreen?'<button class="secondary" data-report-overgreen>File Overgreen</button>':''}${showClosure&&!reportEurospin?'<span class="muted">File Eurospin non presente</span>':''}${showClosure&&!reportOvergreen?'<span class="muted">File Overgreen non presente</span>':''}${admin()&&structured&&['in_attesa','completato'].includes(e.stato)?'<button data-generate-work-report>Genera report lavorazioni</button>':''}${admin()&&e.stato==='completato'&&!isIntesaOrdinaryTicket(e)?'<button data-generate-closure>Genera chiusura</button>':''}${admin()&&e.stato==='completato'?'<button class="secondary" data-edit-closure>Modifica chiusura</button>':''}${!isIntesaOrdinaryTicket(e)&&['programmato','ricevuto','da_integrare'].includes(e.stato)&&canWorkOnExtra(e)?`<button data-close-extra>${structured?'Chiudi definitivamente':(partialOpen?'Continua / chiudi lavoro':'Chiudi lavoro')}</button>`:''}${admin()&&['ricevuto','programmato','da_integrare','in_attesa'].includes(e.stato)?'<button type="button" class="secondary" data-cancel-extra>Annulla target</button>':''}${admin()&&e.stato==='in_attesa'?'<button data-approve-extra>Convalida</button>':''}${admin()&&!e.con_ordinario&&!extraIsScheduled(e)&&!['in_attesa','completato','annullato'].includes(e.stato)?'<button class="secondary" data-program-extra>📅 Programma</button>':''}${admin()?'<button class="secondary" data-edit-extra>Modifica</button><button class="danger-btn" data-delete-extra>Elimina</button>':''}</div>`;
   if(admin()&&e.stato!=='annullato'&&window.OvergreenEconomics.isBillableExtra(e)&&typeof openExtraHours==='function'){
     const hoursButton=document.createElement('button');hoursButton.type='button';hoursButton.className='secondary';hoursButton.dataset.extraHours='';hoursButton.textContent='Economia e rapportino';hoursButton.onclick=()=>openExtraHours(e);
     c.querySelector('.actions').prepend(hoursButton);
@@ -5499,7 +5499,7 @@ function renderExtraClosureDetails(extra){
   workers.innerHTML=editable?profiles.filter(p=>p.attivo||selected.has(p.id)).map(p=>`<label><input type="checkbox" value="${esc(p.id)}"${selected.has(p.id)?' checked':''}> ${esc(p.nome||p.email||p.id)}</label>`).join(''):'';
 }
 function renderExtraNightWork(extra){
-  const cleaning=extra.categoria_target==='pulizie';
+  const cleaning=['pulizie','manutenzioni'].includes(extra.categoria_target);
   $('closeExtraNightWork').classList.toggle('hidden',!cleaning);
   $('closeExtraNightEnabled').checked=cleaning&&Number(extra.night_hours||0)>0;
   $('closeExtraNightHours').value=cleaning&&extra.night_hours?String(extra.night_hours).replace('.',','):'';
@@ -5512,7 +5512,7 @@ function syncExtraNightWork(){
 }
 $('closeExtraNightEnabled').onchange=syncExtraNightWork;
 function readExtraNightWork(extra){
-  if(extra?.categoria_target!=='pulizie')return {};
+  if(!['pulizie','manutenzioni'].includes(extra?.categoria_target))return {};
   if(!$('closeExtraNightEnabled').checked)return {night_hours:0};
   const text=$('closeExtraNightHours').value.trim();
   if(!/^\d{1,5}([.,]\d{1,2})?$/.test(text)||Number(text.replace(',','.'))<=0)throw new Error('Indica le ore notturne della squadra, maggiori di zero e con al massimo due decimali. Esempio: 2,5.');
@@ -5927,7 +5927,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=303').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=304').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

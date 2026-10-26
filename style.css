@@ -399,3 +399,6 @@
 .client-workspaces button[data-workspace="intesa"].active{background:#e8f1fb;border-color:#3672a3;color:#214e72}
 #workspaceLabel{font-weight:600;font-size:12px;color:#52645b;padding:3px 4px}
 
+
+/* Maintenance category */
+.extra-category-badge.category-manutenzioni{background:#fff3df;color:#875000;border:1px solid #e8c080}.category-manutenzioni.standalone-extra,.linked-extra-category.category-manutenzioni{border-left-color:#c78326}

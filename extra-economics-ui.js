@@ -89,6 +89,7 @@ function openExtraEconomicsBook(){
   dialog.showModal();renderExtraEconomicsBook();void refreshExtraEconomicsBook();
 }
 function addEconomicsWorksheet(workbook,rows,period=$('extraEconomicsMonth').value){
+  if(rows.length&&rows.every(x=>(x.extra.categoria_target||x.row.pricing_category)==='manutenzioni'))return addMaintenanceWorksheet(workbook,rows,period);
   const model=window.OvergreenEconomics,ws=workbook.addWorksheet('Foglio1');
   // Green exports retain the template; cleaning exports expose the equipment surcharge.
   const headers=['PUNTO VENDITA','DATA RICHIESTA INTERVENTO','DATA INTERVENTO','NUMERO INTERVENTO','NUMERO CHIUSURA INTERVENTO','DESCRIZIONE INTERVENTO','NUMERO TECNICI','USCITA','IMPORTO FORFETTARIO TRASFERTA','N. ORE ORDINARIE','COSTO ORE ORDINARIE ','N. ORE CON CESTELLO','COSTO ORE CON CESTELLO','COSTO TOTALE ORE','TOTALE',"MODALITA'",'TOTALE FATTURATO','NOTE'];
@@ -167,9 +168,15 @@ async function exportExtraEconomics(){
       const result=await readClosureNumberFromEurospinFile(rows[i].extra);
       rows[i].closureNumber=result.number||'';
     }
-    const workbook=new window.ExcelJS.Workbook();addEconomicsWorksheet(workbook,rows);const buffer=await workbook.xlsx.writeBuffer();if(!admin())return;
-    const blob=new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),url=URL.createObjectURL(blob),a=document.createElement('a');
-    a.href=url;a.download=`Overgreen-economia-extra-${$('extraEconomicsMonth').value||'tutti'}.xlsx`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+    const groups=['verde','pulizie','manutenzioni'].map(category=>({category,rows:rows.filter(x=>(x.extra.categoria_target||x.row.pricing_category)===category)})).filter(g=>g.rows.length);
+    if(groups.reduce((n,g)=>n+g.rows.length,0)!==rows.length)throw Error('Indica la categoria di tutti gli extra prima di esportare.');
+    const files=[];
+    for(const group of groups){const workbook=new window.ExcelJS.Workbook();addEconomicsWorksheet(workbook,group.rows);files.push({name:`Overgreen-${group.category}-${$('extraEconomicsMonth').value||'tutti'}.xlsx`,buffer:await workbook.xlsx.writeBuffer()})}
+    if(!admin())return;
+    let blob,name;
+    if(files.length===1){blob=new Blob([files[0].buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});name=files[0].name}
+    else{await ensureLibraries('JSZip');const zip=new window.JSZip();for(const file of files)zip.file(file.name,file.buffer);blob=await zip.generateAsync({type:'blob'});name=`Overgreen-riepiloghi-${$('extraEconomicsMonth').value||'tutti'}.zip`}
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
     const missing=rows.filter(x=>!x.closureNumber).length;$('extraEconomicsBookStatus').textContent='Excel Eurospin generato.'+(missing?` ${missing} numeri chiusura da verificare, segnalati nelle note.`:'');
   }catch(error){if(admin())$('extraEconomicsBookStatus').textContent=error.message||'Esportazione non riuscita.'}
   finally{if(admin())b.disabled=false}
@@ -219,9 +226,9 @@ async function exportEconomicsZip(){
     }
     if(missing.length)throw Error('Numero chiusura non leggibile: '+missing.join(', ')+'. Controlla i rapportini Eurospin.');
     const groups=[];
-    for(const category of ['verde','pulizie']){
+    for(const category of ['verde','pulizie','manutenzioni']){
       const group=rows.filter(x=>(x.extra.categoria_target||x.row.pricing_category)===category);if(!group.length)continue;
-      const folder=category==='verde'?'Verde':'Pulizie';
+      const folder=category==='verde'?'Verde':category==='manutenzioni'?'Manutenzioni':'Pulizie';
       const book=new window.ExcelJS.Workbook();addEconomicsWorksheet(book,group,filter.month);
       groups.push({folder,rows:group,excel:await book.xlsx.writeBuffer()});
     }
@@ -265,4 +272,25 @@ async function buildEconomicsZipUnderLimit(groups,status){
     if(blob.size<=limit)return blob;
   }
   throw Error(`Il pacchetto completo pesa ${(blob.size/1000000).toFixed(2)} MB anche con la compressione massima. Limite complessivo: 10 MB, Excel inclusi. Seleziona meno extra e riprova. Nessun file è stato escluso e nessuno ZIP è stato scaricato.`);
+}
+
+function addMaintenanceWorksheet(workbook,rows,period){
+  const model=window.OvergreenEconomics,ws=workbook.addWorksheet('Manutenzioni');
+  const headers=['PUNTO VENDITA','DATA INTERVENTO','NUMERO INTERVENTO','NUMERO CHIUSURA','DESCRIZIONE','ADDETTI','USCITA','ORE ORDINARIE','TARIFFA ORDINARIA','ORE NOTTURNE/FESTIVE','TARIFFA NOTTURNA/FESTIVA','MANODOPERA','ELETTROUTENSILI €/H','COSTO ELETTROUTENSILI','SPESE','SCONTO','MODALITÀ','IMPONIBILE','IVA 22%','TOTALE IVA INCLUSA','NOTE'];
+  ws.columns=headers.map((_,i)=>({width:[0,4,20].includes(i)?34:18}));
+  ws.mergeCells('A1:U1');ws.getCell('A1').value='CONSUNTIVO OVERGREEN · MANUTENZIONI · '+model.periodLabel(period).toUpperCase();ws.getRow(1).font={bold:true,size:14};
+  const head=ws.addRow(headers);head.font={bold:true,color:{argb:'FFFFFFFF'}};head.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF875000'}};head.alignment={wrapText:true};head.height=45;
+  rows.forEach(x=>{
+    const e=x.extra,r=x.row,c=x.calc,st=stores.find(s=>s.id===e.store_id),equipment=r.equipment?5:0;
+    const cost=r.total_hours==null?null:Math.round(Number(r.total_hours)*equipment*100);
+    const taxable=c.ready?c.total:null,vat=taxable==null?null:Math.round(taxable*.22),euros=v=>v==null?null:v/100;
+    const notes=[model.cleaningInvoiceLabel(r,'manutenzioni'),r.economic_notes,!c.ready?economicsStatus(c,r)+' · escluso dai totali':'',!x.closureNumber?'Numero chiusura da verificare':'',r.pricing_mode==='preventivo'?'Ore e attrezzature informative: imponibile da preventivo':'',(r.expenses||[]).map(v=>v.description+': '+model.money(model.cents(v.amount))).join('; ')].filter(Boolean).join(' | ');
+    const row=ws.addRow([st?.nome||e.nome_esterno||'',excelDateValue(e.giorno_intervento||model.closureDate(e)),e.numero_target||'',x.closureNumber||'',e.titolo||'',r.operator_count??null,euros(c.exit),c.dayHours,r.hourly_rate==null?null:r.hourly_rate-equipment,c.nightHours,r.night_hourly_rate==null?null:r.night_hourly_rate-equipment,c.labor==null||cost==null?null:euros(c.labor-cost),equipment,euros(cost),euros(c.expenses),euros(c.discount),model.modes[r.pricing_mode]||'',euros(taxable),euros(vat),taxable==null?null:euros(taxable+vat),notes]);
+    row.getCell(2).numFmt='dd/mm/yyyy';row.alignment={wrapText:true,vertical:'top'};
+    for(const i of [7,9,11,12,13,14,15,16,18,19,20])row.getCell(i).numFmt='#,##0.00 "€"';
+  });
+  const sum=rows.reduce((v,x)=>{if(x.calc.ready){v[0]+=x.calc.total;v[1]+=Math.round(x.calc.total*.22)}return v},[0,0]);
+  const total=ws.addRow(['TOTALE MANUTENZIONI']);total.font={bold:true};
+  for(const [column,letter,value] of [[18,'R',sum[0]],[19,'S',sum[1]],[20,'T',sum[0]+sum[1]]]){total.getCell(column).value={formula:rows.length?`SUM(${letter}3:${letter}${rows.length+2})`:'0',result:value/100};total.getCell(column).numFmt='#,##0.00 "€"'}
+  ws.views=[{state:'frozen',ySplit:2}];ws.autoFilter={from:'A2',to:`U${rows.length+2}`};return ws;
 }

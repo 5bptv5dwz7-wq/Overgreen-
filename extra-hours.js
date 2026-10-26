@@ -45,32 +45,32 @@ const ExtraHoursUi=(()=>{
     const category=el('extraEconomicsCategory').value||null;
     return {discount_amount:asAmount(el('extraEconomicsDiscount').value)??0,total_hours:parseExtraHours(el('extraHoursInput').value),pricing_mode:el('extraEconomicsMode').value||null,pricing_category:category,cleaning_scope:category==='pulizie'?(el('extraEconomicsCleaningScope').value||null):null,
       dedicated_trip:el('extraEconomicsTrip').value==='yes'?true:el('extraEconomicsTrip').value==='no'?false:null,
-      night_hours:category==='pulizie'?(parseExtraHours(el('extraEconomicsNightHours').value)??0):0,expected_night_hours:state.nightHours??0,
-      operator_count:count?Number(count):null,equipment:category==='pulizie'&&el('extraEconomicsEquipment').checked,
+      night_hours:['pulizie','manutenzioni'].includes(category)?(parseExtraHours(el('extraEconomicsNightHours').value)??0):0,expected_night_hours:state.nightHours??0,
+      operator_count:count?Number(count):null,equipment:['pulizie','manutenzioni'].includes(category)&&el('extraEconomicsEquipment').checked,
       quote_amount:asAmount(el('extraEconomicsQuoteAmount').value),quote_status:el('extraEconomicsQuoteStatus').value||'bozza',
       quote_exit_included:el('extraEconomicsIncluded').checked,quote_reference:el('extraEconomicsQuoteRef').value.trim(),expenses,economic_notes:el('extraEconomicsNotes').value.trim()};
   }
   function syncEconomics(){
     if(!state)return;const m=model(),quote=el('extraEconomicsMode').value==='preventivo',category=el('extraEconomicsCategory').value;
-    el('extraEconomicsNightWrap').hidden=category!=='pulizie';
+    el('extraEconomicsNightWrap').hidden=!['pulizie','manutenzioni'].includes(category);
     el('extraEconomicsCleaningWrap').hidden=category!=='pulizie';
     el('extraEconomicsCleaningScope').required=category==='pulizie';
     el('extraEconomicsCleaningHint').textContent=category==='pulizie'?m.cleaningInvoiceLabel({cleaning_scope:el('extraEconomicsCleaningScope').value},category):'';
-    el('extraEconomicsQuote').hidden=!quote;el('extraEconomicsEquipmentWrap').hidden=category!=='pulizie';
+    el('extraEconomicsQuote').hidden=!quote;el('extraEconomicsEquipmentWrap').hidden=!['pulizie','manutenzioni'].includes(category);
     el('extraEconomicsIncludedWrap').hidden=!quote||el('extraEconomicsTrip').value!=='yes';
-    if(category!=='pulizie')el('extraEconomicsEquipment').checked=false;
+    if(!['pulizie','manutenzioni'].includes(category))el('extraEconomicsEquipment').checked=false;
     el('extraEconomicsExpensesLabel').textContent=quote?'Spese extra rispetto al preventivo':'Spese aggiuntive';
     const rate=m.rates(category,el('extraEconomicsEquipment').checked);
-    el('extraEconomicsRates').textContent=rate.hourly_rate==null?'Seleziona la categoria per applicare le tariffe.':`${m.money(rate.hourly_rate*100)} / ora diurna${category==='pulizie'?` · ${m.money(rate.night_hourly_rate*100)} / ora notturna`:''}. Scegli l’addebito dell’uscita in fondo.`;
+    el('extraEconomicsRates').textContent=rate.hourly_rate==null?'Seleziona la categoria per applicare le tariffe.':`${m.money(rate.hourly_rate*100)} / ora diurna${['pulizie','manutenzioni'].includes(category)?` · ${m.money(rate.night_hourly_rate*100)} / ora notturna/festiva`:''}. Scegli l’addebito dell’uscita in fondo.`;
     const count=Number(el('extraEconomicsOperators').value);
     el('extraEconomicsTripHint').textContent=rate.exit_rate==null?'Scegli la categoria del target.':`${m.money(rate.exit_rate*100)} per addetto`+(Number.isInteger(count)&&count>0&&count<=99?` × ${count} = ${m.money(rate.exit_rate*100*count)} di uscita.`:'. Indica il numero di addetti.');
     const box=el('extraEconomicsSummary');box.replaceChildren();
     try{
       const values=economicValues(),c=m.calculate({...values,...rate});
-      el('extraEconomicsNightSplit').textContent=values.total_hours==null?'Inserisci le ore complessive per calcolare la parte diurna.':c.dayHours==null?'Le ore notturne non possono superare le ore complessive.':`${valueText(c.dayHours)} ore diurne + ${valueText(c.nightHours)} ore notturne = ${valueText(values.total_hours)} ore complessive.`;
+      el('extraEconomicsNightSplit').textContent=values.total_hours==null?'Inserisci le ore complessive per calcolare la parte diurna.':c.dayHours==null?'Le ore notturne/festive non possono superare le ore complessive.':`${valueText(c.dayHours)} ore diurne + ${valueText(c.nightHours)} ore notturne/festive = ${valueText(values.total_hours)} ore complessive.`;
       const line=(label,amount)=>{const p=document.createElement('p'),strong=document.createElement('strong');p.append(document.createTextNode(label));strong.textContent=m.money(amount);p.append(strong);box.append(p)};
-      if(category==='pulizie'&&c.nightHours>0){line('Manodopera diurna'+(quote?' (informativa)':''),c.laborDay);line('Manodopera notturna'+(quote?' (informativa)':''),c.laborNight)}
-      line(quote?'Preventivo':'Manodopera a ore',c.base);line(c.exitIncluded?'Uscita già inclusa nel preventivo':values.dedicated_trip===false?'Uscita non addebitata':'Uscita da aggiungere',c.exit);line('Spese aggiuntive',c.expenses);line('Subtotale',c.subtotal);line('Sconto',c.discount?-c.discount:0);line('Prezzo finale · IVA esclusa',c.total);
+      if(['pulizie','manutenzioni'].includes(category)&&c.nightHours>0){line('Manodopera diurna'+(quote?' (informativa)':''),c.laborDay);line('Manodopera notturna/festiva'+(quote?' (informativa)':''),c.laborNight)}
+      line(quote?'Preventivo':'Manodopera a ore',c.base);line(c.exitIncluded?'Uscita già inclusa nel preventivo':values.dedicated_trip===false?'Uscita non addebitata':'Uscita da aggiungere',c.exit);line('Spese aggiuntive',c.expenses);line('Subtotale',c.subtotal);line('Sconto',c.discount?-c.discount:0);line('Prezzo finale · IVA esclusa',c.total);if(category==='manutenzioni'){const vat=c.total==null?null:Math.round(c.total*.22);line('IVA 22%',vat);line('Totale IVA inclusa',vat==null?null:c.total+vat);}
       const note=document.createElement('small');note.textContent=!c.complete?'Bozza: mancano '+c.missing.join(', '):c.quotePending?'Preventivo '+m.quoteStates[values.quote_status].toLowerCase()+': escluso dal totale dei preventivi accettati.':'Dati completi. Premi Salva per registrare gli importi.';box.append(note);
     }catch(error){box.textContent=error.message}
   }

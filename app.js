@@ -1,11 +1,12 @@
-const APP_VERSION='V313';
+const APP_VERSION='V314';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
 let activeService=localStorage.getItem('overgreen-service')==='pulizie'?'pulizie':'verde';
+function serviceForView(view=typeof currentView==='undefined'?'':currentView){return ['stores','schedule'].includes(view)&&activeService==='pulizie'&&(typeof activeClient==='undefined'||activeClient==='eurospin')?'pulizie':'verde'}
 
 async function adminOperation(operation,payload){
- if(operation==='schedule_create'&&typeof activeService!=='undefined'&&activeService==='pulizie'&&typeof cleaningPlanOperation==='function')return cleaningPlanOperation(payload);
+ if(operation==='schedule_create'&&typeof serviceForView==='function'&&serviceForView()==='pulizie'&&typeof cleaningPlanOperation==='function')return cleaningPlanOperation(payload);
  validateExtraDateOperation(operation,payload);
  const key='overgreen-v198:'+attachmentMediaScope()+':'+operation+':'+JSON.stringify(payload);
  let id=sessionStorage.getItem(key);
@@ -398,7 +399,7 @@ function syncClientWorkspace(){
 const CURRENT_VIEW_KEY='overgreen_current_view';
 let currentView=localStorage.getItem(CURRENT_VIEW_KEY)||'dashboard';
 const renderedViews=new Map();let viewDataVersion=0;
-function viewRevision(){return (typeof activeService==='undefined'?'verde':activeService)+':'+activeClient+':'+mixedScheduleMode+':'+viewDataVersion+':'+dataSync.revision()+':'+attachmentMediaScope()+':'+today()}
+function viewRevision(view=currentView){return (typeof serviceForView==='function'?serviceForView(view):'verde')+':'+activeClient+':'+mixedScheduleMode+':'+viewDataVersion+':'+dataSync.revision()+':'+attachmentMediaScope()+':'+today()}
 function syncEmployeeNavigation(){
   document.querySelectorAll('[data-view="stores"],[data-view="schedule"],[data-bottom-view="stores"],[data-bottom-view="schedule"],[data-more-view="stores"],[data-more-view="schedule"]').forEach(button=>button.classList.toggle('hidden',!admin()));
   $('app')?.classList.toggle('employee-navigation',!admin());
@@ -409,12 +410,11 @@ function setView(name,options={}){
   if(name==='signatures'&&activeClient!=='eurospin')name='stores';
   if(!admin()&&['stores','schedule','fleet'].includes(name))name='dashboard';
   syncEmployeeNavigation();
-  if(typeof syncServiceMode==='function')syncServiceMode();
   syncClientWorkspace();
   if(!$(name+'View')||(name==='operations'&&!admin()))name='dashboard';
-  const shouldRender=!options.reuse||renderedViews.get(name)!==viewRevision();
-  renderedViews.set(name,viewRevision());
-  currentView=name;localStorage.setItem(CURRENT_VIEW_KEY,name);syncClientWorkspace();
+  const shouldRender=!options.reuse||renderedViews.get(name)!==viewRevision(name);
+  renderedViews.set(name,viewRevision(name));
+  currentView=name;localStorage.setItem(CURRENT_VIEW_KEY,name);syncClientWorkspace();if(typeof syncServiceMode==='function')syncServiceMode();
   document.querySelectorAll('header [data-view]').forEach(b=>{const active=b.dataset.view===name;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
   document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));$(name+'View').classList.remove('hidden');document.querySelectorAll('[data-bottom-view]').forEach(b=>b.classList.toggle('active',b.dataset.bottomView===name));$('pageTitle').textContent={dashboard:'Dashboard',operations:'Da gestire',stores:'Sedi e clienti',schedule:admin()?'Programmazione':'I miei lavori',extras:'Lavori extra',cleaning:'Pulizie',reports:'Report attività',stats:'Statistiche',fleet:'Mezzi',signatures:'Fogli firme Eurospin',archive:'Archivio aziendale',contacts:'Rubrica lavoro',audit:'Log attività',settings:'Impostazioni'}[name];if(!['dashboard','fleet'].includes(name))$('pageTitle').textContent=(name==='extras'?(activeClient==='intesa'?'Ticket':'Extra'):name==='stores'?(activeClient==='intesa'?'Filiali':'Sedi'):$('pageTitle').textContent)+' · '+clientLabel(activeClient);if(name==='operations'&&shouldRender&&typeof renderOperations==='function')renderOperations();if(name==='dashboard'&&shouldRender)renderDashboard();if(name==='stores'&&shouldRender)renderStores();if(name==='schedule'&&shouldRender){renderSchedulePicker();renderSchedules()}if(name==='extras'&&shouldRender)renderExtras();if(name==='cleaning'&&shouldRender)renderCleaning();if(name==='reports'&&shouldRender)renderDailyReport();if(name==='stats'&&shouldRender)renderStats();if(name==='fleet')window.OvergreenFleet?.renderVehicles();if(name==='signatures')openSignatureSheetsView();if(name==='archive')openCompanyArchive();if(name==='contacts'&&shouldRender)renderWorkContacts();if(name==='audit'&&admin())openAuditView();if(name!=='audit')auditViewOpen(name);if(name==='settings'){void renderRemoteReloadPanel();ensureCloudSettingsUi();refreshPhotoDeliveryStatus().catch(()=>{});ensurePushSettingsUi();refreshPushSettingsUi();renderCloudEmployeeList();updateSyncUi();if(admin()){loadSupabaseUsage();renderHealthCenter();}}}
 
@@ -1163,7 +1163,7 @@ function compactDashboardJob(card){
   const summary=document.createElement('summary');summary.textContent='Altre azioni';more.appendChild(summary);
   const body=document.createElement('div');body.className='actions';secondary.forEach(button=>body.appendChild(button));more.appendChild(body);card.appendChild(more);
 }
-function renderDashboard(){if(typeof renderCleaningDashboardSummary==='function')renderCleaningDashboardSummary();window.OvergreenVoice?.sync();renderDashboardSmart();renderStoreReminderPanels();renderExtraDateAlerts();
+function renderDashboard(){window.OvergreenVoice?.sync();renderDashboardSmart();renderStoreReminderPanels();renderExtraDateAlerts();
   if(typeof renderOperationsShortcut==='function')renderOperationsShortcut();
   if(currentView==='operations'&&typeof renderOperations==='function')renderOperations();
   if(!$('dashToday'))return;
@@ -1185,7 +1185,7 @@ function renderDashboard(){if(typeof renderCleaningDashboardSummary==='function'
   $('dashToday').textContent=todaysItems.length+todaysExtras.length+todaysActivities.length;
   const completed=completedToday();
   $('dashDone').textContent=completed.total;
-  $('dashDoneDetails').textContent=`${completed.ordinary.length} ordinari · ${completed.standalone.length} extra separati · ${completed.linked.length} target/extra inclusi`;
+  $('dashDoneDetails').textContent=`${completed.ordinary.length+completed.standalone.filter(e=>e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET')).length} ordinari · ${completed.standalone.filter(e=>!e.cleaning_codes?.length||e.cleaning_codes.includes('TARGET')).length} extra separati · ${completed.linked.length} target/extra inclusi`;
   $('dashScheduled').textContent=stores.filter(s=>isStoreProgrammed(s.id)).length;
   const clientStores=type=>stores.filter(s=>clientType(s)===type);
   const openClientExtras=type=>extras.filter(e=>clientType(e)===type&&!['completato','in_attesa','annullato'].includes(e.stato));
@@ -1264,7 +1264,7 @@ function renderDashboard(){if(typeof renderCleaningDashboardSummary==='function'
           const pending=itemPending(row.item);
           c.className=`dashboard-line-job ordinary ${done?'is-done':pending?'is-pending':'is-open'}`;
           const ordinaryNotes=[row.schedule?.nota_generale,st?.note].filter(v=>String(v||'').trim());
-          c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span>${clientBadge(st)}<strong>${esc(st?.nome||'Punto vendita')}</strong>${!done?storeReminderMarkup(st,row.schedule?.giorno):''}${(st?.indirizzo||st?.citta)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${done?'Completato':pending?'In attesa di convalida':'Da eseguire'}</small>${!done?nextVisitNoteMarkup(st):''}${scheduleItemNoteMarkup(row.item)}${visitPhotosMarkup(row.item)}${ordinaryNotes.length?`<div class="dashboard-job-notes"><strong>Note</strong>${ordinaryNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>{const pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');return `<div class="embedded-extra ${extraCategoryClass(e)} ${extraIsDone(e)?'is-done':'is-open'}" data-open-linked-extra="${e.id}" role="button" tabindex="0"><span>${extraIsDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b>${deadlineLabel(e)}<span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span>${e.numero_target?`<small class="target-number">Target: ${esc(e.numero_target)}</small>`:''}<small>${extraIsDone(e)?'Completato':'Da fare insieme al passaggio'} · Tocca per aprire</small>${dashboardExtraDocumentsMarkup(e)}${e.descrizione?`<p class="embedded-extra-description">${esc(e.descrizione)}</p>`:''}${pdf?`<button type="button" class="secondary compact-btn" data-open-linked-pdf="${e.id}">📄 Apri PDF</button>`:''}</div></div>`}).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${admin()?'<button class="secondary" data-share>Condividi</button>':''}${done?(admin()?'<button class="reopen-intervention-btn" data-reopen>↩ Riapri intervento</button>':'<button class="secondary" disabled>✓ Completato</button>'):pending?'<button class="secondary" disabled>⏳ In attesa</button>':'<button data-done>Registra ordinario</button>'}</div>`;
+          c.innerHTML=`<div class="job-main"><span class="job-kind">ORDINARIO</span>${clientBadge(st)}<strong>${esc(st?.nome||'Punto vendita')}</strong>${!done?storeReminderMarkup(st,row.schedule?.giorno,'verde'):''}${(st?.indirizzo||st?.citta)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${done?'Completato':pending?'In attesa di convalida':'Da eseguire'}</small>${!done?nextVisitNoteMarkup(st):''}${scheduleItemNoteMarkup(row.item)}${visitPhotosMarkup(row.item)}${ordinaryNotes.length?`<div class="dashboard-job-notes"><strong>Note</strong>${ordinaryNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}${linked.length?`<div class="embedded-extras"><strong>Extra nello stesso intervento</strong>${linked.map(e=>{const pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');return `<div class="embedded-extra ${extraCategoryClass(e)} ${extraIsDone(e)?'is-done':'is-open'}" data-open-linked-extra="${e.id}" role="button" tabindex="0"><span>${extraIsDone(e)?'✓':'!'}</span><div><b>${esc(e.titolo)}</b>${deadlineLabel(e)}<span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span>${e.numero_target?`<small class="target-number">Target: ${esc(e.numero_target)}</small>`:''}<small>${extraIsDone(e)?'Completato':'Da fare insieme al passaggio'} · Tocca per aprire</small>${dashboardExtraDocumentsMarkup(e)}${e.descrizione?`<p class="embedded-extra-description">${esc(e.descrizione)}</p>`:''}${pdf?`<button type="button" class="secondary compact-btn" data-open-linked-pdf="${e.id}">📄 Apri PDF</button>`:''}</div></div>`}).join('')}</div>`:''}</div><div class="actions"><button class="secondary" data-map>Maps</button>${admin()?'<button class="secondary" data-share>Condividi</button>':''}${done?(admin()?'<button class="reopen-intervention-btn" data-reopen>↩ Riapri intervento</button>':'<button class="secondary" disabled>✓ Completato</button>'):pending?'<button class="secondary" disabled>⏳ In attesa</button>':'<button data-done>Registra ordinario</button>'}</div>`;
           if(admin()){const noteBtn=document.createElement('button');noteBtn.className='secondary';noteBtn.textContent=row.item.nota?'📌 Modifica appunto':'📌 Appunto';noteBtn.onclick=()=>openScheduleItemNote(row.item);c.querySelector('.actions').appendChild(noteBtn);addVisitPhotosButton(c.querySelector('.actions'),row.item)}
           c.dataset.routeAddress=routeAddressForStore(st);if(st)c.dataset.weatherStore=st.id;
           c.querySelector('[data-map]').onclick=()=>openStoreMaps(st);
@@ -1426,10 +1426,11 @@ async function uploadStoreArchiveFiles(store,kind,files){
     const path=`punti-vendita/${store.id}/${kind}/${Date.now()}-${crypto.randomUUID()}-${safe}`;
     await uploadFile(path,file);
   }
-  toast(`${files.length} file caricati`);await showStoreDetail(stores.find(x=>x.id===store.id)||store)
+  toast(`${files.length} file caricati`);await showStoreDetail(stores.find(x=>x.id===store.id)||store,$('storeDetailDialog').dataset.service||serviceForView())
 }
 let storeDetailRequest=0;
-async function showStoreDetail(s){
+async function showStoreDetail(s,service=typeof serviceForView==='function'?serviceForView():'verde'){
+ $('storeDetailDialog').dataset.service=service;
  if(s)activateClient(clientType(s));
   const request=++storeDetailRequest,actor=profile?.id;
   const dialog=$('storeDetailDialog'),body=$('storeDetailBody');
@@ -1448,7 +1449,7 @@ async function showStoreDetail(s){
   }
 }
 function renderStoreDetail(s,archive,archiveOnly=false){
-  const cleaning=typeof activeService!=='undefined'&&activeService==='pulizie';if(cleaning)s=cleaningStoreView(s);
+  const cleaning=$('storeDetailDialog')?.dataset.service==='pulizie';if(cleaning)s=cleaningStoreView(s);
   const rows=(cleaning?[]:interventions).filter(i=>i.store_id===s.id&&!i.multi_day_open).sort((a,b)=>String(interventionEndDate(b)).localeCompare(String(interventionEndDate(a))));
   const ex=extras.filter(e=>e.store_id===s.id&&(cleaning?e.categoria_target==='pulizie':!(e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET')))).sort((a,b)=>String(b.giorno_intervento).localeCompare(String(a.giorno_intervento)));
   const plans=archive.filter(a=>archiveKind(a)==='planimetria');
@@ -1532,11 +1533,11 @@ function renderStoreDetail(s,archive,archiveOnly=false){
     </section>`;
 
   const body=$('storeDetailBody');
-  body.insertAdjacentHTML('afterbegin',storeReminderMarkup(s)+nextVisitNoteMarkup(s));
-  if(admin()){const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent='⚑ Sollecito';b.onclick=()=>{ $('storeDetailDialog').close();openStoreReminder(s)};body.prepend(b)}
+  body.insertAdjacentHTML('afterbegin',storeReminderMarkup(s,null,cleaning?'pulizie':'verde')+(cleaning?'':nextVisitNoteMarkup(s)));
+  if(admin()){const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent='⚑ Sollecito';b.onclick=()=>{ $('storeDetailDialog').close();openStoreReminder(s,cleaning?'pulizie':'verde')};body.prepend(b)}
   body.querySelector('[data-detail-map]').onclick=()=>openStoreMaps(s);
   body.querySelector('[data-detail-edit]')?.addEventListener('click',()=>openStore(stores.find(x=>x.id===s.id)||s));
-  body.querySelector('[data-open-full-history]')?.addEventListener('click',()=>showHistory(s));
+  body.querySelector('[data-open-full-history]')?.addEventListener('click',()=>cleaning?showCleaningStoreHistory(s):showHistory(s,false,'verde'));
   body.querySelectorAll('[data-sheet-tab]').forEach(btn=>btn.onclick=()=>{body.querySelectorAll('[data-sheet-tab]').forEach(x=>x.classList.toggle('active',x===btn));body.querySelectorAll('[data-sheet-panel]').forEach(x=>x.classList.toggle('hidden',x.dataset.sheetPanel!==btn.dataset.sheetTab))});
   body.querySelectorAll('[data-open-extra-id]').forEach(btn=>btn.onclick=()=>{const e=extras.find(x=>x.id===btn.dataset.openExtraId);if(e){$('storeDetailDialog').close();openExtraById(e.id)}});
   body.querySelector('[data-upload-plan]')?.addEventListener('change',e=>uploadStoreArchiveFiles(s,'planimetria',[...e.target.files]).catch(err=>alert(err.message)));
@@ -2615,7 +2616,7 @@ function updateBulkIntervalPreview(){
   box.innerHTML=`<strong>${matches.length} sedi interessate</strong><span>Il nuovo intervallo sarà di ${days} giorni.</span>`;
 }
 function openBulkIntervalDialog(){
- if(typeof activeService!=='undefined'&&activeService==='pulizie'){cleaningTab='due';setView('cleaning');return;}
+ if(typeof serviceForView==='function'&&serviceForView()==='pulizie'){cleaningTab='due';setView('cleaning');return;}
   const preferred=storeClientFilter!=='all'?storeClientFilter:'eurospin';
   $('bulkIntervalClient').value=preferred;
   $('bulkIntervalSiteType').value='all';
@@ -2636,20 +2637,21 @@ function counterDialog(title,description,rows){
  dialog.showModal();
 }
 function openSiteExtras(s){
- const rows=extras.filter(e=>e.store_id===s.id&&(activeService!=='pulizie'||(e.categoria_target==='pulizie'&&!OvergreenCleaning.contract(e)))).map(e=>({label:`${e.titolo} · ${e.stato.replaceAll('_',' ')}`,open:()=>openExtraById(e.id)}));
+ const rows=extras.filter(e=>e.store_id===s.id&&(serviceForView()!=='pulizie'||(e.categoria_target==='pulizie'&&!OvergreenCleaning.contract(e)))).map(e=>({label:`${e.titolo} · ${e.stato.replaceAll('_',' ')}`,open:()=>openExtraById(e.id)}));
  if(admin())rows.unshift({label:'＋ Nuovo extra per questa sede',open:()=>{$('newExtraBtn').click();$('extraClient').value=clientType(s);syncExtraClosureOptions($('extraClosureProfile'),clientType(s),clientType(s));renderExtraStoreOptions();$('extraStore').value=s.id;syncExtraDestinationUi()}});
  counterDialog('Extra · '+s.nome,'La chiusura di un extra non aggiorna l’ultimo passaggio ordinario né i giorni del taglio erba.',rows);
 }
 function showCompletedToday(){
  const data=completedToday();
- const ordinaryRows=data.ordinary.map(i=>{const s=stores.find(s=>s.id===i.store_id);return {label:`Ordinario · ${s?.nome||'Sede'} · ${fmt(interventionEndDate(i))}`,open:()=>s&&showHistory(s)}});
- const extraRows=(list,prefix)=>list.map(e=>({label:`${prefix} · ${e.titolo}`,open:()=>openExtraById(e.id)}));
- counterDialog('Eseguiti e convalidati · '+fmt(today()),`${data.total} interventi: ${data.ordinary.length} ordinari e ${data.standalone.length} extra separati. ${data.linked.length} target/extra inclusi negli ordinari, senza doppio conteggio.`,[...ordinaryRows,...extraRows(data.standalone,'Extra'),...extraRows(data.linked,'Incluso nell’ordinario')]);
+ const ordinaryRows=data.ordinary.map(i=>{const s=stores.find(s=>s.id===i.store_id);return {label:`Ordinario · ${s?.nome||'Sede'} · ${fmt(interventionEndDate(i))}`,open:()=>s&&showHistory(s,false,'verde')}});
+ const extraRows=(list,prefix)=>list.map(e=>({label:`${e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET')?'Ordinario · Pulizie':prefix} · ${e.titolo}`,open:()=>openExtraById(e.id)}));
+ counterDialog('Eseguiti e convalidati · '+fmt(today()),`${data.total} interventi: ${data.ordinary.length+data.standalone.filter(e=>e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET')).length} ordinari e ${data.standalone.filter(e=>!e.cleaning_codes?.length||e.cleaning_codes.includes('TARGET')).length} extra separati. ${data.linked.length} target/extra inclusi negli ordinari, senza doppio conteggio.`,[...ordinaryRows,...extraRows(data.standalone,'Extra'),...extraRows(data.linked,'Incluso nell’ordinario')]);
 }
 function renderStores(){
- const cleaning=typeof activeService!=='undefined'&&activeService==='pulizie';
- const serviceRows=cleaning?stores.filter(s=>clientType(s)==='eurospin'&&OvergreenCleaning.active(s,today())).map(cleaningStoreView):stores;
- const programmedFor=id=>cleaning?cleaningStoreProgrammed(id):isStoreProgrammed(id);
+ const cleaning=typeof serviceForView==='function'&&serviceForView()==='pulizie';
+ const cleaningIndex=cleaning?cleaningStoreIndex():null;
+ const serviceRows=cleaning?stores.filter(s=>clientType(s)==='eurospin'&&OvergreenCleaning.active(s,today())).map(st=>cleaningStoreView(st,cleaningIndex.get(st.id)||[])):stores;
+ const programmedFor=id=>cleaning?cleaningStoreProgrammed(id,cleaningIndex.get(id)||[]):isStoreProgrammed(id);
  const q=$('searchInput').value.trim().toLowerCase(),sort=$('sortSelect').value;
  const todayStoreIds=new Set(cleaning?cleaningRows().filter(e=>e.stato==='completato'&&OvergreenCleaning.day(e)===today()).map(e=>e.store_id):completedToday().ordinary.map(i=>i.store_id));
  document.querySelectorAll('[data-client-filter]').forEach(b=>b.classList.toggle('active',b.dataset.clientFilter===storeClientFilter));
@@ -2659,7 +2661,7 @@ function renderStores(){
  if(storeFilter!=='all')list=list.filter(s=>storeFilter==='reminders'?!!activeStoreReminder(s):storeFilter==='today'?todayStoreIds.has(s.id):storeFilter==='due'?isOverdueStore(s):storeFilter==='scheduled'?programmedFor(s.id):storeFilter==='urgent'?isUrgentStore(s):status(s)===storeFilter);
  list.sort((a,b)=>sort==='alpha'?a.nome.localeCompare(b.nome,'it'):compareStoreReminders(a,b)||OvergreenCounters.compare(a,b,today()));
  $('reminderCount').textContent=clientStores.filter(activeStoreReminder).length;
- $('storesList').innerHTML='';for(const s of list){const n=days(s.ultimo_passaggio),pending=cleaning?cleaningRows().some(e=>e.store_id===s.id&&e.stato==='in_attesa'):interventions.some(i=>i.store_id===s.id&&i.stato==='in_attesa'),storeState=status(s),programmed=programmedFor(s.id);const c=document.createElement('article');c.className=`card store-card ${storeState}`;c.innerHTML=`<div class="status-bar"></div><div><div class="card-top"><div><h3 data-detail>${esc(s.nome)}</h3><p class="muted">${esc(s.citta||s.indirizzo||'')}</p></div><div class="days">${!storeHasInterval(s)?'Su richiesta':n===null?'—':n+' gg'}</div></div>${storeReminderMarkup(s)}${programmed?'<p class="programmed-label">📅 In programma</p>':''}${!storeHasInterval(s)?'<p class="muted"><strong>↪ Nessun intervallo · solo su richiesta</strong></p>':''}${pending?'<p class="pending">⏳ In attesa di convalida</p>':''}${s.site_type==='atm'&&s.importo_fisso!==null&&s.importo_fisso!==undefined?`<p class="muted"><strong>Importo fisso:</strong> ${esc(euro(s.importo_fisso))}</p>`:''}<p class="muted">Ultimo ordinario: ${fmt(s.ultimo_passaggio)}</p><div class="actions"><button class="secondary" data-map>Maps</button><button data-history>Storico</button><button class="secondary" data-site-extras>Extra della sede</button>${!pending?'<button data-done>Registra ordinario</button>':''}${admin()?'<button class="secondary" data-reminder>⚑ Sollecito</button><button class="secondary" data-share>Condividi</button><button class="secondary" data-edit>Modifica</button>':''}</div></div>`;
+ $('storesList').innerHTML='';for(const s of list){const n=days(s.ultimo_passaggio),pending=cleaning?(cleaningIndex.get(s.id)||[]).some(e=>OvergreenCleaning.contract(e)&&e.stato==='in_attesa'):interventions.some(i=>i.store_id===s.id&&i.stato==='in_attesa'),storeState=status(s),programmed=programmedFor(s.id);const c=document.createElement('article');c.className=`card store-card ${storeState}`;c.innerHTML=`<div class="status-bar"></div><div><div class="card-top"><div><h3 data-detail>${esc(s.nome)}</h3><p class="muted">${esc(s.citta||s.indirizzo||'')}</p></div><div class="days">${!storeHasInterval(s)?'Su richiesta':n===null?'—':n+' gg'}</div></div>${storeReminderMarkup(s)}${programmed?'<p class="programmed-label">📅 In programma</p>':''}${!storeHasInterval(s)?'<p class="muted"><strong>↪ Nessun intervallo · solo su richiesta</strong></p>':''}${pending?'<p class="pending">⏳ In attesa di convalida</p>':''}${s.site_type==='atm'&&s.importo_fisso!==null&&s.importo_fisso!==undefined?`<p class="muted"><strong>Importo fisso:</strong> ${esc(euro(s.importo_fisso))}</p>`:''}<p class="muted">Ultimo ordinario: ${fmt(s.ultimo_passaggio)}</p><div class="actions"><button class="secondary" data-map>Maps</button><button data-history>Storico</button><button class="secondary" data-site-extras>Extra della sede</button>${!pending?'<button data-done>Registra ordinario</button>':''}${admin()?'<button class="secondary" data-reminder>⚑ Sollecito</button><button class="secondary" data-share>Condividi</button><button class="secondary" data-edit>Modifica</button>':''}</div></div>`;
  c.querySelector('[data-detail]').onclick=()=>showStoreDetail(s);c.querySelector('[data-map]').onclick=()=>openStoreMaps(s);c.querySelector('[data-history]').onclick=()=>cleaning?showCleaningStoreHistory(s):showHistory(s);c.querySelector('[data-site-extras]').onclick=()=>openSiteExtras(s);c.querySelector('[data-done]')?.addEventListener('click',()=>cleaning?openCleaningOrdinary(s):openDone(s));c.querySelector('[data-share]')?.addEventListener('click',()=>shareStoreExternally(s));c.querySelector('[data-edit]')?.addEventListener('click',()=>openStore(stores.find(x=>x.id===s.id)||s));c.querySelector('[data-reminder]')?.addEventListener('click',()=>openStoreReminder(s));window.OvergreenCompact?.store(c);$('storesList').appendChild(c)}
  $('totalCount').textContent=clientStores.length;
  $('dueCount').textContent=clientStores.filter(isOverdueStore).length;
@@ -2727,8 +2729,9 @@ async function compressImage(file){
 }
 async function uploadFile(path,file){const {error}=await sb.storage.from('documenti').upload(path,file,{upsert:false,cacheControl:'3600'});if(error)throw error;return path}
 async function addAttachment(data){const {data:row,error}=await sb.from('attachments').insert(data).select().single();if(error)throw error;return row}
-async function showHistory(s,refreshOnly=false){
- if(typeof activeService!=='undefined'&&activeService==='pulizie')return showCleaningStoreHistory(s);
+async function showHistory(s,refreshOnly=false,service=serviceForView()){
+ if(service==='pulizie')return showCleaningStoreHistory(s);
+ $('historyDialog').dataset.service='verde';
  if(s)activateClient(clientType(s));
   currentHistoryStoreId=s.id;
   if(!refreshOnly&&!$('historyDialog').open)openDialog('historyDialog');
@@ -2976,6 +2979,7 @@ function renderPending(){
     if(pics.length)hydratePendingPhotos(c,pics);
   }
   for(const e of pendingExtras){
+    if(e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET')&&typeof cleaningOrdinaryCard==='function'){$('pendingList').appendChild(cleaningOrdinaryCard(e));continue;}
     const st=stores.find(x=>x.id===e.store_id),names=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean),pics=attachments.filter(a=>a.extra_id===e.id&&a.tipo==='foto_generica'),re=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),ro=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen');
     const c=document.createElement('article');c.className='card pending pending-review';
     c.innerHTML=`<div class="pending-review-head"><div><h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3><p class="muted">${fmt(e.giorno_intervento)} · ${esc(e.titolo)} · 🕒 ${esc(closureText(e))}</p></div><span class="badge-state">In attesa</span></div><div class="pending-review-section"><strong>Chi ha eseguito</strong><p>${names.length?names.map(esc).join(' · '):'Operatore non indicato'}</p></div><div class="pending-review-section"><strong>Note finali</strong><div class="history-note ${e.note_lorenzo?'':'muted'}">${esc(e.note_lorenzo||'Nessuna nota inserita')}</div></div><div class="pending-review-section"><div class="pending-photo-head"><strong>Foto allegate</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-extra-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div><div class="actions">${closureProfile(e)==='eurospin'?`${re?'<button class="secondary" data-re>File Eurospin</button>':'<span class="muted">File Eurospin mancante</span>'}${ro?'<button class="secondary" data-ro>File Overgreen</button>':'<span class="muted">File Overgreen mancante</span>'}`:(attachments.some(a=>a.extra_id===e.id&&a.tipo==='verbale_cliente')?'<button class="secondary" data-client-doc>Documento cliente</button>':'')}<button data-ok>Convalida</button></div>`;
@@ -2984,7 +2988,7 @@ function renderPending(){
 }
 // V196: i cambi di stato collegati sono una sola transazione server.
 async function refreshAfterSave(sections=DATA_SECTIONS){
-  try{await loadAll({sections});return true}catch(err){
+  try{await loadAll({sections});if($('historyDialog')?.open&&$('historyDialog').dataset.service==='pulizie'&&typeof showCleaningStoreHistory==='function'){const store=stores.find(s=>s.id===currentHistoryStoreId);if(store)showCleaningStoreHistory(store)}return true}catch(err){
     console.warn('Dati salvati; aggiornamento schermata fallito',err);
     toast('Salvato. Aggiornamento non riuscito: premi Aggiorna, non rifare la chiusura.');return false;
   }
@@ -3201,7 +3205,7 @@ const helpPages={
 };
 function openHelp(){const h=helpPages[currentView]||helpPages.dashboard;$('helpTitle').textContent=h.title;$('helpBody').innerHTML=h.html;openDialog('helpDialog')}
 async function planOperation(operation,payload){
- if(operation==='add'&&typeof activeService!=='undefined'&&activeService==='pulizie'&&typeof cleaningPlanOperation==='function')return cleaningPlanOperation(payload,true);
+ if(operation==='add'&&typeof serviceForView==='function'&&serviceForView()==='pulizie'&&typeof cleaningPlanOperation==='function')return cleaningPlanOperation(payload,true);
  const key='overgreen-plan-v273:'+attachmentMediaScope()+':'+operation+':'+JSON.stringify(payload);
  let id=sessionStorage.getItem(key);if(!id){id=crypto.randomUUID();sessionStorage.setItem(key,id)}
  return dataSync.enqueue('plan:'+payload.id,async()=>{
@@ -3306,27 +3310,26 @@ function enableScheduleOrder(container,schedule){
 }
 function openAddScheduleItems(schedule){
   if(!admin())return;
-  $('addScheduleItemsForm').reset();$('addScheduleId').value=schedule.id;
+  $('addScheduleItemsForm').reset();$('addScheduleId').value=schedule.id;$('addScheduleStores').replaceChildren();
   const names=scheduleMembers.filter(m=>m.schedule_id===schedule.id).map(m=>profiles.find(p=>p.id===m.profile_id)?.nome).filter(Boolean);
   $('addScheduleInfo').textContent=`${fmt(schedule.giorno)} · ${names.join(' + ')||'Squadra non indicata'}`;
   renderAddSchedulePicker();openDialog('addScheduleItemsDialog');
 }
 function renderAddSchedulePicker(){
- const cleaning=typeof activeService!=='undefined'&&activeService==='pulizie';
+ const cleaning=typeof serviceForView==='function'&&serviceForView()==='pulizie';
   const scheduleId=$('addScheduleId').value,q=($('addScheduleSearch').value||'').toLowerCase(),box=$('addScheduleStores');if(!box)return;
   const already=new Set((cleaning?cleaningRows().filter(e=>e.schedule_id===scheduleId&&OvergreenCleaning.contract(e)):scheduleItems).filter(i=>i.schedule_id===scheduleId).map(i=>i.store_id));
-  const selected=new Set([...box.querySelectorAll('input:checked')].map(x=>x.value));box.innerHTML='';
+  const selected=new Set([...box.querySelectorAll(cleaning?'[data-clean-store]:checked':'input:checked')].map(x=>x.value));box.innerHTML='';
   const available=stores.filter(st=>planningMatches(st)&&(!cleaning||OvergreenCleaning.active(st,schedules.find(s=>s.id===scheduleId)?.giorno||today()))&&!already.has(st.id)&&[st.nome,st.citta,st.indirizzo,storeSiteTypeLabel(st)].some(v=>String(v||'').toLowerCase().includes(q))).sort((a,b)=>compareStoreReminders(a,b)||String(a.nome||'').localeCompare(String(b.nome||''),'it'));
-  for(const st of available){const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${st.id}" ${selected.has(st.id)?'checked':''}><span><strong>${esc(st.nome)}</strong>${storeReminderMarkup(st,schedules.find(s=>s.id===scheduleId)?.giorno)}<br><small>${esc([storeSiteTypeLabel(st),st.citta,st.indirizzo].filter(Boolean).join(' · '))}</small></span>`;box.appendChild(l)}
+  for(const st of available){const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${st.id}" ${selected.has(st.id)?'checked':''}><span><strong>${esc(st.nome)}</strong>${storeReminderMarkup(st,schedules.find(s=>s.id===scheduleId)?.giorno)}<br><small>${esc([storeSiteTypeLabel(st),st.citta,st.indirizzo].filter(Boolean).join(' · '))}</small></span>`;box.appendChild(l);if(cleaning){const input=l.querySelector('input'),day=schedules.find(s=>s.id===scheduleId)?.giorno||today();input.setAttribute('data-clean-store','');input.onchange=()=>mountCleaningPlanOptions(l,st,day,input.checked);mountCleaningPlanOptions(l,st,day,selected.has(st.id))}}
   const existingExtras=existingExtrasForSchedulePicker(scheduleId).filter(planningMatches).filter(e=>!cleaning||(e.categoria_target==='pulizie'&&!OvergreenCleaning.contract(e))).filter(e=>!q||schedulePlannerExtraSearchText(e).includes(q)).sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||''),'it'));
   for(const e of existingExtras){
     const value=`extra:${e.id}`,l=document.createElement('label'),st=stores.find(s=>s.id===e.store_id),oldSchedule=e.schedule_id?schedules.find(s=>s.id===e.schedule_id):null;
     const oldDate=oldSchedule?.giorno||e.giorno_intervento||null;
     const placement=oldSchedule?`⚠ Già programmato il ${fmt(oldDate)} · verrà spostato in questa giornata`:oldDate?`Data attuale ${fmt(oldDate)} · verrà assegnato a questa giornata`:'Extra aperto · non ancora programmato';
     l.innerHTML=`<input type="checkbox" value="${value}" ${selected.has(value)?'checked':''}><span><strong>🔧 ${esc(e.titolo||'Extra')}</strong><br><small>${esc([clientLabel(e),e.numero_target?`Target/Ticket ${e.numero_target}`:null,st?.nome||e.nome_esterno||e.indirizzo_esterno||'Extra senza sede'].filter(Boolean).join(' · '))}</small><br><small class="muted">${esc(placement)}</small>${deadlineLabel(e)}</span>`;
-    box.appendChild(l)
+    if(cleaning)l.querySelector('input').setAttribute('data-clean-store','');box.appendChild(l)
   }
-  if(cleaning)box.querySelectorAll('input[type=checkbox]').forEach(input=>input.setAttribute('data-clean-store',''));
   if(!available.length&&!existingExtras.length)box.innerHTML='<p class="muted">Nessun altro lavoro disponibile.</p>';
 }
 function extraMatchesScheduleDate(e){
@@ -3345,16 +3348,16 @@ let schedulePickerLetter='';
 function selectedScheduleStoreIds(){return [...schedulePickerSelected]}
 function setSchedulePickerValue(value,checked){if(checked)schedulePickerSelected.add(value);else schedulePickerSelected.delete(value);updateScheduleSelectedCount()}
 function updateScheduleSelectedCount(){renderScheduleItemNoteDrafts();const count=schedulePickerSelected.size;if($('scheduleSelectedCount'))$('scheduleSelectedCount').textContent=`${count} selezionat${count===1?'o':'i'}`;if($('scheduleSubmitBtn'))$('scheduleSubmitBtn').textContent=count?`Aggiungi ${count} lavor${count===1?'o':'i'} alla giornata`:'Aggiungi lavori alla giornata';window.OvergreenStoreMap?.sync()}
-function resetSchedulePickerSelection(){if(typeof cleaningPlanDrafts!=='undefined')cleaningPlanDrafts.clear();window.OvergreenFleet?.reset();window.OvergreenRouteEndpoints?.reset();scheduleItemNoteDrafts.clear();schedulePickerSelected.clear();schedulePickerMode='all';schedulePickerLetter='';if($('scheduleSearch'))$('scheduleSearch').value='';updateScheduleSelectedCount()}
+function resetSchedulePickerSelection(){if(typeof cleaningPlanDrafts!=='undefined')cleaningPlanDrafts.clear();if(typeof servicePlannerSelections!=='undefined')servicePlannerSelections.delete(activeService);window.OvergreenFleet?.reset();window.OvergreenRouteEndpoints?.reset();scheduleItemNoteDrafts.clear();schedulePickerSelected.clear();schedulePickerMode='all';schedulePickerLetter='';if($('scheduleSearch'))$('scheduleSearch').value='';updateScheduleSelectedCount()}
 function schedulePickerMatchesStore(st,q,pickerClient){
- if(typeof activeService!=='undefined'&&activeService==='pulizie'&&(!OvergreenCleaning.active(st,$('scheduleDate').value||tomorrow())||clientType(st)!=='eurospin'))return false;
+ if(typeof serviceForView==='function'&&serviceForView()==='pulizie'&&(!OvergreenCleaning.active(st,$('scheduleDate').value||tomorrow())||clientType(st)!=='eurospin'))return false;
   if(pickerClient!=='all'&&String(st.client_type||'eurospin')!==pickerClient)return false;
   if(schedulePickerLetter&&!String(st.nome||'').trim().toLocaleUpperCase('it').startsWith(schedulePickerLetter))return false;
   if(q&&![st.nome,st.citta,st.indirizzo,st.note,clientLabel(st.client_type),storeSiteTypeLabel(st)].some(v=>String(v||'').toLowerCase().includes(q)))return false;
   return schedulePickerMode!=='selected'||schedulePickerSelected.has(st.id);
 }
 function schedulePickerMatchesExtra(e,q,pickerClient){
- if(typeof activeService!=='undefined'&&activeService==='pulizie'&&(e.categoria_target!=='pulizie'||OvergreenCleaning.contract(e)))return false;
+ if(typeof serviceForView==='function'&&serviceForView()==='pulizie'&&(e.categoria_target!=='pulizie'||OvergreenCleaning.contract(e)))return false;
   const value=`extra:${e.id}`;
   if(pickerClient!=='all'&&clientType(e)!==pickerClient)return false;
   if(schedulePickerLetter&&!String(e.titolo||'Extra').trim().toLocaleUpperCase('it').startsWith(schedulePickerLetter))return false;
@@ -3594,9 +3597,9 @@ function renderSchedules(){
       r.dataset.routeAddress=routeAddressForStore(st);
       r.dataset.scheduleItemId=item.id;
       const stato=effectiveState==='in_attesa'?'In attesa di convalida':'Da eseguire',linked=linkedExtrasForScheduleItem(item.id);
-      r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${displayIndex+1}</div><div class="schedule-item-copy">${scheduleClientBadge(st)}<strong data-store-detail>${esc(st?.nome||'Sede')}</strong>${storeReminderMarkup(st,s.giorno)}<small>${esc(st?.citta||st?.indirizzo||'')} · ${stato}</small></div></div>${scheduleItemNoteMarkup(item)}${visitPhotosMarkup(item)}${effectiveState==='da_fare'?nextVisitNoteMarkup(st):''}${linked.length?`<div class="linked-extra-reminder compact-linked"><strong>Extra collegati (${linked.length})</strong>${linked.map(e=>`<span class="linked-extra-category ${extraCategoryClass(e)}"><b>${esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}</span>`).join('')}</div>`:''}<div class="actions schedule-item-actions"><button class="secondary" data-map>Maps</button>${effectiveState==='da_fare'?`<button data-done>${openMultiDayIntervention(st?.id)?'Continua intervento':'Registra ordinario'}</button>`:''}${admin()&&effectiveState==='da_fare'?'<button class="danger-btn" data-delete-scheduled>Elimina</button>':''}</div>`;
+      r.innerHTML=`<div class="schedule-item-main"><div class="schedule-order-number">${displayIndex+1}</div><div class="schedule-item-copy">${scheduleClientBadge(st)}<strong data-store-detail>${esc(st?.nome||'Sede')}</strong>${storeReminderMarkup(st,s.giorno,'verde')}<small>${esc(st?.citta||st?.indirizzo||'')} · ${stato}</small></div></div>${scheduleItemNoteMarkup(item)}${visitPhotosMarkup(item)}${effectiveState==='da_fare'?nextVisitNoteMarkup(st):''}${linked.length?`<div class="linked-extra-reminder compact-linked"><strong>Extra collegati (${linked.length})</strong>${linked.map(e=>`<span class="linked-extra-category ${extraCategoryClass(e)}"><b>${esc(extraCategoryLabel(e))}</b> ${esc(e.titolo)}</span>`).join('')}</div>`:''}<div class="actions schedule-item-actions"><button class="secondary" data-map>Maps</button>${effectiveState==='da_fare'?`<button data-done>${openMultiDayIntervention(st?.id)?'Continua intervento':'Registra ordinario'}</button>`:''}${admin()&&effectiveState==='da_fare'?'<button class="danger-btn" data-delete-scheduled>Elimina</button>':''}</div>`;
       if(admin()){const noteBtn=document.createElement('button');noteBtn.type='button';noteBtn.className='secondary';noteBtn.textContent=item.nota?'📌 Modifica appunto':'📌 Appunto';noteBtn.onclick=()=>openScheduleItemNote(item);r.querySelector('.schedule-item-actions').appendChild(noteBtn);addVisitPhotosButton(r.querySelector('.schedule-item-actions'),item)}
-      r.querySelector('[data-store-detail]').onclick=()=>showStoreDetail(st);r.querySelector('[data-map]').onclick=()=>openStoreMaps(st);
+      r.querySelector('[data-store-detail]').onclick=()=>showStoreDetail(st,'verde');r.querySelector('[data-map]').onclick=()=>openStoreMaps(st);
       r.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,item.id));r.querySelector('[data-delete-scheduled]')?.addEventListener('click',()=>deleteScheduleItem(item,st));c.appendChild(r)
       }else if(job.kind==='extra'){
         const e=job.extra,r=extraCard(e);r.classList.add('schedule-extra-card','schedule-item');if(e._dayItem)r.dataset.scheduleItemId=e._dayItem.id;else r.dataset.scheduleExtraId=e.id;
@@ -3932,7 +3935,8 @@ function schedulePlannerExtraSearchText(e){
   return [e.titolo,e.numero_target,e.descrizione,e.nome_esterno,e.indirizzo_esterno,clientLabel(e),extraCategoryLabel(e),st?.nome,st?.citta,st?.indirizzo].filter(Boolean).join(' ').toLowerCase();
 }
 function renderSchedulePicker(){
- const cleaning=typeof activeService!=='undefined'&&activeService==='pulizie';
+ const cleaning=typeof serviceForView==='function'&&serviceForView()==='pulizie';
+ const cleaningIndex=cleaning?cleaningStoreIndex():null;
   const q=String($('scheduleSearch')?.value||'').trim().toLowerCase(),w=$('scheduleStores');if(!w)return;
   const pickerClient=$('schedulePickerClient')?.value||'all';
   w.innerHTML='';
@@ -3962,9 +3966,9 @@ function renderSchedulePicker(){
     group.innerHTML=`<summary><span>${esc(label)}</span><b>${rows.length}</b></summary><div class="picker-group-list"></div>`;
     const body=group.querySelector('.picker-group-list');
     for(const st of rows){
-      const l=document.createElement('label'),programmed=cleaning?cleaningStoreProgrammed(st.id):isStoreProgrammed(st.id);
+      const l=document.createElement('label'),programmed=cleaning?cleaningStoreProgrammed(st.id,cleaningIndex.get(st.id)||[]):isStoreProgrammed(st.id);
       l.innerHTML=`<input type="checkbox" value="${st.id}" ${schedulePickerSelected.has(st.id)?'checked':''}><span><strong>${esc(st.nome)}</strong>${storeReminderMarkup(st,$('scheduleDate').value)}${programmed?' <em class="picker-programmed">Già in programma</em>':''}${!cleaning&&!storeHasInterval(st)?' <em class="picker-programmed">Solo su richiesta</em>':''}<small>${esc([storeSiteTypeLabel(st),st.citta,st.indirizzo].filter(Boolean).join(' · ')||'Nessun indirizzo')}</small></span>`;
-      l.querySelector('input').onchange=e=>{setSchedulePickerValue(st.id,e.target.checked);if(cleaning)l.nextElementSibling.hidden=!e.target.checked};body.appendChild(l);if(cleaning){l.querySelector('input').setAttribute('data-clean-store','');const wrap=document.createElement('div');wrap.innerHTML=cleaningPlanOptions(st,$('scheduleDate').value||tomorrow());const options=wrap.firstElementChild;options.hidden=!schedulePickerSelected.has(st.id);options.querySelectorAll('[data-clean-codes]').forEach(input=>input.onchange=()=>cleaningPlanDrafts.set(st.id,selectedCleaningCodes(options)));body.appendChild(options)}
+      l.querySelector('input').onchange=e=>{setSchedulePickerValue(st.id,e.target.checked);if(cleaning)mountCleaningPlanOptions(l,st,$('scheduleDate').value||tomorrow(),e.target.checked)};body.appendChild(l);if(cleaning){l.querySelector('input').setAttribute('data-clean-store','');mountCleaningPlanOptions(l,st,$('scheduleDate').value||tomorrow(),schedulePickerSelected.has(st.id))}
     }
     w.appendChild(group)
   }
@@ -3972,11 +3976,11 @@ function renderSchedulePicker(){
   const standalone=standaloneExtrasForPlanner().filter(e=>schedulePickerMatchesExtra(e,q,pickerClient)&&(!cleaning||!OvergreenCleaning.contract(e))).sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||''),'it'));
   if(standalone.length){resultCount+=standalone.length;
     const group=document.createElement('details');group.className='picker-group extras';group.open=true;
-    group.innerHTML=`<summary><span>🔧 Extra senza sede</span><b>${standalone.length}</b></summary><div class="picker-group-list"></div>`;
+    group.innerHTML=`<summary><span>Extra e Target disponibili</span><b>${standalone.length}</b></summary><div class="picker-group-list"></div>`;
     const body=group.querySelector('.picker-group-list');
     for(const e of standalone){
-      const value=`extra:${e.id}`,l=document.createElement('label'),place=e.nome_esterno||e.indirizzo_esterno||'Nessuna sede associata';
-      l.innerHTML=`<input type="checkbox" value="${value}" ${schedulePickerSelected.has(value)?'checked':''}><span><strong>${esc(e.titolo||'Extra')}</strong><em class="picker-programmed">Extra standalone</em>${deadlineLabel(e)}<small>${esc([clientLabel(e),e.numero_target?`Target/Ticket ${e.numero_target}`:null,place].filter(Boolean).join(' · '))}</small></span>`;
+      const value=`extra:${e.id}`,l=document.createElement('label'),place=stores.find(s=>s.id===e.store_id)?.nome||e.nome_esterno||e.indirizzo_esterno||'Nessuna sede associata';
+      l.innerHTML=`<input type="checkbox" value="${value}" ${schedulePickerSelected.has(value)?'checked':''}><span><strong>${esc(place)}</strong><em class="picker-programmed">${e.numero_target?'Target '+esc(e.numero_target):'Extra'}</em><small class="picker-extra-description">${esc(e.titolo||'')}</small>${deadlineLabel(e)}<small>${esc([clientLabel(e),e.numero_target?`Target/Ticket ${e.numero_target}`:null,place].filter(Boolean).join(' · '))}</small></span>`;
       l.querySelector('input').onchange=ev=>setSchedulePickerValue(value,ev.target.checked);body.appendChild(l)
     }
     w.appendChild(group)
@@ -4976,7 +4980,7 @@ $('userEditForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const
 $('addScheduleItemsForm').onsubmit=e=>{
  e.preventDefault();if(!admin())return;
  return withFormBusy('addScheduleItemsForm',async()=>{
-  const scheduleId=$('addScheduleId').value,selected=[...$('addScheduleStores').querySelectorAll(activeService==='pulizie'?'[data-clean-store]:checked':'input:checked')].map(x=>x.value);
+  const scheduleId=$('addScheduleId').value,selected=[...$('addScheduleStores').querySelectorAll(serviceForView()==='pulizie'?'[data-clean-store]:checked':'input:checked')].map(x=>x.value);
   if(!selected.length)throw new Error('Seleziona almeno una sede o un extra.');
   const storeIds=selected.filter(v=>!v.startsWith('extra:')),extraIds=selected.filter(v=>v.startsWith('extra:')).map(v=>v.slice(6));
   const sch=schedules.find(x=>x.id===scheduleId),members=scheduleMembers.filter(m=>m.schedule_id===scheduleId).map(m=>m.profile_id);
@@ -5835,6 +5839,7 @@ $('closeExtraForm').onsubmit=async e=>{
     const cleaningClose=extra.cleaning_codes?.length&&!extra.cleaning_codes.includes('TARGET');
     const cleaningDone=cleaningClose?selectedCleaningCodes($('cleaningClosureChoices')):null;
     if(cleaningClose&&!cleaningDone.length)throw new Error('Seleziona almeno una lavorazione eseguita.');
+    if(cleaningClose)validateCleaningExecution(extra,closure.day,cleaningDone);
     if(structuredItems.length&&!cleaningClose){
       const incomplete=structuredItems.filter(w=>!['completata','non_eseguita'].includes(w.stato));
       if(incomplete.length)throw new Error(`Prima di chiudere definitivamente completa la scheda Lavorazioni. Mancano: ${incomplete.map(w=>w.titolo).join(', ')}`);
@@ -5857,6 +5862,8 @@ $('closeExtraForm').onsubmit=async e=>{
     if(profileMode==='intesa'&&!photos.length&&!structuredHasPhotos&&!existingGenericPhotos)throw new Error('Per Intesa serve almeno una foto, generica oppure collegata a una lavorazione.');
 
     await saveCurrentExtraDraft();
+    let registered=false;const closurePayload={stato:'in_attesa',giorno_intervento:closure.day,note_lorenzo:notes,closed_by:profile.id,closed_at:closure.closedAt,...nightWork};
+    if(extra._unsavedCleaning&&!photos.length&&!reports.length){const result=await sb.rpc('overgreen_cleaning_register_v314',{p_request_id:id,p_store:extra.store_id,p_codes:cleaningDone,p_payload:closurePayload,p_workers:closure.workers});if(result.error)throw result.error;if(!result.data?.id)throw new Error('Invio non confermato. Riprova.');extra=result.data;id=extra.id;$('closeExtraId').value=id;registered=true;cleaningOrdinaryDraft=null;}
     if(extra._unsavedCleaning){extra=await materializeCleaningOrdinary(extra,closure.day,cleaningDone,notes);id=extra.id;$('closeExtraId').value=id;await saveCurrentExtraDraft();}
     // Identificativi e file persistono anche dopo un riavvio del telefono.
     for(const [tipo,originalFile] of reports){
@@ -5872,8 +5879,8 @@ $('closeExtraForm').onsubmit=async e=>{
 
 
     btn.textContent='Invio a Lorenzo…';
-    const {error}=await sb.rpc(cleaningClose?'overgreen_cleaning_close_v309':'overgreen_close_extra_v271',{...(cleaningClose?{p_codes:cleaningDone}:{}),p_extra_id:id,p_payload:{stato:'in_attesa',giorno_intervento:closure.day,note_lorenzo:notes,closed_by:profile.id,closed_at:closure.closedAt,...nightWork},p_workers:closure.workers});
-    if(error)throw error;
+    if(!registered){const {error}=await sb.rpc(cleaningClose?'overgreen_cleaning_close_v309':'overgreen_close_extra_v271',{...(cleaningClose?{p_codes:cleaningDone}:{}),p_extra_id:id,p_payload:closurePayload,p_workers:closure.workers});
+    if(error)throw error;}
     await cleanupReplacedAttachments(replacedAttachments);
     await extraDrafts.remove(id);if(draftId!==id)await extraDrafts.remove(draftId);
     if(cleaningClose)sessionStorage.removeItem(cleaningOrdinaryDraftKey(extra.store_id));
@@ -5970,7 +5977,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=313').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=314').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

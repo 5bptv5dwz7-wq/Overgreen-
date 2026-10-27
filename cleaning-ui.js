@@ -3,7 +3,7 @@ let cleaningStoreFilter='',cleaningSearch='',cleaningMonth='',cleaningTab='sites
 function cleaningRows(){return extras.filter(e=>clientType(e)==='eurospin'&&e.categoria_target==='pulizie')}
 function cleaningOpen(storeId='',existingId=''){
  if(!admin())return;
- $('cleaningEditDialog').querySelector('h2').textContent='Visita pulizie';$('cleaningEditForm').querySelector('[type=submit]').textContent='Salva e assegna';$('cleaningVisitMode').closest('label').hidden=false;
+ $('cleaningEditDialog').querySelector('h2').textContent=existingId?'Classifica Target':'Visita pulizie';$('cleaningEditForm').querySelector('[type=submit]').textContent=existingId?'Salva classificazione':'Salva e assegna';$('cleaningVisitMode').closest('label').hidden=false;
  const dialog=$('cleaningEditDialog');$('cleaningEditForm').reset();
  $('cleaningVisitId').value=crypto.randomUUID();$('cleaningExistingId').value=existingId;
  const existing=extras.find(e=>e.id===existingId);
@@ -26,7 +26,7 @@ function cleaningVisitOptions(){
  const codes=existing||mode!=='contract'?[]:Object.keys(model.catalog);
  const due=new Set(model.due(s||{},cleaningRows(),date).filter(x=>x.due).map(x=>x.code));
  $('cleaningVisitCodes').innerHTML=codes.map(code=>`<label class="cleaning-choice"><input type="checkbox" value="${code}" ${!active||(code==='D/2'&&!slots.free)?'disabled':''} ${due.has(code)&&code!=='D/2'?'checked':''}><span><strong>${code} · ${esc(model.catalog[code].label)}</strong><small>${model.catalog[code].frequency}</small></span></label>`).join('');
- $('cleaningRequestOutcome').textContent=mode==='request'?($('cleaningRequestMatch').checked&&active&&slots.free?'Sarà classificato D/2 e prenoterà una semestrale.':'Sarà un Target a ore, senza consumare semestrali.'):mode==='target'?'Target a ore: non consuma semestrali.':'';
+ $('cleaningRequestOutcome').textContent=mode==='request'?($('cleaningRequestMatch').checked?(!active?'D/2 non disponibile: affidamento non attivo nella data scelta.':!slots.free?'D/2 non disponibile: le due semestrali dell’anno sono già occupate.':'Sarà classificato D/2 e prenoterà una semestrale.'):'Sarà un Target a ore, senza consumare semestrali.'):mode==='target'?'Target a ore: non consuma semestrali.':'';
 }
 async function cleaningSaveVisit(event){
  event.preventDefault();if(!admin())return;
@@ -34,12 +34,12 @@ async function cleaningSaveVisit(event){
   const model=OvergreenCleaning,storeId=$('cleaningVisitStore').value,s=stores.find(x=>x.id===storeId),date=$('cleaningVisitDay').value,mode=$('cleaningVisitMode').value;
   let codes=[...$('cleaningVisitCodes').querySelectorAll('input:checked')].map(x=>x.value);
   if(mode==='target')codes=['TARGET'];
-  if(mode==='request')codes=$('cleaningRequestMatch').checked&&model.active(s||{},date)&&model.slots(cleaningRows(),storeId,date.slice(0,4)).free?['D/2']:['TARGET'];
+  if(mode==='request'){codes=['TARGET'];if($('cleaningRequestMatch').checked){if(!model.active(s||{},date))throw Error('Affidamento pulizie non attivo nella data scelta.');if(!model.slots(cleaningRows(),storeId,date.slice(0,4)).free)throw Error('Nessuna semestrale D/2 disponibile per questo anno.');codes=['D/2'];}}
   if(!codes.length)throw Error('Seleziona almeno una lavorazione.');
   const result=await sb.rpc('overgreen_cleaning_create_v308',{p_id:$('cleaningVisitId').value,p_store:storeId,p_day:date,p_codes:codes,p_description:$('cleaningVisitNote').value.trim()||null,p_existing:$('cleaningExistingId').value||null});
   if(result.error)throw result.error;
-  $('cleaningEditDialog').close();await loadAll();toast(codes.includes('TARGET')?'Target a ore salvato':'Visita pulizie salvata');
-  const row=extras.find(x=>x.id===result.data.id);if(row&&!extraIsScheduled(row))openProgramExtraDialog(row);
+  const classified=!!$('cleaningExistingId').value;$('cleaningEditDialog').close();await loadAll();toast(codes.includes('TARGET')?'Target a ore salvato':classified?'Target convertito in semestrale D/2':'Visita pulizie salvata');
+  const row=extras.find(x=>x.id===result.data.id);if(!classified&&row&&!extraIsScheduled(row))openProgramExtraDialog(row);
  });
 }
 function cleaningContractOpen(id=''){
@@ -60,7 +60,7 @@ function renderCleaning(){
  if(!admin()&&['due','sites'].includes(cleaningTab))cleaningTab='work';
  $('cleaningAdminActions').hidden=!admin();
  document.querySelectorAll('[data-cleaning-tab]').forEach(b=>b.classList.toggle('active',b.dataset.cleaningTab===cleaningTab));
- $('cleaningMonth').hidden=cleaningTab!=='history';
+ $('cleaningMonth').hidden=cleaningTab!=='history';$('cleaningResetStore').hidden=!cleaningStoreFilter;
  if(cleaningTab==='sites'&&admin()&&typeof renderCleaningAffidamenti==='function'){renderCleaningAffidamenti();return;}
  const model=OvergreenCleaning,rows=cleaningRows(),q=cleaningSearch.toLocaleLowerCase('it');
  const sites=stores.filter(s=>clientType(s)==='eurospin'&&(!cleaningStoreFilter||s.id===cleaningStoreFilter)&&(!q||[s.nome,s.citta,s.indirizzo].join(' ').toLocaleLowerCase('it').includes(q)));
@@ -70,13 +70,13 @@ function renderCleaning(){
   for(const s of sites.filter(s=>cleaningTab==='sites'||model.active(s,today()))){
    const due=model.due(s,rows,today()),slot=model.slots(rows,s.id,today().slice(0,4)),card=document.createElement('article');card.className='card';
    card.innerHTML=`<h3>${esc(s.nome)}</h3><p>${s.cleaning_enabled?'Ordinarie affidate dal '+fmt(s.cleaning_start)+(s.cleaning_end?' al '+fmt(s.cleaning_end):''):'Solo interventi a richiesta'}</p><p>D/2 ${today().slice(0,4)} · ${slot.used}/2 eseguite · ${slot.reserved} prenotate · ${slot.free} disponibili</p><div class="cleaning-due">${due.map(x=>`<p><strong>${x.code}</strong> ${esc(model.catalog[x.code].label)} <span>${x.pending?'Già in lavorazione / programmata':x.due?'Da fare · '+fmt(x.next):'Prossima: '+fmt(x.next)}</span></p>`).join('')}</div><div class="actions"><button data-new>Nuova visita</button><button class="secondary" data-contract>Affidamento</button><button class="secondary" data-history>Storico</button></div>`;
-   card.querySelector('[data-new]').textContent='Programma pulizia';card.querySelector('[data-new]').onclick=()=>{switchService('pulizie');setView('schedule');schedulePickerSelected.add(s.id);renderSchedulePicker()};card.querySelector('[data-contract]').onclick=()=>cleaningContractOpen(s.id);card.querySelector('[data-history]').onclick=()=>{cleaningStoreFilter=s.id;cleaningTab='history';renderCleaning()};root.appendChild(card);
+   card.querySelector('[data-new]').textContent='Programma pulizia';card.querySelector('[data-new]').onclick=()=>{switchService('pulizie',{render:false});setView('schedule');schedulePickerSelected.add(s.id);renderSchedulePicker()};card.querySelector('[data-contract]').onclick=()=>cleaningContractOpen(s.id);card.querySelector('[data-history]').onclick=()=>{cleaningStoreFilter=s.id;cleaningTab='history';renderCleaning()};root.appendChild(card);
   }
  }else{
   const ids=new Set(sites.map(s=>s.id));
   const shown=rows.filter(e=>ids.has(e.store_id)||(!e.store_id&&!cleaningStoreFilter&&!q)).filter(e=>cleaningTab==='history'?['completato','annullato'].includes(e.stato)&&(!cleaningMonth||String(model.day(e)||e.closed_at||'').startsWith(cleaningMonth)):!['completato','annullato'].includes(e.stato)).sort((a,b)=>String(model.day(b)||'').localeCompare(String(model.day(a)||'')));
   for(const e of shown){const card=extraCard(e);const label=document.createElement('p');label.className='cleaning-summary';label.textContent=(e.cleaning_done_codes||e.cleaning_codes)?.join(' + ')||'Target · da classificare se pertinente';card.prepend(label);
-   if(admin()&&!e.cleaning_codes&&!['completato','annullato','in_attesa'].includes(e.stato)&&e.store_id){const b=document.createElement('button');b.className='secondary';b.textContent='Classifica D/2 o Target';b.onclick=()=>cleaningOpen(e.store_id,e.id);card.querySelector('.actions').appendChild(b)}
+   if(admin()&&(!e.cleaning_codes||e.cleaning_codes.includes('TARGET'))&&!['completato','annullato','in_attesa'].includes(e.stato)&&e.store_id){const b=document.createElement('button');b.className='secondary';b.textContent='Verifica semestrale D/2';b.onclick=()=>cleaningOpen(e.store_id,e.id);card.querySelector('.actions').appendChild(b)}
    root.appendChild(card);
   }
  }
@@ -98,7 +98,7 @@ async function exportCleaning(){
   const blob=new Blob([await book.xlsx.writeBuffer()],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Overgreen-Pulizie-${month}.xlsx`;a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
  }catch(e){alert('Esportazione non riuscita: '+e.message)}
 }
-$('cleaningNew').onclick=()=>{switchService('pulizie');setView('schedule')};$('cleaningContractNew').onclick=()=>cleaningContractOpen();$('cleaningExport').onclick=exportCleaning;
+$('cleaningNew').onclick=()=>{switchService('pulizie',{render:false});setView('schedule')};$('cleaningContractNew').onclick=()=>cleaningContractOpen();$('cleaningExport').onclick=exportCleaning;
 $('cleaningEditForm').onsubmit=cleaningSaveVisit;$('cleaningContractForm').onsubmit=cleaningContractSave;$('cleaningContractStore').onchange=cleaningContractFill;
 for(const id of ['cleaningVisitStore','cleaningVisitDay','cleaningVisitMode','cleaningRequestMatch'])$(id).onchange=cleaningVisitOptions;
 $('cleaningSearch').oninput=e=>{cleaningSearch=e.target.value;renderCleaning()};$('cleaningMonth').value=today().slice(0,7);$('cleaningMonth').onchange=e=>{cleaningMonth=e.target.value;renderCleaning()};

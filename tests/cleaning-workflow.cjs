@@ -25,6 +25,7 @@ test('V309: atomic planning, actual work, release/reclaim semester slot, RLS and
  await db.exec(fs.readFileSync(__dirname+'/../docs/v308-pulizie.sql','utf8'));
  const close=fs.readFileSync(__dirname+'/../supabase/migrations/20261018191703_reliability_v271.sql','utf8');await db.exec(close.slice(close.indexOf('create or replace function public.overgreen_close_extra_v271')));
  await db.exec(fs.readFileSync(__dirname+'/../docs/v309-cleaning-workflow.sql','utf8'));
+ await db.exec(fs.readFileSync(__dirname+'/../docs/v314-cleaning-reliability.sql','utf8'));
  await db.exec(`set role authenticated;select set_config('app.actor','${admin}',false);update stores set cleaning_enabled=true,cleaning_start='2026-01-01'`);
  let n=1;const id=()=>`20000000-0000-0000-0000-${String(n++).padStart(12,'0')}`;
  const p={day:'2026-10-27',members:[worker],stores:[site],extras:[],cleaning_stores:[{id:site,codes:['A/1','A/2','D/2']}]};
@@ -42,6 +43,21 @@ test('V309: atomic planning, actual work, release/reclaim semester slot, RLS and
  const e2=id();await db.query('select overgreen_cleaning_create_v308($1,$2,$3,$4)',[e2,site,'2026-10-27',['C/1']]);await db.query('insert into extra_workers values($1,$2)',[e2,worker]);
  await db.exec(`select set_config('app.actor','${worker}',false)`);await finish(['C/1','D/2'],e2);row=(await db.query('select * from extras where id=$1',[e2])).rows[0];assert.equal(row.cleaning_slot,1);assert.deepEqual(row.cleaning_done_codes,['C/1','D/2']);
  await assert.rejects(plan(id(),p),/riservato/);
+ await assert.rejects(db.query('select overgreen_cleaning_register_v314($1,$2,$3,$4,$5)',[id(),site,['A/1'],JSON.stringify(payload),[worker]]),/riservato/);
+ await db.exec(`select set_config('app.actor','${admin}',false)`);
+ const target=id();await db.query('select overgreen_cleaning_create_v308($1,$2,$3,$4)',[target,site,'2026-10-27',['TARGET']]);
+ await db.query('select overgreen_cleaning_create_v308($1,$2,$3,$4,null,$5)',[id(),site,'2026-10-27',['D/2'],target]);
+ assert.equal((await db.query('select cleaning_slot from extras where id=$1',[target])).rows[0].cleaning_slot,2);
+ // Classification retry must keep the same reservation.
+ await db.query('select overgreen_cleaning_create_v308($1,$2,$3,$4,null,$5)',[id(),site,'2026-10-27',['D/2'],target]);
+ const reg=id(),rp={...payload,giorno_intervento:'2026-11-03',closed_by:admin,note_lorenzo:'Una visita'};
+ const register=(workers=[admin])=>db.query('select overgreen_cleaning_register_v314($1,$2,$3,$4,$5) r',[reg,site,['A/1','A/2'],JSON.stringify(rp),workers]);
+ await assert.rejects(register([]),/Squadra/);assert.equal((await db.query('select count(*)::int n from extras where id=$1',[reg])).rows[0].n,0);
+ const registered=(await register()).rows[0].r;assert.equal(registered.stato,'in_attesa');assert.deepEqual((await register()).rows[0].r,registered);
+ const omitted=id();await db.query('select overgreen_cleaning_create_v308($1,$2,$3,$4)',[omitted,site,'2026-11-04',['A/1','A/2','C/1']]);
+ await db.query('select overgreen_cleaning_close_v309($1,$2,$3,$4)',[omitted,['C/1'],JSON.stringify({...rp,giorno_intervento:'2026-11-04'}),[admin]]);
+ await db.query('select overgreen_cleaning_create_v308($1,$2,$3,$4)',[id(),site,'2026-11-04',['A/1','A/2']]);
+
  assert.equal((await db.query("select has_function_privilege('anon','overgreen_cleaning_close_v309(uuid,text[],jsonb,uuid[])','execute') ok")).rows[0].ok,false);
  }finally{await db.close()}
 });
@@ -50,16 +66,16 @@ test('V309 UI: service switch, only entrusted sites, ordinary payload conversion
  c.capture=x=>captured=x;
  run(`sb.rpc=async(name,p)=>{capture({name,p});return {data:{id:'schedule'}}};session={user:{id:'admin'}};profile=realProfile={id:'admin',ruolo:'admin',attivo:true};profiles=[profile];stores=[{id:'s',nome:'AFFIDATO',client_type:'eurospin',attivo:true,cleaning_enabled:true,cleaning_start:'2026-01-01'},{id:'n',nome:'SOLO VERDE',client_type:'eurospin',attivo:true}];extras=[];switchService('pulizie');setView('schedule');`);
  assert(c.document.body.classList.contains('service-cleaning'));assert.match(c.document.getElementById('scheduleStores').textContent,/AFFIDATO/);assert.doesNotMatch(c.document.getElementById('scheduleStores').textContent,/SOLO VERDE/);
- const options=c.document.querySelector('#scheduleStores .cleaning-plan-options');assert.equal(options.hidden,true);assert.equal(options.querySelector('summary').textContent,'Lavorazioni previste');
- const checkbox=c.document.querySelector('#scheduleStores [data-clean-store]');checkbox.checked=true;checkbox.onchange({target:checkbox});assert.equal(options.hidden,false);
- run(`setSchedulePickerValue('s',true);cleaningPlanDrafts.set('s',['A/1','A/2','D/2']);`);
+ assert.equal(c.document.querySelector('#scheduleStores .cleaning-plan-options'),null);
+ const checkbox=c.document.querySelector('#scheduleStores [data-clean-store]');checkbox.checked=true;checkbox.onchange({target:checkbox});const options=c.document.querySelector('#scheduleStores .cleaning-plan-options');assert(options);assert.equal(options.querySelector('summary').textContent,'Lavorazioni previste');
+ run(`setSchedulePickerValue('s',true);cleaningPlanDrafts.set(cleaningPlanKey('s','2026-10-27'),['A/1','A/2','D/2']);`);
  await run(`adminOperation('schedule_create',{members:['admin'],stores:['s'],extras:[],day:'2026-10-27'})`);assert.equal(captured.name,'overgreen_cleaning_plan_v309');assert.equal(captured.p.p_payload.cleaning_stores[0].id,'s');
  run(`renderCleaningClosure({id:'visit',store_id:'s',cleaning_codes:['A/1','A/2'],stato:'programmato'});`);assert.equal(c.document.querySelectorAll('#cleaningClosureChoices [data-clean-codes]').length,4);assert.match(c.document.getElementById('closeExtraTitle').textContent,/Registra ordinario · Pulizie/);
  run(`switchService('verde');setView('schedule');`);assert(!c.document.body.classList.contains('service-cleaning'));assert.match(c.document.getElementById('scheduleStores').textContent,/SOLO VERDE/);
 });
 test('V311 Sedi shares every action and planner control, keeping cleaning data separate',()=>{
  const harness=fs.readFileSync(__dirname+'/app-startup.cjs','utf8').split("console.log('PASS full application")[0];const c=new Function('require','__dirname',harness+';return c;')(require,__dirname),run=s=>vm.runInContext(s,c);
- run(`session={user:{id:'admin'}};profile=realProfile={id:'admin',ruolo:'admin',attivo:true};profiles=[profile];stores=[{id:'s',nome:'PV TEST',client_type:'eurospin',attivo:true,cleaning_enabled:true,cleaning_start:'2026-01-01',ultimo_passaggio:'2026-10-25',intervallo_giorni:15}];extras=[];storeFilter='all';storeClientFilter='all';activeService='verde';renderStores();`);
+ run(`session={user:{id:'admin'}};profile=realProfile={id:'admin',ruolo:'admin',attivo:true};profiles=[profile];stores=[{id:'s',nome:'PV TEST',client_type:'eurospin',attivo:true,cleaning_enabled:true,cleaning_start:'2026-01-01',ultimo_passaggio:'2026-10-25',intervallo_giorni:15}];extras=[];storeFilter='all';storeClientFilter='all';activeService='verde';setView('stores');`);
  const selectors=['data-map','data-done','data-history','data-site-extras','data-reminder','data-share','data-edit'];
  for(const attr of selectors)assert(c.document.querySelector('#storesList ['+attr+']'),attr+' green');
  run(`switchService('pulizie');renderStores();`);

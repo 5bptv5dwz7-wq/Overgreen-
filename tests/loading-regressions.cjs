@@ -6,7 +6,7 @@ test('visit photo failure refreshes the shared URL once and then offers retry',a
 });
 test('store details render immediately and reject an older archive response',async()=>{
  const src=fs.readFileSync('app.js','utf8');const start=src.indexOf('let storeDetailRequest=');const end=src.indexOf('function renderStoreDetail',start);const pending={},renders=[];
- const body={prepend(){},querySelector(){return null}},dialog={open:true,scrollTop:0},title={};
+ const body={prepend(){},querySelector(){return null}},dialog={open:true,scrollTop:0,dataset:{}},title={};
  const c={profile:{id:'a'},document:{createElement:()=>({remove(){}})},$:id=>id==='storeDetailBody'?body:id==='storeDetailDialog'?dialog:title,renderStoreDetail:(s,files,archiveOnly)=>renders.push([s.id,files,archiveOnly]),storeArchiveFiles:id=>new Promise(r=>pending[id]=r),openDialog(){}};
  Object.assign(c,{activeClient:'eurospin',clientType:r=>r?.client_type||'eurospin',clientLabel:c.clientLabel||((v)=>typeof v==='string'?v:v?.client_type||'eurospin'),workspaceMatches:r=>(r?.client_type||'eurospin')===c.activeClient,workspaceStoreMatches:id=>!c.stores?.length||c.stores.some(st=>st.id===id&&(st.client_type||'eurospin')===c.activeClient),syncClientWorkspace(){},activateClient(client){c.activeClient=client;c.extraClientFilter=client;c.storeClientFilter=client;c.scheduleClientFilter=client;}});vm.createContext(c);vm.runInContext(src.slice(start,end),c);
  const a=c.showStoreDetail({id:'a',nome:'A'}),b=c.showStoreDetail({id:'b',nome:'B'});assert.equal(renders.length,2);

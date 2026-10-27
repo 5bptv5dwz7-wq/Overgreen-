@@ -1,10 +1,9 @@
 /* One shared visit per set of cleaning tasks; existing workflow owns assignments and closure. */
-let cleaningRegisterMode=false;
 let cleaningStoreFilter='',cleaningSearch='',cleaningMonth='',cleaningTab='sites';
 function cleaningRows(){return extras.filter(e=>clientType(e)==='eurospin'&&e.categoria_target==='pulizie')}
 function cleaningOpen(storeId='',existingId=''){
  if(!admin())return;
- cleaningRegisterMode=false;$('cleaningEditDialog').querySelector('h2').textContent='Visita pulizie';$('cleaningEditForm').querySelector('[type=submit]').textContent='Salva e assegna';$('cleaningVisitMode').closest('label').hidden=false;
+ $('cleaningEditDialog').querySelector('h2').textContent='Visita pulizie';$('cleaningEditForm').querySelector('[type=submit]').textContent='Salva e assegna';$('cleaningVisitMode').closest('label').hidden=false;
  const dialog=$('cleaningEditDialog');$('cleaningEditForm').reset();
  $('cleaningVisitId').value=crypto.randomUUID();$('cleaningExistingId').value=existingId;
  const existing=extras.find(e=>e.id===existingId);
@@ -40,7 +39,7 @@ async function cleaningSaveVisit(event){
   const result=await sb.rpc('overgreen_cleaning_create_v308',{p_id:$('cleaningVisitId').value,p_store:storeId,p_day:date,p_codes:codes,p_description:$('cleaningVisitNote').value.trim()||null,p_existing:$('cleaningExistingId').value||null});
   if(result.error)throw result.error;
   $('cleaningEditDialog').close();await loadAll();toast(codes.includes('TARGET')?'Target a ore salvato':'Visita pulizie salvata');
-  const row=extras.find(x=>x.id===result.data.id);if(row&&cleaningRegisterMode){cleaningRegisterMode=false;openExtraClosureDialog(row)}else if(row&&!extraIsScheduled(row))openProgramExtraDialog(row);
+  const row=extras.find(x=>x.id===result.data.id);if(row&&!extraIsScheduled(row))openProgramExtraDialog(row);
  });
 }
 function cleaningContractOpen(id=''){

@@ -67,7 +67,7 @@ test('V311 Sedi shares every action and planner control, keeping cleaning data s
  assert.doesNotMatch(c.document.getElementById('storesList').textContent,/25\/10\/2026/);
  run(`storeReminders=[{store_id:'s',service:'verde',active:true,note:'ERBA'},{store_id:'s',service:'pulizie',active:true,note:'PULIZIE'}];renderStores();`);
  assert.match(c.document.getElementById('storesList').textContent,/PULIZIE/);assert.doesNotMatch(c.document.getElementById('storesList').textContent,/ERBA/);
- c.document.querySelector('#storesList [data-done]').click();assert.match(c.document.querySelector('#cleaningEditDialog h2').textContent,/Registra ordinario/);assert.equal(c.document.getElementById('cleaningVisitMode').value,'contract');
+ c.document.querySelector('#storesList [data-done]').click();assert.match(c.document.getElementById('closeExtraTitle').textContent,/Registra ordinario/);assert.equal(run('cleaningOrdinaryDraft._unsavedCleaning'),true);assert.equal(run('extras.length'),0);
  run(`setView('schedule');renderSchedulePicker();`);assert(c.document.querySelector('[data-picker-mode="selected"]'));assert(c.document.querySelector('[data-picker-letter="A"]'));assert(c.document.querySelector('[data-select-results]'));
  run(`switchService('verde');renderStores();`);assert.match(c.document.getElementById('storesList').textContent,/ERBA/);assert.doesNotMatch(c.document.getElementById('storesList').textContent,/PULIZIE/);
 });
@@ -78,4 +78,11 @@ test('V312 ordinary cleaning never renders extra documents, elapsed request days
  run('openExtraClosureEdit(extras[0])');assert(c.document.getElementById('editClosureRequest').closest('fieldset').hidden);assert.equal(c.document.querySelector('#editExtraClosureDialog h2').textContent,'Modifica intervento ordinario');
  run(`extras.push({...extras[0],id:'target',cleaning_codes:['TARGET'],cleaning_done_codes:null});openExtraClosureEdit(extras[1]);`);assert(!c.document.getElementById('editClosureRequest').closest('fieldset').hidden);
  const target=run('extraCard(extras[1])');assert.match(target.textContent,/EXTRA/);assert.match(target.textContent,/File Eurospin/);assert.match(run('dashboardExtraDocumentsMarkup(extras[1])'),/Rapportini necessari/);
+});
+test('V313 registering from Sedi opens closure directly without writes; creation retries reuse ID',async()=>{
+ const harness=fs.readFileSync(__dirname+'/app-startup.cjs','utf8').split("console.log('PASS full application")[0];const c=new Function('require','__dirname',harness+';return c;')(require,__dirname),run=s=>vm.runInContext(s,c);let calls=[];c.capture=x=>calls.push(x);
+ run(`session={user:{id:'admin'}};profile=realProfile={id:'admin',ruolo:'admin',attivo:true};profiles=[profile];stores=[{id:'s',nome:'TEST',client_type:'eurospin',cleaning_enabled:true,cleaning_start:'2026-01-01'}];extras=[];sb.rpc=async(name,p)=>{capture({name,p});return {data:{id:p.p_id,store_id:p.p_store,cleaning_codes:p.p_codes,stato:'ricevuto'}}};openCleaningOrdinary(stores[0]);`);
+ assert.equal(calls.length,0);const id=c.document.getElementById('closeExtraId').value;assert(id);assert.equal(!!c.document.getElementById('cleaningEditDialog').open,false);assert.equal(c.document.querySelectorAll('#cleaningClosureChoices [data-clean-codes]').length,4);
+ run(`$('closeExtraDialog').close();openCleaningOrdinary(stores[0]);`);assert.equal(c.document.getElementById('closeExtraId').value,id);assert.equal(calls.length,0);
+ await run(`materializeCleaningOrdinary(cleaningOrdinaryDraft,'2026-10-27',['A/1','A/2'],'Note')`);assert.equal(calls.length,1);assert.equal(calls[0].p.p_id,id);assert.equal(run(`cleaningClosureRecord('${id}')._unsavedCleaning`),undefined);assert.equal(run('extras.length'),1);
 });

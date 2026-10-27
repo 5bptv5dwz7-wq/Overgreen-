@@ -1,4 +1,4 @@
-const APP_VERSION='V312';
+const APP_VERSION='V313';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -5822,14 +5822,14 @@ $('closeExtraPartialBtn')?.addEventListener('click',saveExtraPartial);
 
 $('closeExtraForm').onsubmit=async e=>{
   e.preventDefault();
-  if(!canWorkOnExtra(extras.find(x=>x.id===$('closeExtraId').value)))return;
+  if(!canWorkOnExtra(extras.find(x=>x.id===$('closeExtraId').value)||(typeof cleaningClosureRecord==='function'?cleaningClosureRecord($('closeExtraId').value):null)))return;
   const btn=e.submitter||$('closeExtraFinalBtn'),oldText=btn.textContent;
   if(extraSaveBusy||extraDraftRestoring)return;extraSaveBusy=true;setExtraSaveBusy(true);
   btn.disabled=true;btn.textContent='Preparazione…';
   const uploadedPaths=[],replacedAttachments=[];
   try{
-    const id=$('closeExtraId').value,profileMode=$('closeExtraForm').dataset.profile||'eurospin',ticket=$('closeExtraTicket').value.trim()||null;
-    const extra=extras.find(x=>x.id===id),closure=extraClosureDetails(extra),nightWork=readExtraNightWork(extra);
+    let id=$('closeExtraId').value;const draftId=id,profileMode=$('closeExtraForm').dataset.profile||'eurospin',ticket=$('closeExtraTicket').value.trim()||null;
+    let extra=extras.find(x=>x.id===id)||(typeof cleaningClosureRecord==='function'?cleaningClosureRecord(id):null);const closure=extraClosureDetails(extra),nightWork=readExtraNightWork(extra);
     if(!confirmExtraDateExecution([extra],closure.day))return;
     const structuredItems=workItemsForExtra(id);
     const cleaningClose=extra.cleaning_codes?.length&&!extra.cleaning_codes.includes('TARGET');
@@ -5857,6 +5857,7 @@ $('closeExtraForm').onsubmit=async e=>{
     if(profileMode==='intesa'&&!photos.length&&!structuredHasPhotos&&!existingGenericPhotos)throw new Error('Per Intesa serve almeno una foto, generica oppure collegata a una lavorazione.');
 
     await saveCurrentExtraDraft();
+    if(extra._unsavedCleaning){extra=await materializeCleaningOrdinary(extra,closure.day,cleaningDone,notes);id=extra.id;$('closeExtraId').value=id;await saveCurrentExtraDraft();}
     // Identificativi e file persistono anche dopo un riavvio del telefono.
     for(const [tipo,originalFile] of reports){
       btn.textContent='Carico documento…';
@@ -5874,10 +5875,11 @@ $('closeExtraForm').onsubmit=async e=>{
     const {error}=await sb.rpc(cleaningClose?'overgreen_cleaning_close_v309':'overgreen_close_extra_v271',{...(cleaningClose?{p_codes:cleaningDone}:{}),p_extra_id:id,p_payload:{stato:'in_attesa',giorno_intervento:closure.day,note_lorenzo:notes,closed_by:profile.id,closed_at:closure.closedAt,...nightWork},p_workers:closure.workers});
     if(error)throw error;
     await cleanupReplacedAttachments(replacedAttachments);
-    await extraDrafts.remove(id);
+    await extraDrafts.remove(id);if(draftId!==id)await extraDrafts.remove(draftId);
+    if(cleaningClose)sessionStorage.removeItem(cleaningOrdinaryDraftKey(extra.store_id));
     void notifyAdminClosure('extra',id,photos.length);
     $('closeExtraDialog').close();$('closeExtraForm').reset();window.ExtraClosureDocuments.reset();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
-    toast(`Extra inviato a Lorenzo${photos.length?' · '+photos.length+' foto':''}`);
+    toast(`${cleaningClose?'Ordinario':'Extra'} inviato a Lorenzo${photos.length?' · '+photos.length+' foto':''}`);
     await refreshAfterSave();
     if(combinedExtraClosureQueue.length)setTimeout(()=>openNextCombinedExtraClosure(),250);
   }catch(err){
@@ -5968,7 +5970,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=312').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=313').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

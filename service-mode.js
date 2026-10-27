@@ -61,13 +61,25 @@ function cleaningStoreView(s){
  const last=cleaningRows().filter(e=>e.store_id===s.id&&e.stato==='completato'&&OvergreenCleaning.codes(e).some(c=>c==='A/1'||c==='A/2')).map(OvergreenCleaning.day).filter(Boolean).sort().pop();
  return {...s,ultimo_passaggio:last||null,intervallo_giorni:7};
 }
+let cleaningOrdinaryDraft=null;
+function cleaningOrdinaryDraftKey(storeId){return 'overgreen-ordinary-cleaning:'+attachmentMediaScope()+':'+storeId}
 function openCleaningOrdinary(s){
+ if(!admin())return;
  const existing=cleaningRows().find(e=>e.store_id===s.id&&OvergreenCleaning.contract(e)&&OvergreenCleaning.day(e)===today()&&!['completato','annullato','in_attesa'].includes(e.stato));
- if(existing)return openExtraClosureDialog(existing);
- cleaningOpen(s.id);cleaningRegisterMode=true;
- $('cleaningEditDialog').querySelector('h2').textContent='Registra ordinario · '+s.nome;
- $('cleaningEditForm').querySelector('[type=submit]').textContent='Continua alla chiusura';
- $('cleaningVisitMode').closest('label').hidden=true;
+ if(existing){cleaningOrdinaryDraft=null;return openExtraClosureDialog(existing)}
+ const key=cleaningOrdinaryDraftKey(s.id);let id=sessionStorage.getItem(key);if(!id){id=crypto.randomUUID();sessionStorage.setItem(key,id)}
+ cleaningOrdinaryDraft={id,store_id:s.id,client_type:'eurospin',categoria_target:'pulizie',closure_profile:'eurospin',stato:'ricevuto',titolo:'Ordinario · Pulizie',cleaning_codes:['A/1','A/2'],cleaning_period:today(),giorno_intervento:today(),_unsavedCleaning:true};
+ openExtraClosureDialog(cleaningOrdinaryDraft);
+}
+function cleaningClosureRecord(id){return extras.find(e=>e.id===id)||(cleaningOrdinaryDraft?.id===id?cleaningOrdinaryDraft:null)}
+async function materializeCleaningOrdinary(draft,day,codes,notes){
+ const result=await sb.rpc('overgreen_cleaning_create_v308',{p_id:draft.id,p_store:draft.store_id,p_day:day,p_codes:codes,p_description:notes,p_existing:null});
+ if(result.error)throw result.error;
+ const row=result.data;if(!row?.id)throw new Error('Registrazione non confermata. Riprova.');
+ const index=extras.findIndex(e=>e.id===row.id);if(index<0)extras.push(row);else extras[index]=row;
+ // Retain the confirmed ID if an upload or the closure fails: retries reuse this visit.
+ sessionStorage.setItem(cleaningOrdinaryDraftKey(draft.store_id),row.id);
+ cleaningOrdinaryDraft=null;return row;
 }
 function showCleaningStoreHistory(s){
  currentHistoryStoreId=s.id;$('historyTitle').textContent=s.nome;

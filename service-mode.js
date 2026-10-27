@@ -40,10 +40,11 @@ function renderCleaningDashboardSummary(){
 }
 function renderCleaningClosure(extra){
  const box=$('cleaningClosureChoices');if(!box)return;const isCleaning=OvergreenCleaning.contract(extra);box.hidden=!isCleaning;
+ $('closeExtraForm').querySelectorAll('.continue-help').forEach(el=>el.hidden=isCleaning);
  if(!isCleaning){box.replaceChildren();return;}
  const date=extra.giorno_intervento||today(),slot=OvergreenCleaning.slots(cleaningRows(),extra.store_id,date.slice(0,4));const codes=extra.cleaning_done_codes||extra.cleaning_codes;
  box.innerHTML=`<legend>Lavorazioni eseguite</legend><p>Seleziona ciò che hai effettivamente fatto in questa visita.</p>${cleaningCodeChoices(codes,'close',!extra.cleaning_slot&&!slot.free)}<p class="muted">D/2: ${slot.free} disponibilità libere${extra.cleaning_slot?' · una semestrale prenotata per questa visita':''}. Le voci non selezionate restano da fare.</p>`;
- $('closeExtraTitle').textContent='Chiudi pulizia';$('closeExtraLinkedInfo').innerHTML='<strong>Visita pulizie</strong><small>Una sola visita, anche con più lavorazioni. Lo storico del verde resta separato.</small>';$('closeExtraNightWork').classList.add('hidden');$('closeStructuredWorkWrap')?.classList.add('hidden');$('closeExtraPartialBtn').classList.add('hidden');
+ $('closeExtraCancelBtn').classList.add('hidden');$('closeExtraPartialStatus')?.classList.add('hidden');$('closeExtraTitle').textContent='Registra ordinario · Pulizie';$('closeExtraLinkedInfo').innerHTML='<strong>Visita pulizie</strong><small>Una sola visita, anche con più lavorazioni. Lo storico del verde resta separato.</small>';$('closeExtraNightWork').classList.add('hidden');$('closeStructuredWorkWrap')?.classList.add('hidden');$('closeExtraPartialBtn').classList.add('hidden');
 }
 document.querySelectorAll('[data-service]').forEach(b=>b.onclick=()=>switchService(b.dataset.service));
 
@@ -74,4 +75,23 @@ function showCleaningStoreHistory(s){
  const root=$('historyList');root.innerHTML=`<div class="history-summary"><div><strong>${rows.length}</strong><span>interventi</span></div><div><strong>${rows.filter(e=>e.stato==='completato').length}</strong><span>convalidati</span></div><div><strong>${attachments.filter(a=>a.tipo==='foto_generica'&&rows.some(e=>e.id===a.extra_id)).length}</strong><span>foto</span></div></div><div class="history-subtitle">Cronologia interventi</div>`;
  rows.forEach(e=>root.appendChild(extraCard(e)));if(!rows.length)root.insertAdjacentHTML('beforeend','<div class="history-empty"><strong>Nessun intervento</strong><span>Gli interventi registrati compariranno qui.</span></div>');
  if(!$('historyDialog').open)openDialog('historyDialog');
+}
+
+function cleaningOrdinaryCard(e){
+ const st=stores.find(s=>s.id===e.store_id),c=document.createElement('article');c.className='card history-item cleaning-ordinary-card';c.dataset.extraCardId=e.id;
+ const done=e.stato==='completato',pending=e.stato==='in_attesa',cancelled=e.stato==='annullato';
+ const state=done?'Convalidato':pending?'In attesa di convalida':cancelled?'Annullato':'Da eseguire';
+ const codes=OvergreenCleaning.codes(e),labels=[];
+ if(codes.some(code=>code==='A/1'||code==='A/2'))labels.push('Settimanale');
+ if(codes.includes('C/1'))labels.push('Mensile · vetri dei servizi');
+ if(codes.includes('C/2'))labels.push('Mensile · pulizia esterna');
+ if(codes.includes('D/2'))labels.push('Semestrale');
+ const pics=attachments.filter(a=>a.extra_id===e.id&&a.tipo==='foto_generica');
+ const names=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean);
+ c.innerHTML=`<div class="history-head"><div><strong>${esc(fmt(OvergreenCleaning.day(e)))}</strong><h3>Ordinario · Pulizie</h3><small>${esc(st?.nome||e.nome_esterno||'')}</small></div><span class="badge-state">${state}</span></div><p><strong>${done||pending?'Lavorazioni eseguite':'Lavorazioni previste'}</strong><br>${labels.map(esc).join(' · ')}</p>${names.length?`<p class="muted">Operatori: ${names.map(esc).join(' · ')}</p>`:''}${e.closed_at?`<p class="muted">Registrato: ${esc(closureText(e))}</p>`:''}<div class="history-note">${esc(e.note_lorenzo||e.descrizione||'Nessuna nota')}</div><div class="pending-photo-head"><strong>Foto del lavoro</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-extra-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div><div class="actions"><button class="secondary" data-map>Maps</button>${!done&&!pending&&!cancelled&&canWorkOnExtra(e)?'<button data-register>Registra ordinario</button>':''}${admin()&&pending?'<button data-approve>Convalida</button>':''}${admin()&&done?'<button class="secondary" data-edit>Modifica intervento</button>':''}</div>`;
+ c.querySelector('[data-map]').onclick=()=>openExtraMaps(e,st);
+ c.querySelector('[data-register]')?.addEventListener('click',()=>openExtraClosureDialog(e));
+ c.querySelector('[data-approve]')?.addEventListener('click',()=>approveExtra(e));
+ c.querySelector('[data-edit]')?.addEventListener('click',()=>openExtraClosureEdit(e));
+ if(pics.length)hydrateExtraPhotos(c,pics);return c;
 }

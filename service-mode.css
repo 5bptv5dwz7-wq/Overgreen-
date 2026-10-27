@@ -43,3 +43,5 @@ body.service-cleaning .cleaning-picker-site small{font-size:12px;font-weight:400
 body.service-cleaning #app main .secondary,body.service-cleaning #scheduleSelectedCount,body.service-cleaning .fleet-badge{background:#eef5ff;color:#174d84;border-color:#d4e2f2}
 body.service-cleaning #app main #scheduleView .schedule-toolbar{background:#eef5ff}
 body.service-cleaning #scheduleStores .cleaning-picker-site>label,body.service-cleaning #addScheduleStores .cleaning-picker-site>label{border-radius:0;background:transparent;color:#213b55;padding:3px!important}
+.cleaning-ordinary-card{border-left:4px solid #1568c5}.cleaning-ordinary-card .history-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.cleaning-ordinary-card h3{font-size:16px;margin:5px 0}.cleaning-ordinary-card .badge-state{color:#174d84;background:#eef5ff}.cleaning-ordinary-card .history-note{white-space:pre-wrap;overflow-wrap:anywhere}
+#editExtraClosureForm fieldset[hidden],#closeExtraForm .continue-help[hidden]{display:none!important}

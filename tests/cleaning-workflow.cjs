@@ -54,7 +54,7 @@ test('V309 UI: service switch, only entrusted sites, ordinary payload conversion
  const checkbox=c.document.querySelector('#scheduleStores [data-clean-store]');checkbox.checked=true;checkbox.onchange({target:checkbox});assert.equal(options.hidden,false);
  run(`setSchedulePickerValue('s',true);cleaningPlanDrafts.set('s',['A/1','A/2','D/2']);`);
  await run(`adminOperation('schedule_create',{members:['admin'],stores:['s'],extras:[],day:'2026-10-27'})`);assert.equal(captured.name,'overgreen_cleaning_plan_v309');assert.equal(captured.p.p_payload.cleaning_stores[0].id,'s');
- run(`renderCleaningClosure({id:'visit',store_id:'s',cleaning_codes:['A/1','A/2'],stato:'programmato'});`);assert.equal(c.document.querySelectorAll('#cleaningClosureChoices [data-clean-codes]').length,4);assert.match(c.document.getElementById('closeExtraTitle').textContent,/pulizia/);
+ run(`renderCleaningClosure({id:'visit',store_id:'s',cleaning_codes:['A/1','A/2'],stato:'programmato'});`);assert.equal(c.document.querySelectorAll('#cleaningClosureChoices [data-clean-codes]').length,4);assert.match(c.document.getElementById('closeExtraTitle').textContent,/Registra ordinario · Pulizie/);
  run(`switchService('verde');setView('schedule');`);assert(!c.document.body.classList.contains('service-cleaning'));assert.match(c.document.getElementById('scheduleStores').textContent,/SOLO VERDE/);
 });
 test('V311 Sedi shares every action and planner control, keeping cleaning data separate',()=>{
@@ -70,4 +70,12 @@ test('V311 Sedi shares every action and planner control, keeping cleaning data s
  c.document.querySelector('#storesList [data-done]').click();assert.match(c.document.querySelector('#cleaningEditDialog h2').textContent,/Registra ordinario/);assert.equal(c.document.getElementById('cleaningVisitMode').value,'contract');
  run(`setView('schedule');renderSchedulePicker();`);assert(c.document.querySelector('[data-picker-mode="selected"]'));assert(c.document.querySelector('[data-picker-letter="A"]'));assert(c.document.querySelector('[data-select-results]'));
  run(`switchService('verde');renderStores();`);assert.match(c.document.getElementById('storesList').textContent,/ERBA/);assert.doesNotMatch(c.document.getElementById('storesList').textContent,/PULIZIE/);
+});
+test('V312 ordinary cleaning never renders extra documents, elapsed request days or closure packages',()=>{
+ const harness=fs.readFileSync(__dirname+'/app-startup.cjs','utf8').split("console.log('PASS full application")[0];const c=new Function('require','__dirname',harness+';return c;')(require,__dirname),run=s=>vm.runInContext(s,c);
+ run(`session={user:{id:'admin'}};profile=realProfile={id:'admin',ruolo:'admin',attivo:true};profiles=[profile];stores=[{id:'s',nome:'ACQUI TERME',client_type:'eurospin'}];extras=[{id:'clean',store_id:'s',client_type:'eurospin',categoria_target:'pulizie',stato:'completato',giorno_intervento:'2026-10-26',cleaning_codes:['A/1','A/2','C/1','C/2'],cleaning_done_codes:['A/1','A/2'],titolo:'Pulizie'}];attachments=[];`);
+ const card=run('extraCard(extras[0])');assert.match(card.textContent,/Ordinario · Pulizie/);assert.match(card.textContent,/Settimanale/);assert.doesNotMatch(card.textContent,/EXTRA|Eseguito in|File Eurospin|File Overgreen|Genera chiusura|Mensile/);assert(card.querySelector('[data-edit]'));assert.equal(run('dashboardExtraDocumentsMarkup(extras[0])'),'');
+ run('openExtraClosureEdit(extras[0])');assert(c.document.getElementById('editClosureRequest').closest('fieldset').hidden);assert.equal(c.document.querySelector('#editExtraClosureDialog h2').textContent,'Modifica intervento ordinario');
+ run(`extras.push({...extras[0],id:'target',cleaning_codes:['TARGET'],cleaning_done_codes:null});openExtraClosureEdit(extras[1]);`);assert(!c.document.getElementById('editClosureRequest').closest('fieldset').hidden);
+ const target=run('extraCard(extras[1])');assert.match(target.textContent,/EXTRA/);assert.match(target.textContent,/File Eurospin/);assert.match(run('dashboardExtraDocumentsMarkup(extras[1])'),/Rapportini necessari/);
 });

@@ -1,4 +1,4 @@
-const APP_VERSION='V311';
+const APP_VERSION='V312';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -334,6 +334,7 @@ function isIntesaOrdinaryTicket(row){return closureProfile(row)==='intesa_ordina
 function isEurospinOrdinaryTarget(row){return closureProfile(row)==='eurospin_ordinario'}
 function isOrdinaryIncludedExtra(row){return isIntesaOrdinaryTicket(row)||isEurospinOrdinaryTarget(row)}
 function dashboardExtraDocumentsMarkup(extra){
+  if(extra.cleaning_codes?.length&&!extra.cleaning_codes.includes('TARGET'))return '';
   if(clientType(extra)!=='eurospin')return '';
   const included=isEurospinOrdinaryTarget(extra);
   return `<div class="dashboard-extra-documents ${included?'documents-not-required':'documents-required'}"><b>${included?'Incluso nell’ordinario':'Rapportini necessari'}</b><small>${included?'Rapportino Eurospin: stampa non necessaria':'Rapportino Eurospin: da stampare'}</small><small>${included?'Rapportino Overgreen: produzione non necessaria':'Rapportino Overgreen: da produrre'}</small></div>`;
@@ -1300,7 +1301,7 @@ function renderDashboard(){if(typeof renderCleaningDashboardSummary==='function'
           const requestPdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');
           const canClose=!done&&(!isIntesaOrdinaryTicket(e)||e._dayItem)&&['programmato','ricevuto','da_integrare'].includes(e.stato)&&canWorkOnExtra(e);
           const hasMap=!!extraMapsDestination(e,st);
-          c.innerHTML=`<div class="job-main"><span class="job-kind">${e.cleaning_codes?.length?'PULIZIA':'EXTRA'}</span>${clientBadge(e)}<span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span><strong>${esc(st?.nome||e.nome_esterno||'Extra')}</strong>${(st?.indirizzo||st?.citta||e.indirizzo_esterno)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo||e.indirizzo_esterno,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${esc(e.titolo)} · ${done?'Completato':urgent?'Urgente':'Da eseguire'}</small>${dashboardExtraDocumentsMarkup(e)}${deadlineLabel(e)}${extraNotes.length?`<div class="dashboard-job-notes"><strong>${done?'Descrizione / note':'Descrizione'}</strong>${extraNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}</div><div class="actions">${hasMap?'<button class="secondary" data-map-extra>Maps</button>':''}${requestPdf?'<button class="secondary" data-pdf-extra>Apri PDF</button>':''}${canClose?'<button data-close-extra-dashboard>✓ Eseguito</button>':''}<button class="secondary" data-open-extra>Apri extra</button></div>`;
+          c.innerHTML=`<div class="job-main"><span class="job-kind">${e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET')?'ORDINARIO · PULIZIE':'EXTRA'}</span>${clientBadge(e)}<span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span><strong>${esc(st?.nome||e.nome_esterno||'Extra')}</strong>${(st?.indirizzo||st?.citta||e.indirizzo_esterno)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo||e.indirizzo_esterno,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${esc(e.titolo)} · ${done?'Completato':urgent?'Urgente':'Da eseguire'}</small>${dashboardExtraDocumentsMarkup(e)}${deadlineLabel(e)}${extraNotes.length?`<div class="dashboard-job-notes"><strong>${done?'Descrizione / note':'Descrizione'}</strong>${extraNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}</div><div class="actions">${hasMap?'<button class="secondary" data-map-extra>Maps</button>':''}${requestPdf?'<button class="secondary" data-pdf-extra>Apri PDF</button>':''}${canClose?'<button data-close-extra-dashboard>✓ Eseguito</button>':''}<button class="secondary" data-open-extra>${e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET')?'Apri intervento':'Apri extra'}</button></div>`;
           c.dataset.routeAddress=routeAddressForExtra(e,st);if(st)c.dataset.weatherStore=st.id;
           c.querySelector('[data-map-extra]')?.addEventListener('click',()=>openExtraMaps(e,st));
           c.querySelector('[data-pdf-extra]')?.addEventListener('click',()=>openAttachment(requestPdf));
@@ -1358,7 +1359,7 @@ function renderGlobalSearch(){
   const foundProfiles=profiles.filter(p=>p.nome.toLowerCase().includes(q)).slice(0,4);
   const foundContacts=workContacts.filter(workspaceSearchMatches).filter(c=>[c.nome,c.azienda,c.ruolo,c.competenze].filter(Boolean).join(' ').toLowerCase().includes(q)).slice(0,4);
   for(const st of foundStores){const c=document.createElement('article');c.className='card global-result';c.innerHTML=`<strong>🏪 ${esc(st.nome)}</strong><small class="muted">Punto vendita · ${esc(st.citta||st.indirizzo||'')}</small>`;c.onclick=()=>showStoreDetail(st);root.appendChild(c)}
-  for(const e of foundExtras){const c=document.createElement('article');c.className='card global-result';c.innerHTML=`<strong>🧾 ${esc(e.titolo)}</strong><small class="muted">Extra · richiesta ${fmt(extraRequestDate(e))} · ${esc(elapsedDaysLabel(e))} · ${e.giorno_intervento?`esecuzione ${fmt(e.giorno_intervento)}`:'da programmare'}</small>`;c.onclick=()=>openExtraById(e.id);root.appendChild(c)}
+  for(const e of foundExtras){const c=document.createElement('article');c.className='card global-result';c.innerHTML=`<strong>🧾 ${esc(e.titolo)}</strong><small class="muted">${e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET')?'Ordinario · Pulizie':`Extra · richiesta ${fmt(extraRequestDate(e))} · ${esc(elapsedDaysLabel(e))}`} · ${e.giorno_intervento?`esecuzione ${fmt(e.giorno_intervento)}`:'da programmare'}</small>`;c.onclick=()=>openExtraById(e.id);root.appendChild(c)}
   for(const ct of foundContacts){const c=document.createElement('article');c.className='card global-result';c.innerHTML=`<strong>📇 ${esc(ct.nome)}</strong><small class="muted">${esc([ct.azienda,ct.ruolo].filter(Boolean).join(' · ')||'Contatto di lavoro')}</small>`;c.onclick=()=>{activateClient(ct.client_type||'privato');setView('contacts');if($('contactsSearch')){$('contactsSearch').value=ct.nome;renderWorkContacts()}};root.appendChild(c)}
   for(const p of foundProfiles){const c=document.createElement('article');c.className='card global-result';c.innerHTML=`<strong>👤 ${esc(p.nome)}</strong><small class="muted">${p.ruolo==='admin'?'Amministratore':'Dipendente'}</small>`;c.onclick=()=>{scheduleWorkerFilter=p.id;$('scheduleWorkerFilter').value=p.id;setView('schedule')};root.appendChild(c)}
   if(!root.children.length)root.innerHTML='<p class="muted">Nessun risultato.</p>';
@@ -3599,7 +3600,7 @@ function renderSchedules(){
       r.querySelector('[data-done]')?.addEventListener('click',()=>openDone(st,item.id));r.querySelector('[data-delete-scheduled]')?.addEventListener('click',()=>deleteScheduleItem(item,st));c.appendChild(r)
       }else if(job.kind==='extra'){
         const e=job.extra,r=extraCard(e);r.classList.add('schedule-extra-card','schedule-item');if(e._dayItem)r.dataset.scheduleItemId=e._dayItem.id;else r.dataset.scheduleExtraId=e.id;
-        const badge=document.createElement('div');badge.className='schedule-next-visit';badge.innerHTML=`<strong>🔧 Extra standalone della giornata · posizione ${displayIndex+1}</strong>`;
+        const badge=document.createElement('div');badge.className='schedule-next-visit';badge.innerHTML=`<strong>${e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET')?'Ordinario · Pulizie':'🔧 Extra standalone della giornata'} · posizione ${displayIndex+1}</strong>`;
         r.prepend(badge);
         if(admin()){
           const actions=r.querySelector('.actions')||r;
@@ -4419,6 +4420,7 @@ function downloadEurospinPackage(cat){
 }
 
 function extraCard(e){
+  if(e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET')&&typeof cleaningOrdinaryCard==='function')return cleaningOrdinaryCard(e);
   const st=stores.find(s=>s.id===e.store_id),pdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta'),reportEurospin=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),reportOvergreen=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen'),pics=attachments.filter(a=>a.extra_id===e.id&&a.tipo==='foto_generica');const structuredItems=workItemsForExtra(e.id),structured=structuredItems.length>0;
   const showClosure=['in_attesa','completato'].includes(e.stato),partialOpen=e.stato==='da_integrare',showProgress=showClosure||partialOpen,c=document.createElement('article');
   const assignedNames=extraWorkers.filter(w=>w.extra_id===e.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean);
@@ -4472,6 +4474,9 @@ async function renderExtraClosurePhotoManager(extraId){
   }
 }
 function openExtraClosureEdit(e){
+  const cleaning=!!(e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET'));
+  $('editExtraClosureDialog').querySelector('h2').textContent=cleaning?'Modifica intervento ordinario':'Modifica chiusura extra';
+  $('editClosureRequest').closest('fieldset').hidden=cleaning;
   if(!admin()||!['completato','annullato'].includes(e.stato))return;
   $('editExtraClosureId').value=e.id;$('editExtraClosureClosedAt').value=toDateTimeLocal(e.closed_at);$('editExtraExecutionDate').value=e.giorno_intervento||(e.closed_at?new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(e.closed_at)):'');$('editExtraCorrectionReason').value='';$('editExtraClosureNotes').value=e.note_lorenzo||'';
   $('editExtraClosurePhotos').value='';$('editClosureRequest').value='';$('editClosureOvergreen').value='';$('editClosureEurospin').value='';
@@ -4510,6 +4515,7 @@ function focusExtraCard(extraId,attempt=0){
 
 function openExtraById(extraId){
   const e=extras.find(x=>x.id===extraId);if(!e)return;
+  if(e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET'))return showCleaningStoreHistory(stores.find(s=>s.id===e.store_id)||{id:e.store_id,nome:e.nome_esterno||'Pulizie'});
   extraCompletedMonthFilter='';
   extraHideIncludedCompleted=false;
   activateClient(clientType(e));
@@ -4697,7 +4703,7 @@ async function openAttachment(a){
     alert('Impossibile aprire il file: '+(err?.message||String(err)));return false;
   }
 }
-async function approveExtra(e){if(!admin())return;const {error}=await sb.from('extras').update({stato:'completato',convalidato_da:profile.id,convalidato_il:new Date().toISOString()}).eq('id',e.id);if(error)return alert(error.message);toast('Extra convalidato');await refreshAfterSave(['extras','extra_workers','attachments'])}
+async function approveExtra(e){if(!admin())return;const {error}=await sb.from('extras').update({stato:'completato',convalidato_da:profile.id,convalidato_il:new Date().toISOString()}).eq('id',e.id);if(error)return alert(error.message);toast(e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET')?'Ordinario convalidato':'Extra convalidato');await refreshAfterSave(['extras','extra_workers','attachments','store_reminders'])}
 async function seedStores(){if(!admin())return;if(stores.length&&!confirm(`Sono già presenti ${stores.length} punti vendita. Continuare?`))return;const rows=SEED_STORES.filter(x=>!stores.some(s=>s.nome===x.name)).map(x=>({nome:x.name,ultimo_passaggio:x.lastDone,intervallo_giorni:15,attivo:true}));if(!rows.length)return toast('Nessun punto vendita da importare');const {error}=await sb.from('stores').insert(rows);if(error)return alert(error.message);toast(`${rows.length} punti vendita importati`);await loadAll()}
 
 $('rememberAccess').checked=localStorage.getItem(REMEMBER_ACCESS_KEY)!=='0';
@@ -5962,7 +5968,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=311').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=312').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

@@ -1,5 +1,5 @@
 /* One shared visit per set of cleaning tasks; existing workflow owns assignments and closure. */
-let cleaningStoreFilter='',cleaningSearch='',cleaningMonth='',cleaningTab='due';
+let cleaningStoreFilter='',cleaningSearch='',cleaningMonth='',cleaningTab='sites';
 function cleaningRows(){return extras.filter(e=>clientType(e)==='eurospin'&&e.categoria_target==='pulizie')}
 function cleaningOpen(storeId='',existingId=''){
  if(!admin())return;
@@ -60,6 +60,7 @@ function renderCleaning(){
  $('cleaningAdminActions').hidden=!admin();
  document.querySelectorAll('[data-cleaning-tab]').forEach(b=>b.classList.toggle('active',b.dataset.cleaningTab===cleaningTab));
  $('cleaningMonth').hidden=cleaningTab!=='history';
+ if(cleaningTab==='sites'&&admin()&&typeof renderCleaningAffidamenti==='function'){renderCleaningAffidamenti();return;}
  const model=OvergreenCleaning,rows=cleaningRows(),q=cleaningSearch.toLocaleLowerCase('it');
  const sites=stores.filter(s=>clientType(s)==='eurospin'&&(!cleaningStoreFilter||s.id===cleaningStoreFilter)&&(!q||[s.nome,s.citta,s.indirizzo].join(' ').toLocaleLowerCase('it').includes(q)));
  root.replaceChildren();
@@ -68,12 +69,12 @@ function renderCleaning(){
   for(const s of sites.filter(s=>cleaningTab==='sites'||model.active(s,today()))){
    const due=model.due(s,rows,today()),slot=model.slots(rows,s.id,today().slice(0,4)),card=document.createElement('article');card.className='card';
    card.innerHTML=`<h3>${esc(s.nome)}</h3><p>${s.cleaning_enabled?'Ordinarie affidate dal '+fmt(s.cleaning_start)+(s.cleaning_end?' al '+fmt(s.cleaning_end):''):'Solo interventi a richiesta'}</p><p>D/2 ${today().slice(0,4)} · ${slot.used}/2 eseguite · ${slot.reserved} prenotate · ${slot.free} disponibili</p><div class="cleaning-due">${due.map(x=>`<p><strong>${x.code}</strong> ${esc(model.catalog[x.code].label)} <span>${x.pending?'Già in lavorazione / programmata':x.due?'Da fare · '+fmt(x.next):'Prossima: '+fmt(x.next)}</span></p>`).join('')}</div><div class="actions"><button data-new>Nuova visita</button><button class="secondary" data-contract>Affidamento</button><button class="secondary" data-history>Storico</button></div>`;
-   card.querySelector('[data-new]').onclick=()=>cleaningOpen(s.id);card.querySelector('[data-contract]').onclick=()=>cleaningContractOpen(s.id);card.querySelector('[data-history]').onclick=()=>{cleaningStoreFilter=s.id;cleaningTab='history';renderCleaning()};root.appendChild(card);
+   card.querySelector('[data-new]').textContent='Programma pulizia';card.querySelector('[data-new]').onclick=()=>{switchService('pulizie');setView('schedule');schedulePickerSelected.add(s.id);renderSchedulePicker()};card.querySelector('[data-contract]').onclick=()=>cleaningContractOpen(s.id);card.querySelector('[data-history]').onclick=()=>{cleaningStoreFilter=s.id;cleaningTab='history';renderCleaning()};root.appendChild(card);
   }
  }else{
   const ids=new Set(sites.map(s=>s.id));
   const shown=rows.filter(e=>ids.has(e.store_id)||(!e.store_id&&!cleaningStoreFilter&&!q)).filter(e=>cleaningTab==='history'?['completato','annullato'].includes(e.stato)&&(!cleaningMonth||String(model.day(e)||e.closed_at||'').startsWith(cleaningMonth)):!['completato','annullato'].includes(e.stato)).sort((a,b)=>String(model.day(b)||'').localeCompare(String(model.day(a)||'')));
-  for(const e of shown){const card=extraCard(e);const label=document.createElement('p');label.className='cleaning-summary';label.textContent=e.cleaning_codes?.join(' + ')||'Target · da classificare se pertinente';card.prepend(label);
+  for(const e of shown){const card=extraCard(e);const label=document.createElement('p');label.className='cleaning-summary';label.textContent=(e.cleaning_done_codes||e.cleaning_codes)?.join(' + ')||'Target · da classificare se pertinente';card.prepend(label);
    if(admin()&&!e.cleaning_codes&&!['completato','annullato','in_attesa'].includes(e.stato)&&e.store_id){const b=document.createElement('button');b.className='secondary';b.textContent='Classifica D/2 o Target';b.onclick=()=>cleaningOpen(e.store_id,e.id);card.querySelector('.actions').appendChild(b)}
    root.appendChild(card);
   }
@@ -86,17 +87,17 @@ async function exportCleaning(){
   await loadAll();await ensureLibraries('ExcelJS');const month=$('cleaningMonth').value||today().slice(0,7),book=new ExcelJS.Workbook(),model=OvergreenCleaning;
   const visits=cleaningRows().filter(e=>model.contract(e)&&e.stato==='completato'&&String(model.day(e)||'').startsWith(month));
   const ws=book.addWorksheet('Ordinarie e semestrali');ws.columns=[{header:'PV',width:32},{header:'Data',width:16},{header:'Lavorazioni',width:28},{header:'Semestrale',width:16},{header:'Note',width:45}];
-  for(const e of visits)ws.addRow([stores.find(s=>s.id===e.store_id)?.nome,model.day(e),e.cleaning_codes.join(' + '),e.cleaning_slot?'D/2 '+e.cleaning_slot+'/2':'Canone ordinario',e.note_lorenzo||'']);
+  for(const e of visits)ws.addRow([stores.find(s=>s.id===e.store_id)?.nome,model.day(e),model.codes(e).join(' + '),e.cleaning_slot?'D/2 '+e.cleaning_slot+'/2':'Canone ordinario',e.note_lorenzo||'']);
   const totals=book.addWorksheet('Riepilogo contrattuale');totals.columns=[{header:'PV',width:32},{header:'Mese',width:14},{header:'Visite ordinarie convalidate',width:25},{header:'D/2 convalidate',width:20},{header:'Canone mese da compilare',width:26},{header:'Prezzo D/2 da compilare',width:24},{header:'Totale contrattuale',width:22}];
   const ids=[...new Set(visits.map(e=>e.store_id))];
-  for(const id of ids){const list=visits.filter(e=>e.store_id===id),r=totals.addRow([stores.find(s=>s.id===id)?.nome,month,list.filter(e=>e.cleaning_codes.some(c=>c!=='D/2')).length,list.filter(e=>e.cleaning_codes.includes('D/2')).length,null,null,null]);r.getCell(7).value={formula:`IF(AND(ISNUMBER(E${r.number}),OR(D${r.number}=0,ISNUMBER(F${r.number}))),E${r.number}+D${r.number}*F${r.number},"")`}}
+  for(const id of ids){const list=visits.filter(e=>e.store_id===id),r=totals.addRow([stores.find(s=>s.id===id)?.nome,month,list.filter(e=>model.codes(e).some(c=>c!=='D/2')).length,list.filter(e=>model.codes(e).includes('D/2')).length,null,null,null]);r.getCell(7).value={formula:`IF(AND(ISNUMBER(E${r.number}),OR(D${r.number}=0,ISNUMBER(F${r.number}))),E${r.number}+D${r.number}*F${r.number},"")`}}
   const targetRows=OvergreenEconomics.filterRows(cleaningRows(),extraEconomicsRecords,attachments,{month,category:'pulizie',mode:'',state:''});
   if(targetRows.length){addEconomicsWorksheet(book,targetRows,month);book.worksheets.at(-1).name='Target a ore'}
   for(const sheet of book.worksheets){sheet.getRow(1).font={bold:true};sheet.views=[{state:'frozen',ySplit:1}];}
   const blob=new Blob([await book.xlsx.writeBuffer()],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Overgreen-Pulizie-${month}.xlsx`;a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
  }catch(e){alert('Esportazione non riuscita: '+e.message)}
 }
-$('cleaningNew').onclick=()=>cleaningOpen();$('cleaningContractNew').onclick=()=>cleaningContractOpen();$('cleaningExport').onclick=exportCleaning;
+$('cleaningNew').onclick=()=>{switchService('pulizie');setView('schedule')};$('cleaningContractNew').onclick=()=>cleaningContractOpen();$('cleaningExport').onclick=exportCleaning;
 $('cleaningEditForm').onsubmit=cleaningSaveVisit;$('cleaningContractForm').onsubmit=cleaningContractSave;$('cleaningContractStore').onchange=cleaningContractFill;
 for(const id of ['cleaningVisitStore','cleaningVisitDay','cleaningVisitMode','cleaningRequestMatch'])$(id).onchange=cleaningVisitOptions;
 $('cleaningSearch').oninput=e=>{cleaningSearch=e.target.value;renderCleaning()};$('cleaningMonth').value=today().slice(0,7);$('cleaningMonth').onchange=e=>{cleaningMonth=e.target.value;renderCleaning()};

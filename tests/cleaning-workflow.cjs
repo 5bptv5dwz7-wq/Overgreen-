@@ -1,0 +1,57 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const {PGlite}=require('@electric-sql/pglite');const admin='00000000-0000-0000-0000-000000000001',worker='00000000-0000-0000-0000-000000000002',site='10000000-0000-0000-0000-000000000001';
+test('V309: atomic planning, actual work, release/reclaim semester slot, RLS and retry',async()=>{
+ const db=new PGlite();try{
+ await db.exec(`create role authenticated;create role anon;create schema auth;
+ create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('app.actor',true),'')::uuid$$;
+ create function is_admin() returns boolean language sql stable as $$select auth.uid()='${admin}'::uuid$$;
+ create function is_active_user() returns boolean language sql stable as $$select auth.uid() in ('${admin}'::uuid,'${worker}'::uuid)$$;
+ create type stato_extra as enum ('ricevuto','programmato','da_integrare','in_attesa','completato','annullato');
+ create table profiles(id uuid primary key,attivo boolean);insert into profiles values('${admin}',true),('${worker}',true);
+ create table stores(id uuid primary key,client_type text,attivo boolean);
+ create table extras(id uuid primary key,store_id uuid references stores,titolo text,descrizione text,client_type text,categoria_target text,closure_profile text,data_richiesta date,stato stato_extra,creato_da uuid,created_at timestamptz default now(),giorno_intervento date,con_ordinario boolean default false,note_lorenzo text,closed_by uuid,closed_at timestamptz,night_hours numeric default 0);
+ create table extra_work_items(id uuid default gen_random_uuid(),extra_id uuid references extras,titolo text,posizione integer,stato text,nota text);
+ create table extra_labor_hours(extra_id uuid);
+ create table extra_workers(extra_id uuid references extras,profile_id uuid,primary key(extra_id,profile_id));
+ create table overgreen_requests_v198(request_id uuid primary key,actor_id uuid,operation text,payload jsonb,response jsonb);
+ create function can_access_extra(eid uuid) returns boolean language sql stable as $$select is_admin() or exists(select 1 from extra_workers where extra_id=eid and profile_id=auth.uid())$$;
+ alter table extras enable row level security;create policy r on extras for select to authenticated using(true);create policy i on extras for insert to authenticated with check(is_admin());create policy u on extras for update to authenticated using(can_access_extra(id)) with check(can_access_extra(id));
+ alter table stores enable row level security;create policy r on stores for select to authenticated using(true);create policy u on stores for update to authenticated using(is_admin()) with check(is_admin());
+ create function overgreen_admin_v198(rid uuid,operation text,p jsonb) returns jsonb language plpgsql as $$begin if jsonb_array_length(p->'members')=0 then raise exception 'Squadra obbligatoria'; end if;return p;end$$;
+ create function overgreen_plan_v273(rid uuid,operation text,p jsonb) returns jsonb language sql as $$select p$$;
+ grant usage on schema auth,public to authenticated;grant all on all tables in schema public to authenticated;
+ insert into stores values('${site}','eurospin',true);
+ `);
+ await db.exec(fs.readFileSync(__dirname+'/../docs/v308-pulizie.sql','utf8'));
+ const close=fs.readFileSync(__dirname+'/../supabase/migrations/20261018191703_reliability_v271.sql','utf8');await db.exec(close.slice(close.indexOf('create or replace function public.overgreen_close_extra_v271')));
+ await db.exec(fs.readFileSync(__dirname+'/../docs/v309-cleaning-workflow.sql','utf8'));
+ await db.exec(`set role authenticated;select set_config('app.actor','${admin}',false);update stores set cleaning_enabled=true,cleaning_start='2026-01-01'`);
+ let n=1;const id=()=>`20000000-0000-0000-0000-${String(n++).padStart(12,'0')}`;
+ const p={day:'2026-10-27',members:[worker],stores:[site],extras:[],cleaning_stores:[{id:site,codes:['A/1','A/2','D/2']}]};
+ const request=id();const plan=(r,p)=>db.query('select overgreen_cleaning_plan_v309($1,$2,false) r',[r,JSON.stringify(p)]);
+ await assert.rejects(plan(id(),{...p,members:[]}),/Squadra/);assert.equal((await db.query('select count(*)::int n from extras')).rows[0].n,0);
+ const result=(await plan(request,p)).rows[0].r,eid=result.extras[0];assert.deepEqual(result.stores,[]);assert.equal(result.extras.length,1);assert.deepEqual((await plan(request,p)).rows[0].r,result);
+ await assert.rejects(plan(request,{...p,day:'2026-11-01'}),/corrispondente/);
+ await db.query('insert into extra_workers values($1,$2)',[eid,worker]);
+ await db.exec(`select set_config('app.actor','${worker}',false)`);
+ const payload={stato:'in_attesa',giorno_intervento:'2026-10-27',closed_by:worker,closed_at:'2026-10-27T12:00:00Z'};
+ const finish=(codes,e=eid)=>db.query('select overgreen_cleaning_close_v309($1,$2,$3,null) r',[e,codes,JSON.stringify(payload)]);
+ await finish(['A/1','A/2']);let row=(await db.query('select * from extras where id=$1',[eid])).rows[0];assert.equal(row.cleaning_slot,null);assert.deepEqual(row.cleaning_done_codes,['A/1','A/2']);await finish(['A/1','A/2']);
+ await assert.rejects(finish(['D/2']),/già ricevuta/);
+ await db.exec(`select set_config('app.actor','${admin}',false)`);
+ const e2=id();await db.query('select overgreen_cleaning_create_v308($1,$2,$3,$4)',[e2,site,'2026-10-27',['C/1']]);await db.query('insert into extra_workers values($1,$2)',[e2,worker]);
+ await db.exec(`select set_config('app.actor','${worker}',false)`);await finish(['C/1','D/2'],e2);row=(await db.query('select * from extras where id=$1',[e2])).rows[0];assert.equal(row.cleaning_slot,1);assert.deepEqual(row.cleaning_done_codes,['C/1','D/2']);
+ await assert.rejects(plan(id(),p),/riservato/);
+ assert.equal((await db.query("select has_function_privilege('anon','overgreen_cleaning_close_v309(uuid,text[],jsonb,uuid[])','execute') ok")).rows[0].ok,false);
+ }finally{await db.close()}
+});
+test('V309 UI: service switch, only entrusted sites, ordinary payload conversion and actual closure checklist',async()=>{
+ const harness=fs.readFileSync(__dirname+'/app-startup.cjs','utf8').split("console.log('PASS full application")[0];const c=new Function('require','__dirname',harness+';return c;')(require,__dirname),run=s=>vm.runInContext(s,c);let captured;
+ c.capture=x=>captured=x;
+ run(`sb.rpc=async(name,p)=>{capture({name,p});return {data:{id:'schedule'}}};session={user:{id:'admin'}};profile=realProfile={id:'admin',ruolo:'admin',attivo:true};profiles=[profile];stores=[{id:'s',nome:'AFFIDATO',client_type:'eurospin',attivo:true,cleaning_enabled:true,cleaning_start:'2026-01-01'},{id:'n',nome:'SOLO VERDE',client_type:'eurospin',attivo:true}];extras=[];switchService('pulizie');setView('schedule');`);
+ assert(c.document.body.classList.contains('service-cleaning'));assert.match(c.document.getElementById('scheduleStores').textContent,/AFFIDATO/);assert.doesNotMatch(c.document.getElementById('scheduleStores').textContent,/SOLO VERDE/);
+ run(`setSchedulePickerValue('s',true);cleaningPlanDrafts.set('s',['A/1','A/2','D/2']);`);
+ await run(`adminOperation('schedule_create',{members:['admin'],stores:['s'],extras:[],day:'2026-10-27'})`);assert.equal(captured.name,'overgreen_cleaning_plan_v309');assert.equal(captured.p.p_payload.cleaning_stores[0].id,'s');
+ run(`renderCleaningClosure({id:'visit',store_id:'s',cleaning_codes:['A/1','A/2'],stato:'programmato'});`);assert.equal(c.document.querySelectorAll('#cleaningClosureChoices [data-clean-codes]').length,4);assert.match(c.document.getElementById('closeExtraTitle').textContent,/pulizia/);
+ run(`switchService('verde');setView('schedule');`);assert(!c.document.body.classList.contains('service-cleaning'));assert.match(c.document.getElementById('scheduleStores').textContent,/SOLO VERDE/);
+});

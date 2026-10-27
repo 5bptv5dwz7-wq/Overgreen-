@@ -6,7 +6,7 @@ test('cleaning screen: real application bindings, contract activation, shared vi
  const errors=[];c.alert=x=>errors.push(x);
  run(`sb.rpc=async()=>({data:null});session={user:{id:'test-admin'}};profile=realProfile={id:'test-admin',ruolo:'admin',attivo:true};profiles=[profile];
  stores=[{id:'s',nome:'PV prova',client_type:'eurospin',attivo:true,cleaning_enabled:true,cleaning_start:'2026-01-01'},{id:'other',nome:'PV senza ordinarie',client_type:'eurospin',attivo:true}];
- extras=[];extraWorkers=[];attachments=[];extraWorkItems=[];setView('cleaning');`);
+ extras=[];extraWorkers=[];attachments=[];extraWorkItems=[];cleaningTab='due';setView('cleaning');`);
  assert.match(c.document.getElementById('cleaningContent').textContent,/PV prova/);
  assert.doesNotMatch(c.document.getElementById('cleaningContent').textContent,/PV senza ordinarie/);
  run(`cleaningOpen('s');`);assert.equal(c.document.querySelectorAll('#cleaningVisitCodes input').length,5);

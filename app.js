@@ -1,8 +1,11 @@
-const APP_VERSION='V308';
+const APP_VERSION='V309';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
+let activeService=localStorage.getItem('overgreen-service')==='pulizie'?'pulizie':'verde';
+
 async function adminOperation(operation,payload){
+ if(operation==='schedule_create'&&typeof activeService!=='undefined'&&activeService==='pulizie'&&typeof cleaningPlanOperation==='function')return cleaningPlanOperation(payload);
  validateExtraDateOperation(operation,payload);
  const key='overgreen-v198:'+attachmentMediaScope()+':'+operation+':'+JSON.stringify(payload);
  let id=sessionStorage.getItem(key);
@@ -312,7 +315,7 @@ function elapsedDaysLabel(e){
   return d===null?'Giorni trascorsi non disponibili':d===0?'Richiesto oggi':d===1?'1 giorno trascorso':`${d} giorni trascorsi`;
 }
 function extraCategory(e){return ['verde','pulizie','manutenzioni'].includes(e?.categoria_target)?e.categoria_target:null}
-function extraCategoryLabel(e){return extraCategory(e)==='verde'?'🌿 Verde':extraCategory(e)==='pulizie'?'🧹 Pulizie'+(e.cleaning_codes?' · '+e.cleaning_codes.join(' + '):''):extraCategory(e)==='manutenzioni'?'🔧 Manutenzioni':'Categoria non indicata'}
+function extraCategoryLabel(e){return extraCategory(e)==='verde'?'🌿 Verde':extraCategory(e)==='pulizie'?'🧹 Pulizie'+(e.cleaning_codes?' · '+(e.cleaning_done_codes||e.cleaning_codes).join(' + '):''):extraCategory(e)==='manutenzioni'?'🔧 Manutenzioni':'Categoria non indicata'}
 function extraCategoryClass(e){return extraCategory(e)?`category-${extraCategory(e)}`:'category-unknown'}
 function clientType(row){
   if(typeof row==='string'&&['eurospin','intesa','privato'].includes(row))return row;
@@ -370,6 +373,7 @@ function workspaceSearchMatches(row){return currentView==='dashboard'||workspace
 function workspaceRouteItems(id){return savedRouteItems.filter(i=>i.route_id===id&&planningStoreMatches(i.store_id))}
 function activateClient(client){
  if(!['eurospin','intesa','privato'].includes(client))return;
+ if(client!=='eurospin')activeService='verde';
  const changed=activeClient!==client;if(changed)mixedScheduleMode=false;activeClient=client;localStorage.setItem(CLIENT_WORKSPACE_KEY,client);
  if(changed){renderedViews.clear();resetSchedulePickerSelection();for(const id of ['searchInput','extraSearchInput','scheduleSearch','contactsSearch','operationsSearch','globalSearch','globalSearchEverywhere'])if($(id))$(id).value='';}
  syncClientWorkspace();
@@ -393,7 +397,7 @@ function syncClientWorkspace(){
 const CURRENT_VIEW_KEY='overgreen_current_view';
 let currentView=localStorage.getItem(CURRENT_VIEW_KEY)||'dashboard';
 const renderedViews=new Map();let viewDataVersion=0;
-function viewRevision(){return activeClient+':'+mixedScheduleMode+':'+viewDataVersion+':'+dataSync.revision()+':'+attachmentMediaScope()+':'+today()}
+function viewRevision(){return (typeof activeService==='undefined'?'verde':activeService)+':'+activeClient+':'+mixedScheduleMode+':'+viewDataVersion+':'+dataSync.revision()+':'+attachmentMediaScope()+':'+today()}
 function syncEmployeeNavigation(){
   document.querySelectorAll('[data-view="stores"],[data-view="schedule"],[data-bottom-view="stores"],[data-bottom-view="schedule"],[data-more-view="stores"],[data-more-view="schedule"]').forEach(button=>button.classList.toggle('hidden',!admin()));
   $('app')?.classList.toggle('employee-navigation',!admin());
@@ -404,6 +408,7 @@ function setView(name,options={}){
   if(name==='signatures'&&activeClient!=='eurospin')name='stores';
   if(!admin()&&['stores','schedule','fleet'].includes(name))name='dashboard';
   syncEmployeeNavigation();
+  if(typeof syncServiceMode==='function')syncServiceMode();
   syncClientWorkspace();
   if(!$(name+'View')||(name==='operations'&&!admin()))name='dashboard';
   const shouldRender=!options.reuse||renderedViews.get(name)!==viewRevision();
@@ -1157,7 +1162,7 @@ function compactDashboardJob(card){
   const summary=document.createElement('summary');summary.textContent='Altre azioni';more.appendChild(summary);
   const body=document.createElement('div');body.className='actions';secondary.forEach(button=>body.appendChild(button));more.appendChild(body);card.appendChild(more);
 }
-function renderDashboard(){window.OvergreenVoice?.sync();renderDashboardSmart();renderStoreReminderPanels();renderExtraDateAlerts();
+function renderDashboard(){if(typeof renderCleaningDashboardSummary==='function')renderCleaningDashboardSummary();window.OvergreenVoice?.sync();renderDashboardSmart();renderStoreReminderPanels();renderExtraDateAlerts();
   if(typeof renderOperationsShortcut==='function')renderOperationsShortcut();
   if(currentView==='operations'&&typeof renderOperations==='function')renderOperations();
   if(!$('dashToday'))return;
@@ -1295,12 +1300,12 @@ function renderDashboard(){window.OvergreenVoice?.sync();renderDashboardSmart();
           const requestPdf=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');
           const canClose=!done&&(!isIntesaOrdinaryTicket(e)||e._dayItem)&&['programmato','ricevuto','da_integrare'].includes(e.stato)&&canWorkOnExtra(e);
           const hasMap=!!extraMapsDestination(e,st);
-          c.innerHTML=`<div class="job-main"><span class="job-kind">EXTRA</span>${clientBadge(e)}<span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span><strong>${esc(st?.nome||e.nome_esterno||'Extra')}</strong>${(st?.indirizzo||st?.citta||e.indirizzo_esterno)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo||e.indirizzo_esterno,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${esc(e.titolo)} · ${done?'Completato':urgent?'Urgente':'Da eseguire'}</small>${dashboardExtraDocumentsMarkup(e)}${deadlineLabel(e)}${extraNotes.length?`<div class="dashboard-job-notes"><strong>${done?'Descrizione / note':'Descrizione'}</strong>${extraNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}</div><div class="actions">${hasMap?'<button class="secondary" data-map-extra>Maps</button>':''}${requestPdf?'<button class="secondary" data-pdf-extra>Apri PDF</button>':''}${canClose?'<button data-close-extra-dashboard>✓ Eseguito</button>':''}<button class="secondary" data-open-extra>Apri extra</button></div>`;
+          c.innerHTML=`<div class="job-main"><span class="job-kind">${e.cleaning_codes?.length?'PULIZIA':'EXTRA'}</span>${clientBadge(e)}<span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span><strong>${esc(st?.nome||e.nome_esterno||'Extra')}</strong>${(st?.indirizzo||st?.citta||e.indirizzo_esterno)?`<small class="dashboard-job-address">📍 ${esc([st?.indirizzo||e.indirizzo_esterno,st?.citta].filter(Boolean).join(', '))}</small>`:''}<small>${esc(e.titolo)} · ${done?'Completato':urgent?'Urgente':'Da eseguire'}</small>${dashboardExtraDocumentsMarkup(e)}${deadlineLabel(e)}${extraNotes.length?`<div class="dashboard-job-notes"><strong>${done?'Descrizione / note':'Descrizione'}</strong>${extraNotes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}</div><div class="actions">${hasMap?'<button class="secondary" data-map-extra>Maps</button>':''}${requestPdf?'<button class="secondary" data-pdf-extra>Apri PDF</button>':''}${canClose?'<button data-close-extra-dashboard>✓ Eseguito</button>':''}<button class="secondary" data-open-extra>Apri extra</button></div>`;
           c.dataset.routeAddress=routeAddressForExtra(e,st);if(st)c.dataset.weatherStore=st.id;
           c.querySelector('[data-map-extra]')?.addEventListener('click',()=>openExtraMaps(e,st));
           c.querySelector('[data-pdf-extra]')?.addEventListener('click',()=>openAttachment(requestPdf));
           c.querySelector('[data-close-extra-dashboard]')?.addEventListener('click',()=>openExtraClosureDialog(e));
-          if(isStructuredExtra(e)&&canWorkOnExtra(e)){const progress=document.createElement('button');progress.type='button';progress.className='secondary';progress.dataset.dashboardWorkProgress=e.id;progress.textContent='Lavorazioni';progress.onclick=()=>openExtraWorkProgress(e);c.querySelector('.actions').appendChild(progress)}
+          if(isStructuredExtra(e)&&!e.cleaning_codes?.length&&canWorkOnExtra(e)){const progress=document.createElement('button');progress.type='button';progress.className='secondary';progress.dataset.dashboardWorkProgress=e.id;progress.textContent='Lavorazioni';progress.onclick=()=>openExtraWorkProgress(e);c.querySelector('.actions').appendChild(progress)}
           c.querySelector('[data-open-extra]').onclick=()=>openExtraById(e.id);list.appendChild(c)
         }else{
           const a=job.activity,st=stores.find(x=>x.id===a.store_id),ct=workContacts.find(x=>x.id===a.contact_id),done=a.stato==='completato',meta=activityTypeMeta(a.tipo),c=document.createElement('article');
@@ -2639,6 +2644,7 @@ function showCompletedToday(){
  counterDialog('Eseguiti e convalidati · '+fmt(today()),`${data.total} interventi: ${data.ordinary.length} ordinari e ${data.standalone.length} extra separati. ${data.linked.length} target/extra inclusi negli ordinari, senza doppio conteggio.`,[...ordinaryRows,...extraRows(data.standalone,'Extra'),...extraRows(data.linked,'Incluso nell’ordinario')]);
 }
 function renderStores(){
+ if(typeof activeService!=='undefined'&&activeService==='pulizie'&&typeof renderCleaningStores==='function')return renderCleaningStores();
  const q=$('searchInput').value.trim().toLowerCase(),sort=$('sortSelect').value;
  const todayStoreIds=new Set(completedToday().ordinary.map(i=>i.store_id));
  document.querySelectorAll('[data-client-filter]').forEach(b=>b.classList.toggle('active',b.dataset.clientFilter===storeClientFilter));
@@ -3189,6 +3195,7 @@ const helpPages={
 };
 function openHelp(){const h=helpPages[currentView]||helpPages.dashboard;$('helpTitle').textContent=h.title;$('helpBody').innerHTML=h.html;openDialog('helpDialog')}
 async function planOperation(operation,payload){
+ if(operation==='add'&&typeof activeService!=='undefined'&&activeService==='pulizie'&&typeof cleaningPlanOperation==='function')return cleaningPlanOperation(payload,true);
  const key='overgreen-plan-v273:'+attachmentMediaScope()+':'+operation+':'+JSON.stringify(payload);
  let id=sessionStorage.getItem(key);if(!id){id=crypto.randomUUID();sessionStorage.setItem(key,id)}
  return dataSync.enqueue('plan:'+payload.id,async()=>{
@@ -3299,6 +3306,7 @@ function openAddScheduleItems(schedule){
   renderAddSchedulePicker();openDialog('addScheduleItemsDialog');
 }
 function renderAddSchedulePicker(){
+ if(typeof activeService!=='undefined'&&activeService==='pulizie'&&typeof renderCleaningSchedulePicker==='function')return renderCleaningSchedulePicker('addScheduleStores',schedules.find(s=>s.id===$('addScheduleId').value)?.giorno||today(),true);
   const scheduleId=$('addScheduleId').value,q=($('addScheduleSearch').value||'').toLowerCase(),box=$('addScheduleStores');if(!box)return;
   const already=new Set(scheduleItems.filter(i=>i.schedule_id===scheduleId).map(i=>i.store_id));
   const selected=new Set([...box.querySelectorAll('input:checked')].map(x=>x.value));box.innerHTML='';
@@ -3330,14 +3338,16 @@ let schedulePickerLetter='';
 function selectedScheduleStoreIds(){return [...schedulePickerSelected]}
 function setSchedulePickerValue(value,checked){if(checked)schedulePickerSelected.add(value);else schedulePickerSelected.delete(value);updateScheduleSelectedCount()}
 function updateScheduleSelectedCount(){renderScheduleItemNoteDrafts();const count=schedulePickerSelected.size;if($('scheduleSelectedCount'))$('scheduleSelectedCount').textContent=`${count} selezionat${count===1?'o':'i'}`;if($('scheduleSubmitBtn'))$('scheduleSubmitBtn').textContent=count?`Aggiungi ${count} lavor${count===1?'o':'i'} alla giornata`:'Aggiungi lavori alla giornata';window.OvergreenStoreMap?.sync()}
-function resetSchedulePickerSelection(){window.OvergreenFleet?.reset();window.OvergreenRouteEndpoints?.reset();scheduleItemNoteDrafts.clear();schedulePickerSelected.clear();schedulePickerMode='all';schedulePickerLetter='';if($('scheduleSearch'))$('scheduleSearch').value='';updateScheduleSelectedCount()}
+function resetSchedulePickerSelection(){if(typeof cleaningPlanDrafts!=='undefined')cleaningPlanDrafts.clear();window.OvergreenFleet?.reset();window.OvergreenRouteEndpoints?.reset();scheduleItemNoteDrafts.clear();schedulePickerSelected.clear();schedulePickerMode='all';schedulePickerLetter='';if($('scheduleSearch'))$('scheduleSearch').value='';updateScheduleSelectedCount()}
 function schedulePickerMatchesStore(st,q,pickerClient){
+ if(typeof activeService!=='undefined'&&activeService==='pulizie'&&(!OvergreenCleaning.active(st,$('scheduleDate').value||tomorrow())||clientType(st)!=='eurospin'))return false;
   if(pickerClient!=='all'&&String(st.client_type||'eurospin')!==pickerClient)return false;
   if(schedulePickerLetter&&!String(st.nome||'').trim().toLocaleUpperCase('it').startsWith(schedulePickerLetter))return false;
   if(q&&![st.nome,st.citta,st.indirizzo,st.note,clientLabel(st.client_type),storeSiteTypeLabel(st)].some(v=>String(v||'').toLowerCase().includes(q)))return false;
   return schedulePickerMode!=='selected'||schedulePickerSelected.has(st.id);
 }
 function schedulePickerMatchesExtra(e,q,pickerClient){
+ if(typeof activeService!=='undefined'&&activeService==='pulizie'&&e.categoria_target!=='pulizie')return false;
   const value=`extra:${e.id}`;
   if(pickerClient!=='all'&&clientType(e)!==pickerClient)return false;
   if(schedulePickerLetter&&!String(e.titolo||'Extra').trim().toLocaleUpperCase('it').startsWith(schedulePickerLetter))return false;
@@ -3915,6 +3925,7 @@ function schedulePlannerExtraSearchText(e){
   return [e.titolo,e.numero_target,e.descrizione,e.nome_esterno,e.indirizzo_esterno,clientLabel(e),extraCategoryLabel(e),st?.nome,st?.citta,st?.indirizzo].filter(Boolean).join(' ').toLowerCase();
 }
 function renderSchedulePicker(){
+ if(typeof activeService!=='undefined'&&activeService==='pulizie'&&typeof renderCleaningSchedulePicker==='function')return renderCleaningSchedulePicker();
   const q=String($('scheduleSearch')?.value||'').trim().toLowerCase(),w=$('scheduleStores');if(!w)return;
   const pickerClient=$('schedulePickerClient')?.value||'all';
   w.innerHTML='';
@@ -4060,6 +4071,7 @@ async function buildExtraClosurePdfBlob(e,packageQuality=.68,packageMaxSide=1500
     page.drawText('OVERGREEN',{x:margin,y,size:22,font:bold,color:green});const targetHeader=e.numero_target?`TARGET N° ${pdfSafeText(e.numero_target)}`:'';if(targetHeader){const targetSize=16,targetWidth=bold.widthOfTextAtSize(targetHeader,targetSize);page.drawText(targetHeader,{x:page.getWidth()-margin-targetWidth,y:y+2,size:targetSize,font:bold,color:green});}page.drawText('REPORT DI CHIUSURA LAVORO EXTRA',{x:margin,y:y-29,size:11,font:bold,color:muted});y-=62;
     const place=st?.nome||e.nome_esterno||'Luogo non indicato',address=st?.indirizzo||[e.indirizzo_esterno,st?.citta].filter(Boolean).join(' · ');
     const fields=[['LAVORO',e.titolo],['CATEGORIA',extraCategory(e)==='verde'?'Verde':extraCategory(e)==='pulizie'?'Pulizie':extraCategory(e)==='manutenzioni'?'Manutenzioni':'Categoria non indicata'],['LUOGO',place],['INDIRIZZO',address||'Non indicato'],['DATA RICHIESTA',fmt(extraRequestDate(e))],['DATA ESECUZIONE',fmt(e.giorno_intervento)],['ORARIO CHIUSURA',fmtClosedAt(e.closed_at)],['CHIUSO DA',closedByName(e)],['OPERATORI',names.join(', ')||'Non indicati'],['STATO','Chiuso e convalidato']];
+    if(e.cleaning_done_codes?.length)fields.push(['LAVORAZIONI ESEGUITE',e.cleaning_done_codes.join(' + ')]);
     if(['pulizie','manutenzioni'].includes(e.categoria_target)&&Number(e.night_hours)>0)fields.push(['ORE NOTTURNE/FESTIVE SQUADRA',String(e.night_hours).replace('.',',')]);
     const metaGap=22,metaColW=(w-metaGap)/2,metaLabelW=82,metaValueW=metaColW-metaLabelW-6,metaStartY=y,metaRows=Math.ceil(fields.length/2),rowHeights=[];
     for(let r=0;r<metaRows;r++){
@@ -4116,6 +4128,7 @@ async function generateExtraClosurePdf(e,button){
     page.drawText('OVERGREEN',{x:margin,y,size:22,font:bold,color:green});const targetHeader=e.numero_target?`TARGET N° ${pdfSafeText(e.numero_target)}`:'';if(targetHeader){const targetSize=16,targetWidth=bold.widthOfTextAtSize(targetHeader,targetSize);page.drawText(targetHeader,{x:page.getWidth()-margin-targetWidth,y:y+2,size:targetSize,font:bold,color:green});}page.drawText('REPORT DI CHIUSURA LAVORO EXTRA',{x:margin,y:y-29,size:11,font:bold,color:muted});y-=62;
     const place=st?.nome||e.nome_esterno||'Luogo non indicato',address=st?.indirizzo||[e.indirizzo_esterno,st?.citta].filter(Boolean).join(' · ');
     const fields=[['LAVORO',e.titolo],['CATEGORIA',extraCategory(e)==='verde'?'Verde':extraCategory(e)==='pulizie'?'Pulizie':extraCategory(e)==='manutenzioni'?'Manutenzioni':'Categoria non indicata'],['LUOGO',place],['INDIRIZZO',address||'Non indicato'],['DATA RICHIESTA',fmt(extraRequestDate(e))],['DATA ESECUZIONE',fmt(e.giorno_intervento)],['ORARIO CHIUSURA',fmtClosedAt(e.closed_at)],['CHIUSO DA',closedByName(e)],['OPERATORI',names.join(', ')||'Non indicati'],['STATO','Chiuso e convalidato']];
+    if(e.cleaning_done_codes?.length)fields.push(['LAVORAZIONI ESEGUITE',e.cleaning_done_codes.join(' + ')]);
     if(['pulizie','manutenzioni'].includes(e.categoria_target)&&Number(e.night_hours)>0)fields.push(['ORE NOTTURNE/FESTIVE SQUADRA',String(e.night_hours).replace('.',',')]);
     const metaGap=22,metaColW=(w-metaGap)/2,metaLabelW=82,metaValueW=metaColW-metaLabelW-6,metaStartY=y,metaRows=Math.ceil(fields.length/2),rowHeights=[];
     for(let r=0;r<metaRows;r++){
@@ -4407,7 +4420,7 @@ function extraCard(e){
   const stateLabel=e.stato==='annullato'?'Target annullato':isIntesaOrdinaryTicket(e)?(e.stato==='completato'?'Ticket chiuso con intervento ordinario':e.stato==='in_attesa'?'In attesa insieme all’intervento ordinario':'Ticket incluso nell’intervento ordinario'):partialOpen?'Parziale · da continuare':e.stato.replaceAll('_',' ');
   c.className=`card extra-card ${extraCategoryClass(e)} ${e.stato}`;
   c.dataset.extraCardId=e.id;
-  c.innerHTML=`<div class="extra-card-heading"><div>${clientBadge(e)}<h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3></div><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span></div><p><strong>${esc(e.titolo)}</strong></p>${e.numero_target?`<p class="target-number"><strong>Numero target:</strong> ${esc(e.numero_target)}</p>`:''}${e.descrizione?`<div class="extra-description"><p>${esc(e.descrizione)}</p></div>`:''}${structured?`<div class="linked-extra-reminder"><strong>📋 ${structuredItems.length} lavorazioni</strong><p>${structuredItems.map(w=>`${workStateIcon(w.stato)} ${esc(w.titolo)}`).join(' · ')}</p></div>`:''}${deadlineLabel(e)}${['pulizie','manutenzioni'].includes(e.categoria_target)&&Number(e.night_hours)>0?`<p><strong>Ore notturne/festive squadra:</strong> ${esc(String(e.night_hours).replace('.',','))}</p>`:''}<div class="extra-date-summary"><p><strong>Richiesta:</strong> ${fmt(extraRequestDate(e))}</p><span class="elapsed-days">⏱ ${esc(elapsedDaysLabel(e))}</span><p><strong>Giornate:</strong> ${extraPlannedDates(e).map(fmt).join(' · ')||'Da programmare'}</p></div>${e.con_ordinario?`<p class="linked-ordinary-label">${isIntesaOrdinaryTicket(e)?'🎫 Ticket incluso nel passaggio ordinario · nessun documento richiesto in chiusura':'🔗 Da fare insieme al passaggio ordinario'}</p>`:''}${e.stato==='annullato'?`<p class="extra-cancelled-badge"><strong>Target annullato</strong> · ${esc(closureText(e))} · ${esc(profiles.find(p=>p.id===e.closed_by)?.nome||'Amministratore')}</p>`:''}${partialOpen?'<span class="extra-partial-badge">↪ Parziale · da continuare</span>':`<p class="muted">${esc(stateLabel)}</p>`}<p class="assignment-label"><strong>${esc(assignmentLabel)}</strong></p>${!admin()&&!canWorkOnExtra(e)?'<p class="extra-readonly-label">🔒 Sola lettura</p>':''}${showProgress?`<div class="extra-closure-details">${showClosure?`<div class="closure-stamp">🕒 Chiuso: ${esc(closureText(e))}</div><strong>Note finali</strong>`:'<strong>Avanzamento parziale</strong>'}<div class="history-note ${e.note_lorenzo?'':'muted'}">${esc(e.note_lorenzo||(partialOpen?'Nessuna nota parziale inserita':'Nessuna nota inserita'))}</div><div class="pending-photo-head"><strong>Foto del lavoro</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-extra-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div>`:''}<div class="actions">${extraMapsDestination(e,st)?'<button class="secondary" data-extra-map>Maps</button>':''}${pdf?'<button class="secondary" data-pdf>Apri PDF richiesta</button>':''}${structured?'<button class="secondary" data-work-progress>📋 Lavorazioni</button>':''}${showClosure&&reportEurospin?'<button class="secondary" data-report-eurospin>File Eurospin</button>':''}${showProgress&&reportOvergreen?'<button class="secondary" data-report-overgreen>File Overgreen</button>':''}${showClosure&&!reportEurospin?'<span class="muted">File Eurospin non presente</span>':''}${showClosure&&!reportOvergreen?'<span class="muted">File Overgreen non presente</span>':''}${admin()&&structured&&['in_attesa','completato'].includes(e.stato)?'<button data-generate-work-report>Genera report lavorazioni</button>':''}${admin()&&e.stato==='completato'&&!isIntesaOrdinaryTicket(e)?'<button data-generate-closure>Genera chiusura</button>':''}${admin()&&e.stato==='completato'?'<button class="secondary" data-edit-closure>Modifica chiusura</button>':''}${!isIntesaOrdinaryTicket(e)&&['programmato','ricevuto','da_integrare'].includes(e.stato)&&canWorkOnExtra(e)?`<button data-close-extra>${structured?'Chiudi definitivamente':(partialOpen?'Continua / chiudi lavoro':'Chiudi lavoro')}</button>`:''}${admin()&&['ricevuto','programmato','da_integrare','in_attesa'].includes(e.stato)?'<button type="button" class="secondary" data-cancel-extra>Annulla target</button>':''}${admin()&&e.stato==='in_attesa'?'<button data-approve-extra>Convalida</button>':''}${admin()&&!e.con_ordinario&&!extraIsScheduled(e)&&!['in_attesa','completato','annullato'].includes(e.stato)?'<button class="secondary" data-program-extra>📅 Programma</button>':''}${admin()?'<button class="secondary" data-edit-extra>Modifica</button><button class="danger-btn" data-delete-extra>Elimina</button>':''}</div>`;
+  c.innerHTML=`<div class="extra-card-heading"><div>${clientBadge(e)}<h3>EXTRA · ${esc(st?.nome||e.nome_esterno||'')}</h3></div><span class="extra-category-badge ${extraCategoryClass(e)}">${esc(extraCategoryLabel(e))}</span></div><p><strong>${esc(e.titolo)}</strong></p>${e.numero_target?`<p class="target-number"><strong>Numero target:</strong> ${esc(e.numero_target)}</p>`:''}${e.descrizione?`<div class="extra-description"><p>${esc(e.descrizione)}</p></div>`:''}${structured?`<div class="linked-extra-reminder"><strong>📋 ${structuredItems.length} lavorazioni</strong><p>${structuredItems.map(w=>`${workStateIcon(w.stato)} ${esc(w.titolo)}`).join(' · ')}</p></div>`:''}${deadlineLabel(e)}${['pulizie','manutenzioni'].includes(e.categoria_target)&&Number(e.night_hours)>0?`<p><strong>Ore notturne/festive squadra:</strong> ${esc(String(e.night_hours).replace('.',','))}</p>`:''}<div class="extra-date-summary"><p><strong>Richiesta:</strong> ${fmt(extraRequestDate(e))}</p><span class="elapsed-days">⏱ ${esc(elapsedDaysLabel(e))}</span><p><strong>Giornate:</strong> ${extraPlannedDates(e).map(fmt).join(' · ')||'Da programmare'}</p></div>${e.con_ordinario?`<p class="linked-ordinary-label">${isIntesaOrdinaryTicket(e)?'🎫 Ticket incluso nel passaggio ordinario · nessun documento richiesto in chiusura':'🔗 Da fare insieme al passaggio ordinario'}</p>`:''}${e.stato==='annullato'?`<p class="extra-cancelled-badge"><strong>Target annullato</strong> · ${esc(closureText(e))} · ${esc(profiles.find(p=>p.id===e.closed_by)?.nome||'Amministratore')}</p>`:''}${partialOpen?'<span class="extra-partial-badge">↪ Parziale · da continuare</span>':`<p class="muted">${esc(stateLabel)}</p>`}<p class="assignment-label"><strong>${esc(assignmentLabel)}</strong></p>${!admin()&&!canWorkOnExtra(e)?'<p class="extra-readonly-label">🔒 Sola lettura</p>':''}${showProgress?`<div class="extra-closure-details">${showClosure?`<div class="closure-stamp">🕒 Chiuso: ${esc(closureText(e))}</div><strong>Note finali</strong>`:'<strong>Avanzamento parziale</strong>'}<div class="history-note ${e.note_lorenzo?'':'muted'}">${esc(e.note_lorenzo||(partialOpen?'Nessuna nota parziale inserita':'Nessuna nota inserita'))}</div><div class="pending-photo-head"><strong>Foto del lavoro</strong><span>${pics.length}</span></div><div class="pending-review-photos" data-extra-photos>${pics.length?'<span class="history-loading">Caricamento foto…</span>':'<p class="muted">Nessuna foto allegata.</p>'}</div></div>`:''}<div class="actions">${extraMapsDestination(e,st)?'<button class="secondary" data-extra-map>Maps</button>':''}${pdf?'<button class="secondary" data-pdf>Apri PDF richiesta</button>':''}${structured&&!e.cleaning_codes?.length?'<button class="secondary" data-work-progress>📋 Lavorazioni</button>':''}${showClosure&&reportEurospin?'<button class="secondary" data-report-eurospin>File Eurospin</button>':''}${showProgress&&reportOvergreen?'<button class="secondary" data-report-overgreen>File Overgreen</button>':''}${showClosure&&!reportEurospin?'<span class="muted">File Eurospin non presente</span>':''}${showClosure&&!reportOvergreen?'<span class="muted">File Overgreen non presente</span>':''}${admin()&&structured&&['in_attesa','completato'].includes(e.stato)?'<button data-generate-work-report>Genera report lavorazioni</button>':''}${admin()&&e.stato==='completato'&&!isIntesaOrdinaryTicket(e)?'<button data-generate-closure>Genera chiusura</button>':''}${admin()&&e.stato==='completato'?'<button class="secondary" data-edit-closure>Modifica chiusura</button>':''}${!isIntesaOrdinaryTicket(e)&&['programmato','ricevuto','da_integrare'].includes(e.stato)&&canWorkOnExtra(e)?`<button data-close-extra>${structured?'Chiudi definitivamente':(partialOpen?'Continua / chiudi lavoro':'Chiudi lavoro')}</button>`:''}${admin()&&['ricevuto','programmato','da_integrare','in_attesa'].includes(e.stato)?'<button type="button" class="secondary" data-cancel-extra>Annulla target</button>':''}${admin()&&e.stato==='in_attesa'?'<button data-approve-extra>Convalida</button>':''}${admin()&&!e.con_ordinario&&!extraIsScheduled(e)&&!['in_attesa','completato','annullato'].includes(e.stato)?'<button class="secondary" data-program-extra>📅 Programma</button>':''}${admin()?'<button class="secondary" data-edit-extra>Modifica</button><button class="danger-btn" data-delete-extra>Elimina</button>':''}</div>`;
   if(admin()&&e.stato!=='annullato'&&window.OvergreenEconomics.isBillableExtra(e)&&typeof openExtraHours==='function'){
     const hoursButton=document.createElement('button');hoursButton.type='button';hoursButton.className='secondary';hoursButton.dataset.extraHours='';hoursButton.textContent='Economia e rapportino';hoursButton.onclick=()=>openExtraHours(e);
     c.querySelector('.actions').prepend(hoursButton);
@@ -4951,7 +4964,7 @@ $('userEditForm').onsubmit=async e=>{e.preventDefault();if(!admin())return;const
 $('addScheduleItemsForm').onsubmit=e=>{
  e.preventDefault();if(!admin())return;
  return withFormBusy('addScheduleItemsForm',async()=>{
-  const scheduleId=$('addScheduleId').value,selected=[...$('addScheduleStores').querySelectorAll('input:checked')].map(x=>x.value);
+  const scheduleId=$('addScheduleId').value,selected=[...$('addScheduleStores').querySelectorAll(activeService==='pulizie'?'[data-clean-store]:checked':'input:checked')].map(x=>x.value);
   if(!selected.length)throw new Error('Seleziona almeno una sede o un extra.');
   const storeIds=selected.filter(v=>!v.startsWith('extra:')),extraIds=selected.filter(v=>v.startsWith('extra:')).map(v=>v.slice(6));
   const sch=schedules.find(x=>x.id===scheduleId),members=scheduleMembers.filter(m=>m.schedule_id===scheduleId).map(m=>m.profile_id);
@@ -5595,7 +5608,7 @@ function openExtraClosureDialog(extra,fromOrdinary=false){
     info.classList.remove('hidden');
     info.innerHTML=fromOrdinary?`<strong>Extra collegato al passaggio ordinario</strong><span>${esc(st?.nome||extra.nome_esterno||'')} · ${esc(extra.titolo)}</span><small>Se oggi non è concluso puoi salvarlo come parziale: resterà aperto e potrai proseguirlo in seguito.</small>`:'<strong>Solo extra</strong><small>Questa chiusura non aggiorna l’ultimo ordinario e non azzera i giorni del taglio erba.</small>';
   }
-  recoveredGenericFile=null;$('recoveredExtraDocument')?.remove();openDialog('closeExtraDialog');
+  recoveredGenericFile=null;$('recoveredExtraDocument')?.remove();typeof renderCleaningClosure==='function'&&renderCleaningClosure(extra);openDialog('closeExtraDialog');
   void restoreExtraDraft(extra);
   window.AppleDocumentScanner?.refresh();
 }
@@ -5650,7 +5663,7 @@ window.AppleDocumentScanner?.init({
 
 const extraDrafts=window.OvergreenExtraDrafts.create({store:window.OvergreenPhotoSync.storage(indexedDB,'overgreen-extra-drafts-v271'),scope:attachmentMediaScope});
 let extraDraftRestoring=false,recoveredGenericFile=null,extraDraftTimer=null;
-function extraDraftFields(){return {notes:$('closeExtraNotes').value,ticket:$('closeExtraTicket').value,closedAt:$('closeExtraClosedAt').value,nightEnabled:$('closeExtraNightEnabled').checked,nightHours:$('closeExtraNightHours')?.value,workers:[...$('closeExtraWorkers').querySelectorAll('input:checked')].map(x=>x.value)}}
+function extraDraftFields(){return {...($('cleaningClosureChoices')&&!$('cleaningClosureChoices').hidden&&typeof selectedCleaningCodes==='function'?{cleaningCodes:selectedCleaningCodes($('cleaningClosureChoices'))}:{}),notes:$('closeExtraNotes').value,ticket:$('closeExtraTicket').value,closedAt:$('closeExtraClosedAt').value,nightEnabled:$('closeExtraNightEnabled').checked,nightHours:$('closeExtraNightHours')?.value,workers:[...$('closeExtraWorkers').querySelectorAll('input:checked')].map(x=>x.value)}}
 function captureExtraDraft(){
  if(extraDraftRestoring||!$('closeExtraDialog').open)return null;
  const id=$('closeExtraId').value;if(!id)return null;
@@ -5676,7 +5689,7 @@ async function restoreExtraDraft(extra){
   const draft=await extraDrafts.load(extra.id);
   if(!$('closeExtraDialog').open||$('closeExtraId').value!==extra.id||attachmentMediaScope()!==owner)return;
   if(!draft)return;
-  const f=draft.fields;$('closeExtraNotes').value=f.notes||'';$('closeExtraTicket').value=f.ticket||'';
+  const f=draft.fields;if(f.cleaningCodes)$('cleaningClosureChoices')?.querySelectorAll('[data-clean-codes]').forEach(x=>x.checked=x.dataset.cleanCodes.split(',').some(code=>f.cleaningCodes.includes(code)));$('closeExtraNotes').value=f.notes||'';$('closeExtraTicket').value=f.ticket||'';
   if(f.closedAt)$('closeExtraClosedAt').value=f.closedAt;
   $('closeExtraNightEnabled').checked=!!f.nightEnabled;if($('closeExtraNightHours'))$('closeExtraNightHours').value=f.nightHours||'';
   $('closeExtraWorkers').querySelectorAll('input').forEach(x=>x.checked=f.workers?.includes(x.value));
@@ -5807,7 +5820,10 @@ $('closeExtraForm').onsubmit=async e=>{
     const extra=extras.find(x=>x.id===id),closure=extraClosureDetails(extra),nightWork=readExtraNightWork(extra);
     if(!confirmExtraDateExecution([extra],closure.day))return;
     const structuredItems=workItemsForExtra(id);
-    if(structuredItems.length){
+    const cleaningClose=extra.cleaning_codes?.length&&!extra.cleaning_codes.includes('TARGET');
+    const cleaningDone=cleaningClose?selectedCleaningCodes($('cleaningClosureChoices')):null;
+    if(cleaningClose&&!cleaningDone.length)throw new Error('Seleziona almeno una lavorazione eseguita.');
+    if(structuredItems.length&&!cleaningClose){
       const incomplete=structuredItems.filter(w=>!['completata','non_eseguita'].includes(w.stato));
       if(incomplete.length)throw new Error(`Prima di chiudere definitivamente completa la scheda Lavorazioni. Mancano: ${incomplete.map(w=>w.titolo).join(', ')}`);
       const withoutReason=structuredItems.find(w=>w.stato==='non_eseguita'&&!String(w.nota||'').trim()&&!workNotesForItem(w.id).length);
@@ -5843,7 +5859,7 @@ $('closeExtraForm').onsubmit=async e=>{
 
 
     btn.textContent='Invio a Lorenzo…';
-    const {error}=await sb.rpc('overgreen_close_extra_v271',{p_extra_id:id,p_payload:{stato:'in_attesa',giorno_intervento:closure.day,note_lorenzo:notes,closed_by:profile.id,closed_at:closure.closedAt,...nightWork},p_workers:closure.workers});
+    const {error}=await sb.rpc(cleaningClose?'overgreen_cleaning_close_v309':'overgreen_close_extra_v271',{...(cleaningClose?{p_codes:cleaningDone}:{}),p_extra_id:id,p_payload:{stato:'in_attesa',giorno_intervento:closure.day,note_lorenzo:notes,closed_by:profile.id,closed_at:closure.closedAt,...nightWork},p_workers:closure.workers});
     if(error)throw error;
     await cleanupReplacedAttachments(replacedAttachments);
     await extraDrafts.remove(id);
@@ -5940,7 +5956,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=308').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=309').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

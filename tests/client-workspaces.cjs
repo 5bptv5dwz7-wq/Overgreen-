@@ -39,7 +39,7 @@ vm.runInContext(`(async()=>{
  enterClient('eurospin','schedule');toggleMixedPlanning();$('schedulePickerClient').value='all';renderSchedulePicker();assert($('scheduleStores').textContent.includes('INTESA ONLY'));setSchedulePickerValue('se',true);setSchedulePickerValue('si',true);assert.deepEqual([...selectedScheduleStoreIds()],['se','si']);assert.equal(schedulePdfGroups(today(),today())[0].jobs.length,2);assert.equal(scheduleIsMixed('mixed'),true);resetSchedulePickerSelection();
  // A dashboard remains aggregated after visiting either workspace.
  setView('dashboard');assert.equal(globalSearchMatches('ONLY').length,4);assert.equal(stores.length,2);assert.equal(extras.length,2);
- assert.equal($('dashboardView').firstElementChild.classList.contains('dashboard-grid'),true);
+ assert.equal(!!$('dashboardView').querySelector('.dashboard-grid'),true);
  assert.equal($('dashboardNext').querySelectorAll('.dashboard-day').length,7);
  assert.match($('dashboardNext').querySelector('summary').textContent,/4 lavori/);
  assert.match($('dashboardNext').querySelector('summary').textContent,/Eurospin 2 · Intesa 2/);

@@ -69,3 +69,10 @@ test('V314 Target conversion never silently falls back to hourly work and does n
  await run(`cleaningSaveVisit({preventDefault(){}})`);assert.equal(calls.length,0);assert.match(errors.pop(),/Affidamento/);
  run(`stores[0].cleaning_enabled=true;`);await run(`cleaningSaveVisit({preventDefault(){}})`);assert.equal(calls.length,1);assert.equal(calls[0].p.p_existing,'target');assert.equal(calls[0].p.p_codes.join(','),'D/2');assert.equal(errors.length,0);
 });
+test('V315 dashboard extra counters and green shortcuts exclude contract cleaning regardless of remembered service',()=>{
+ const {c,run}=app();run(`extras=[{id:'contract',store_id:'s',client_type:'eurospin',categoria_target:'pulizie',stato:'ricevuto',cleaning_codes:['A/1','A/2']},{id:'target',store_id:'s',client_type:'eurospin',categoria_target:'pulizie',stato:'ricevuto',cleaning_codes:['TARGET'],titolo:'Vetri',data_richiesta:'2026-10-27'}];activeService='pulizie';setView('dashboard');`);
+ assert.equal(c.document.getElementById('dashEurospinTargets').textContent,'1');assert.equal(c.document.querySelector('#dashboardSmart [data-s="e"] strong').textContent,'1');
+ assert.equal(run("standaloneExtrasForPlanner().map(e=>e.id).join(',')"),'target');assert.equal(run("existingExtrasForSchedulePicker('day').map(e=>e.id).join(',')"),'target');
+ c.document.querySelector('[data-client-counter="eurospin-due"]').click();assert.equal(run('currentView'),'stores');assert.equal(run('serviceForView()'),'verde');
+ run(`switchService('pulizie');setView('dashboard');`);c.document.querySelector('[data-dash="scheduled"]').click();assert.equal(run('serviceForView()'),'verde');
+});

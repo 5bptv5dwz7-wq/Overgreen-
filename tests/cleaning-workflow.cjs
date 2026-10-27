@@ -57,3 +57,17 @@ test('V309 UI: service switch, only entrusted sites, ordinary payload conversion
  run(`renderCleaningClosure({id:'visit',store_id:'s',cleaning_codes:['A/1','A/2'],stato:'programmato'});`);assert.equal(c.document.querySelectorAll('#cleaningClosureChoices [data-clean-codes]').length,4);assert.match(c.document.getElementById('closeExtraTitle').textContent,/pulizia/);
  run(`switchService('verde');setView('schedule');`);assert(!c.document.body.classList.contains('service-cleaning'));assert.match(c.document.getElementById('scheduleStores').textContent,/SOLO VERDE/);
 });
+test('V311 Sedi shares every action and planner control, keeping cleaning data separate',()=>{
+ const harness=fs.readFileSync(__dirname+'/app-startup.cjs','utf8').split("console.log('PASS full application")[0];const c=new Function('require','__dirname',harness+';return c;')(require,__dirname),run=s=>vm.runInContext(s,c);
+ run(`session={user:{id:'admin'}};profile=realProfile={id:'admin',ruolo:'admin',attivo:true};profiles=[profile];stores=[{id:'s',nome:'PV TEST',client_type:'eurospin',attivo:true,cleaning_enabled:true,cleaning_start:'2026-01-01',ultimo_passaggio:'2026-10-25',intervallo_giorni:15}];extras=[];storeFilter='all';storeClientFilter='all';activeService='verde';renderStores();`);
+ const selectors=['data-map','data-done','data-history','data-site-extras','data-reminder','data-share','data-edit'];
+ for(const attr of selectors)assert(c.document.querySelector('#storesList ['+attr+']'),attr+' green');
+ run(`switchService('pulizie');renderStores();`);
+ for(const attr of selectors)assert(c.document.querySelector('#storesList ['+attr+']'),attr+' cleaning');
+ assert.doesNotMatch(c.document.getElementById('storesList').textContent,/25\/10\/2026/);
+ run(`storeReminders=[{store_id:'s',service:'verde',active:true,note:'ERBA'},{store_id:'s',service:'pulizie',active:true,note:'PULIZIE'}];renderStores();`);
+ assert.match(c.document.getElementById('storesList').textContent,/PULIZIE/);assert.doesNotMatch(c.document.getElementById('storesList').textContent,/ERBA/);
+ c.document.querySelector('#storesList [data-done]').click();assert.match(c.document.querySelector('#cleaningEditDialog h2').textContent,/Registra ordinario/);assert.equal(c.document.getElementById('cleaningVisitMode').value,'contract');
+ run(`setView('schedule');renderSchedulePicker();`);assert(c.document.querySelector('[data-picker-mode="selected"]'));assert(c.document.querySelector('[data-picker-letter="A"]'));assert(c.document.querySelector('[data-select-results]'));
+ run(`switchService('verde');renderStores();`);assert.match(c.document.getElementById('storesList').textContent,/ERBA/);assert.doesNotMatch(c.document.getElementById('storesList').textContent,/PULIZIE/);
+});

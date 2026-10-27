@@ -1,4 +1,4 @@
-const APP_VERSION='V310';
+const APP_VERSION='V311';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -1447,8 +1447,9 @@ async function showStoreDetail(s){
   }
 }
 function renderStoreDetail(s,archive,archiveOnly=false){
-  const rows=interventions.filter(i=>i.store_id===s.id&&!i.multi_day_open).sort((a,b)=>String(interventionEndDate(b)).localeCompare(String(interventionEndDate(a))));
-  const ex=extras.filter(e=>e.store_id===s.id&&!(e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET'))).sort((a,b)=>String(b.giorno_intervento).localeCompare(String(a.giorno_intervento)));
+  const cleaning=typeof activeService!=='undefined'&&activeService==='pulizie';if(cleaning)s=cleaningStoreView(s);
+  const rows=(cleaning?[]:interventions).filter(i=>i.store_id===s.id&&!i.multi_day_open).sort((a,b)=>String(interventionEndDate(b)).localeCompare(String(interventionEndDate(a))));
+  const ex=extras.filter(e=>e.store_id===s.id&&(cleaning?e.categoria_target==='pulizie':!(e.cleaning_codes?.length&&!e.cleaning_codes.includes('TARGET')))).sort((a,b)=>String(b.giorno_intervento).localeCompare(String(a.giorno_intervento)));
   const plans=archive.filter(a=>archiveKind(a)==='planimetria');
   const manualPhotos=archive.filter(a=>archiveKind(a)==='foto');
   const interventionIds=new Set(rows.map(i=>i.id));
@@ -1462,7 +1463,7 @@ function renderStoreDetail(s,archive,archiveOnly=false){
   const state=status(s),stateLabel=!storeHasInterval(s)?'Solo su richiesta':state==='scheduled'?'In programma':state==='ok'?'Regolare':state==='warning'?'In scadenza':'In ritardo';
   const todayDate=today();
   const futureItems=scheduleItems.filter(i=>i.store_id===s.id&&effectiveScheduleState(i)==='da_fare').map(i=>schedules.find(x=>x.id===i.schedule_id)).filter(x=>x&&x.giorno>=todayDate).sort((a,b)=>String(a.giorno).localeCompare(String(b.giorno)));
-  const nextDate=futureItems[0]?.giorno||null;
+  const nextDate=cleaning?cleaningRows().filter(e=>e.store_id===s.id&&OvergreenCleaning.contract(e)&&!['completato','annullato'].includes(e.stato)&&OvergreenCleaning.day(e)>=todayDate).map(OvergreenCleaning.day).sort()[0]||null:futureItems[0]?.giorno||null;
 
   const workerRows=rows.map(i=>({intervention:i,names:interventionWorkers.filter(w=>w.intervention_id===i.id).map(w=>profiles.find(p=>p.id===w.profile_id)?.nome).filter(Boolean)}));
   const operatorCounts=new Map();
@@ -1533,7 +1534,7 @@ function renderStoreDetail(s,archive,archiveOnly=false){
   body.insertAdjacentHTML('afterbegin',storeReminderMarkup(s)+nextVisitNoteMarkup(s));
   if(admin()){const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent='⚑ Sollecito';b.onclick=()=>{ $('storeDetailDialog').close();openStoreReminder(s)};body.prepend(b)}
   body.querySelector('[data-detail-map]').onclick=()=>openStoreMaps(s);
-  body.querySelector('[data-detail-edit]')?.addEventListener('click',()=>openStore(s));
+  body.querySelector('[data-detail-edit]')?.addEventListener('click',()=>openStore(stores.find(x=>x.id===s.id)||s));
   body.querySelector('[data-open-full-history]')?.addEventListener('click',()=>showHistory(s));
   body.querySelectorAll('[data-sheet-tab]').forEach(btn=>btn.onclick=()=>{body.querySelectorAll('[data-sheet-tab]').forEach(x=>x.classList.toggle('active',x===btn));body.querySelectorAll('[data-sheet-panel]').forEach(x=>x.classList.toggle('hidden',x.dataset.sheetPanel!==btn.dataset.sheetTab))});
   body.querySelectorAll('[data-open-extra-id]').forEach(btn=>btn.onclick=()=>{const e=extras.find(x=>x.id===btn.dataset.openExtraId);if(e){$('storeDetailDialog').close();openExtraById(e.id)}});
@@ -2613,6 +2614,7 @@ function updateBulkIntervalPreview(){
   box.innerHTML=`<strong>${matches.length} sedi interessate</strong><span>Il nuovo intervallo sarà di ${days} giorni.</span>`;
 }
 function openBulkIntervalDialog(){
+ if(typeof activeService!=='undefined'&&activeService==='pulizie'){cleaningTab='due';setView('cleaning');return;}
   const preferred=storeClientFilter!=='all'?storeClientFilter:'eurospin';
   $('bulkIntervalClient').value=preferred;
   $('bulkIntervalSiteType').value='all';
@@ -2633,7 +2635,7 @@ function counterDialog(title,description,rows){
  dialog.showModal();
 }
 function openSiteExtras(s){
- const rows=extras.filter(e=>e.store_id===s.id).map(e=>({label:`${e.titolo} · ${e.stato.replaceAll('_',' ')}`,open:()=>openExtraById(e.id)}));
+ const rows=extras.filter(e=>e.store_id===s.id&&(activeService!=='pulizie'||(e.categoria_target==='pulizie'&&!OvergreenCleaning.contract(e)))).map(e=>({label:`${e.titolo} · ${e.stato.replaceAll('_',' ')}`,open:()=>openExtraById(e.id)}));
  if(admin())rows.unshift({label:'＋ Nuovo extra per questa sede',open:()=>{$('newExtraBtn').click();$('extraClient').value=clientType(s);syncExtraClosureOptions($('extraClosureProfile'),clientType(s),clientType(s));renderExtraStoreOptions();$('extraStore').value=s.id;syncExtraDestinationUi()}});
  counterDialog('Extra · '+s.nome,'La chiusura di un extra non aggiorna l’ultimo passaggio ordinario né i giorni del taglio erba.',rows);
 }
@@ -2644,18 +2646,20 @@ function showCompletedToday(){
  counterDialog('Eseguiti e convalidati · '+fmt(today()),`${data.total} interventi: ${data.ordinary.length} ordinari e ${data.standalone.length} extra separati. ${data.linked.length} target/extra inclusi negli ordinari, senza doppio conteggio.`,[...ordinaryRows,...extraRows(data.standalone,'Extra'),...extraRows(data.linked,'Incluso nell’ordinario')]);
 }
 function renderStores(){
- if(typeof activeService!=='undefined'&&activeService==='pulizie'&&typeof renderCleaningStores==='function')return renderCleaningStores();
+ const cleaning=typeof activeService!=='undefined'&&activeService==='pulizie';
+ const serviceRows=cleaning?stores.filter(s=>clientType(s)==='eurospin'&&OvergreenCleaning.active(s,today())).map(cleaningStoreView):stores;
+ const programmedFor=id=>cleaning?cleaningStoreProgrammed(id):isStoreProgrammed(id);
  const q=$('searchInput').value.trim().toLowerCase(),sort=$('sortSelect').value;
- const todayStoreIds=new Set(completedToday().ordinary.map(i=>i.store_id));
+ const todayStoreIds=new Set(cleaning?cleaningRows().filter(e=>e.stato==='completato'&&OvergreenCleaning.day(e)===today()).map(e=>e.store_id):completedToday().ordinary.map(i=>i.store_id));
  document.querySelectorAll('[data-client-filter]').forEach(b=>b.classList.toggle('active',b.dataset.clientFilter===storeClientFilter));
  document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active',b.dataset.filter===storeFilter));
- const clientStores=stores.filter(s=>storeClientFilter==='all'||clientType(s)===storeClientFilter);
+ const clientStores=serviceRows.filter(s=>storeClientFilter==='all'||clientType(s)===storeClientFilter);
  let list=clientStores.filter(s=>`${s.nome} ${s.citta||''} ${s.indirizzo||''} ${clientLabel(s)}`.toLowerCase().includes(q));
- if(storeFilter!=='all')list=list.filter(s=>storeFilter==='reminders'?!!activeStoreReminder(s):storeFilter==='today'?todayStoreIds.has(s.id):storeFilter==='due'?isOverdueStore(s):storeFilter==='scheduled'?isStoreProgrammed(s.id):storeFilter==='urgent'?isUrgentStore(s):status(s)===storeFilter);
+ if(storeFilter!=='all')list=list.filter(s=>storeFilter==='reminders'?!!activeStoreReminder(s):storeFilter==='today'?todayStoreIds.has(s.id):storeFilter==='due'?isOverdueStore(s):storeFilter==='scheduled'?programmedFor(s.id):storeFilter==='urgent'?isUrgentStore(s):status(s)===storeFilter);
  list.sort((a,b)=>sort==='alpha'?a.nome.localeCompare(b.nome,'it'):compareStoreReminders(a,b)||OvergreenCounters.compare(a,b,today()));
  $('reminderCount').textContent=clientStores.filter(activeStoreReminder).length;
- $('storesList').innerHTML='';for(const s of list){const n=days(s.ultimo_passaggio),pending=interventions.some(i=>i.store_id===s.id&&i.stato==='in_attesa'),storeState=status(s),programmed=isStoreProgrammed(s.id);const c=document.createElement('article');c.className=`card store-card ${storeState}`;c.innerHTML=`<div class="status-bar"></div><div><div class="card-top"><div><h3 data-detail>${esc(s.nome)}</h3><p class="muted">${esc(s.citta||s.indirizzo||'')}</p></div><div class="days">${!storeHasInterval(s)?'Su richiesta':n===null?'—':n+' gg'}</div></div>${storeReminderMarkup(s)}${programmed?'<p class="programmed-label">📅 In programma</p>':''}${!storeHasInterval(s)?'<p class="muted"><strong>↪ Nessun intervallo · solo su richiesta</strong></p>':''}${pending?'<p class="pending">⏳ In attesa di convalida</p>':''}${s.site_type==='atm'&&s.importo_fisso!==null&&s.importo_fisso!==undefined?`<p class="muted"><strong>Importo fisso:</strong> ${esc(euro(s.importo_fisso))}</p>`:''}<p class="muted">Ultimo ordinario: ${fmt(s.ultimo_passaggio)}</p><div class="actions"><button class="secondary" data-map>Maps</button><button data-history>Storico</button><button class="secondary" data-site-extras>Extra della sede</button>${!pending?'<button data-done>Registra ordinario</button>':''}${admin()?'<button class="secondary" data-reminder>⚑ Sollecito</button><button class="secondary" data-share>Condividi</button><button class="secondary" data-edit>Modifica</button>':''}</div></div>`;
- c.querySelector('[data-detail]').onclick=()=>showStoreDetail(s);c.querySelector('[data-map]').onclick=()=>openStoreMaps(s);c.querySelector('[data-history]').onclick=()=>showHistory(s);c.querySelector('[data-site-extras]').onclick=()=>openSiteExtras(s);c.querySelector('[data-done]')?.addEventListener('click',()=>openDone(s));c.querySelector('[data-share]')?.addEventListener('click',()=>shareStoreExternally(s));c.querySelector('[data-edit]')?.addEventListener('click',()=>openStore(s));c.querySelector('[data-reminder]')?.addEventListener('click',()=>openStoreReminder(s));window.OvergreenCompact?.store(c);$('storesList').appendChild(c)}
+ $('storesList').innerHTML='';for(const s of list){const n=days(s.ultimo_passaggio),pending=cleaning?cleaningRows().some(e=>e.store_id===s.id&&e.stato==='in_attesa'):interventions.some(i=>i.store_id===s.id&&i.stato==='in_attesa'),storeState=status(s),programmed=programmedFor(s.id);const c=document.createElement('article');c.className=`card store-card ${storeState}`;c.innerHTML=`<div class="status-bar"></div><div><div class="card-top"><div><h3 data-detail>${esc(s.nome)}</h3><p class="muted">${esc(s.citta||s.indirizzo||'')}</p></div><div class="days">${!storeHasInterval(s)?'Su richiesta':n===null?'—':n+' gg'}</div></div>${storeReminderMarkup(s)}${programmed?'<p class="programmed-label">📅 In programma</p>':''}${!storeHasInterval(s)?'<p class="muted"><strong>↪ Nessun intervallo · solo su richiesta</strong></p>':''}${pending?'<p class="pending">⏳ In attesa di convalida</p>':''}${s.site_type==='atm'&&s.importo_fisso!==null&&s.importo_fisso!==undefined?`<p class="muted"><strong>Importo fisso:</strong> ${esc(euro(s.importo_fisso))}</p>`:''}<p class="muted">Ultimo ordinario: ${fmt(s.ultimo_passaggio)}</p><div class="actions"><button class="secondary" data-map>Maps</button><button data-history>Storico</button><button class="secondary" data-site-extras>Extra della sede</button>${!pending?'<button data-done>Registra ordinario</button>':''}${admin()?'<button class="secondary" data-reminder>⚑ Sollecito</button><button class="secondary" data-share>Condividi</button><button class="secondary" data-edit>Modifica</button>':''}</div></div>`;
+ c.querySelector('[data-detail]').onclick=()=>showStoreDetail(s);c.querySelector('[data-map]').onclick=()=>openStoreMaps(s);c.querySelector('[data-history]').onclick=()=>cleaning?showCleaningStoreHistory(s):showHistory(s);c.querySelector('[data-site-extras]').onclick=()=>openSiteExtras(s);c.querySelector('[data-done]')?.addEventListener('click',()=>cleaning?openCleaningOrdinary(s):openDone(s));c.querySelector('[data-share]')?.addEventListener('click',()=>shareStoreExternally(s));c.querySelector('[data-edit]')?.addEventListener('click',()=>openStore(stores.find(x=>x.id===s.id)||s));c.querySelector('[data-reminder]')?.addEventListener('click',()=>openStoreReminder(s));window.OvergreenCompact?.store(c);$('storesList').appendChild(c)}
  $('totalCount').textContent=clientStores.length;
  $('dueCount').textContent=clientStores.filter(isOverdueStore).length;
  $('warningCount').textContent=clientStores.filter(s=>status(s)==='warning').length;
@@ -2723,6 +2727,7 @@ async function compressImage(file){
 async function uploadFile(path,file){const {error}=await sb.storage.from('documenti').upload(path,file,{upsert:false,cacheControl:'3600'});if(error)throw error;return path}
 async function addAttachment(data){const {data:row,error}=await sb.from('attachments').insert(data).select().single();if(error)throw error;return row}
 async function showHistory(s,refreshOnly=false){
+ if(typeof activeService!=='undefined'&&activeService==='pulizie')return showCleaningStoreHistory(s);
  if(s)activateClient(clientType(s));
   currentHistoryStoreId=s.id;
   if(!refreshOnly&&!$('historyDialog').open)openDialog('historyDialog');
@@ -3306,13 +3311,13 @@ function openAddScheduleItems(schedule){
   renderAddSchedulePicker();openDialog('addScheduleItemsDialog');
 }
 function renderAddSchedulePicker(){
- if(typeof activeService!=='undefined'&&activeService==='pulizie'&&typeof renderCleaningSchedulePicker==='function')return renderCleaningSchedulePicker('addScheduleStores',schedules.find(s=>s.id===$('addScheduleId').value)?.giorno||today(),true);
+ const cleaning=typeof activeService!=='undefined'&&activeService==='pulizie';
   const scheduleId=$('addScheduleId').value,q=($('addScheduleSearch').value||'').toLowerCase(),box=$('addScheduleStores');if(!box)return;
-  const already=new Set(scheduleItems.filter(i=>i.schedule_id===scheduleId).map(i=>i.store_id));
+  const already=new Set((cleaning?cleaningRows().filter(e=>e.schedule_id===scheduleId&&OvergreenCleaning.contract(e)):scheduleItems).filter(i=>i.schedule_id===scheduleId).map(i=>i.store_id));
   const selected=new Set([...box.querySelectorAll('input:checked')].map(x=>x.value));box.innerHTML='';
-  const available=stores.filter(st=>planningMatches(st)&&!already.has(st.id)&&[st.nome,st.citta,st.indirizzo,storeSiteTypeLabel(st)].some(v=>String(v||'').toLowerCase().includes(q))).sort((a,b)=>compareStoreReminders(a,b)||String(a.nome||'').localeCompare(String(b.nome||''),'it'));
+  const available=stores.filter(st=>planningMatches(st)&&(!cleaning||OvergreenCleaning.active(st,schedules.find(s=>s.id===scheduleId)?.giorno||today()))&&!already.has(st.id)&&[st.nome,st.citta,st.indirizzo,storeSiteTypeLabel(st)].some(v=>String(v||'').toLowerCase().includes(q))).sort((a,b)=>compareStoreReminders(a,b)||String(a.nome||'').localeCompare(String(b.nome||''),'it'));
   for(const st of available){const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${st.id}" ${selected.has(st.id)?'checked':''}><span><strong>${esc(st.nome)}</strong>${storeReminderMarkup(st,schedules.find(s=>s.id===scheduleId)?.giorno)}<br><small>${esc([storeSiteTypeLabel(st),st.citta,st.indirizzo].filter(Boolean).join(' · '))}</small></span>`;box.appendChild(l)}
-  const existingExtras=existingExtrasForSchedulePicker(scheduleId).filter(planningMatches).filter(e=>!q||schedulePlannerExtraSearchText(e).includes(q)).sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||''),'it'));
+  const existingExtras=existingExtrasForSchedulePicker(scheduleId).filter(planningMatches).filter(e=>!cleaning||(e.categoria_target==='pulizie'&&!OvergreenCleaning.contract(e))).filter(e=>!q||schedulePlannerExtraSearchText(e).includes(q)).sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||''),'it'));
   for(const e of existingExtras){
     const value=`extra:${e.id}`,l=document.createElement('label'),st=stores.find(s=>s.id===e.store_id),oldSchedule=e.schedule_id?schedules.find(s=>s.id===e.schedule_id):null;
     const oldDate=oldSchedule?.giorno||e.giorno_intervento||null;
@@ -3320,6 +3325,7 @@ function renderAddSchedulePicker(){
     l.innerHTML=`<input type="checkbox" value="${value}" ${selected.has(value)?'checked':''}><span><strong>🔧 ${esc(e.titolo||'Extra')}</strong><br><small>${esc([clientLabel(e),e.numero_target?`Target/Ticket ${e.numero_target}`:null,st?.nome||e.nome_esterno||e.indirizzo_esterno||'Extra senza sede'].filter(Boolean).join(' · '))}</small><br><small class="muted">${esc(placement)}</small>${deadlineLabel(e)}</span>`;
     box.appendChild(l)
   }
+  if(cleaning)box.querySelectorAll('input[type=checkbox]').forEach(input=>input.setAttribute('data-clean-store',''));
   if(!available.length&&!existingExtras.length)box.innerHTML='<p class="muted">Nessun altro lavoro disponibile.</p>';
 }
 function extraMatchesScheduleDate(e){
@@ -3347,7 +3353,7 @@ function schedulePickerMatchesStore(st,q,pickerClient){
   return schedulePickerMode!=='selected'||schedulePickerSelected.has(st.id);
 }
 function schedulePickerMatchesExtra(e,q,pickerClient){
- if(typeof activeService!=='undefined'&&activeService==='pulizie'&&e.categoria_target!=='pulizie')return false;
+ if(typeof activeService!=='undefined'&&activeService==='pulizie'&&(e.categoria_target!=='pulizie'||OvergreenCleaning.contract(e)))return false;
   const value=`extra:${e.id}`;
   if(pickerClient!=='all'&&clientType(e)!==pickerClient)return false;
   if(schedulePickerLetter&&!String(e.titolo||'Extra').trim().toLocaleUpperCase('it').startsWith(schedulePickerLetter))return false;
@@ -3925,7 +3931,7 @@ function schedulePlannerExtraSearchText(e){
   return [e.titolo,e.numero_target,e.descrizione,e.nome_esterno,e.indirizzo_esterno,clientLabel(e),extraCategoryLabel(e),st?.nome,st?.citta,st?.indirizzo].filter(Boolean).join(' ').toLowerCase();
 }
 function renderSchedulePicker(){
- if(typeof activeService!=='undefined'&&activeService==='pulizie'&&typeof renderCleaningSchedulePicker==='function')return renderCleaningSchedulePicker();
+ const cleaning=typeof activeService!=='undefined'&&activeService==='pulizie';
   const q=String($('scheduleSearch')?.value||'').trim().toLowerCase(),w=$('scheduleStores');if(!w)return;
   const pickerClient=$('schedulePickerClient')?.value||'all';
   w.innerHTML='';
@@ -3955,14 +3961,14 @@ function renderSchedulePicker(){
     group.innerHTML=`<summary><span>${esc(label)}</span><b>${rows.length}</b></summary><div class="picker-group-list"></div>`;
     const body=group.querySelector('.picker-group-list');
     for(const st of rows){
-      const l=document.createElement('label'),programmed=isStoreProgrammed(st.id);
-      l.innerHTML=`<input type="checkbox" value="${st.id}" ${schedulePickerSelected.has(st.id)?'checked':''}><span><strong>${esc(st.nome)}</strong>${storeReminderMarkup(st,$('scheduleDate').value)}${programmed?' <em class="picker-programmed">Già in programma</em>':''}${!storeHasInterval(st)?' <em class="picker-programmed">Solo su richiesta</em>':''}<small>${esc([storeSiteTypeLabel(st),st.citta,st.indirizzo].filter(Boolean).join(' · ')||'Nessun indirizzo')}</small></span>`;
-      l.querySelector('input').onchange=e=>setSchedulePickerValue(st.id,e.target.checked);body.appendChild(l)
+      const l=document.createElement('label'),programmed=cleaning?cleaningStoreProgrammed(st.id):isStoreProgrammed(st.id);
+      l.innerHTML=`<input type="checkbox" value="${st.id}" ${schedulePickerSelected.has(st.id)?'checked':''}><span><strong>${esc(st.nome)}</strong>${storeReminderMarkup(st,$('scheduleDate').value)}${programmed?' <em class="picker-programmed">Già in programma</em>':''}${!cleaning&&!storeHasInterval(st)?' <em class="picker-programmed">Solo su richiesta</em>':''}<small>${esc([storeSiteTypeLabel(st),st.citta,st.indirizzo].filter(Boolean).join(' · ')||'Nessun indirizzo')}</small></span>`;
+      l.querySelector('input').onchange=e=>{setSchedulePickerValue(st.id,e.target.checked);if(cleaning)l.nextElementSibling.hidden=!e.target.checked};body.appendChild(l);if(cleaning){l.querySelector('input').setAttribute('data-clean-store','');const wrap=document.createElement('div');wrap.innerHTML=cleaningPlanOptions(st,$('scheduleDate').value||tomorrow());const options=wrap.firstElementChild;options.hidden=!schedulePickerSelected.has(st.id);options.querySelectorAll('[data-clean-codes]').forEach(input=>input.onchange=()=>cleaningPlanDrafts.set(st.id,selectedCleaningCodes(options)));body.appendChild(options)}
     }
     w.appendChild(group)
   }
 
-  const standalone=standaloneExtrasForPlanner().filter(e=>schedulePickerMatchesExtra(e,q,pickerClient)).sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||''),'it'));
+  const standalone=standaloneExtrasForPlanner().filter(e=>schedulePickerMatchesExtra(e,q,pickerClient)&&(!cleaning||!OvergreenCleaning.contract(e))).sort((a,b)=>String(a.titolo||'').localeCompare(String(b.titolo||''),'it'));
   if(standalone.length){resultCount+=standalone.length;
     const group=document.createElement('details');group.className='picker-group extras';group.open=true;
     group.innerHTML=`<summary><span>🔧 Extra senza sede</span><b>${standalone.length}</b></summary><div class="picker-group-list"></div>`;
@@ -5956,7 +5962,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=310').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=311').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

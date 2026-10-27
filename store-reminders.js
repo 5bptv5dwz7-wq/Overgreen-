@@ -1,6 +1,6 @@
 // V234: an explicit customer request is independent of the routine visit interval.
 let storeReminders=[];
-function activeStoreReminder(store){return storeReminders.find(r=>r.store_id===store?.id&&r.active)||null}
+function activeStoreReminder(store){return storeReminders.find(r=>r.store_id===store?.id&&r.active&&(r.service||'verde')===(typeof activeService!=='undefined'?activeService:'verde'))||null}
 function compareStoreReminders(a,b){
  const ra=activeStoreReminder(a),rb=activeStoreReminder(b);
  if(!ra||!rb)return ra?-1:rb?1:0;
@@ -15,6 +15,7 @@ function storeReminderMarkup(store,plannedDate=null){
 }
 function storeReminderPlanStatus(store){
  const r=activeStoreReminder(store);
+ if(typeof activeService!=='undefined'&&activeService==='pulizie'){const visits=cleaningRows().filter(e=>e.store_id===store.id&&OvergreenCleaning.contract(e)&&!['completato','annullato'].includes(e.stato));if(visits.some(e=>e.stato==='in_attesa'))return 'Passaggio eseguito · in attesa di convalida';const dates=visits.map(OvergreenCleaning.day).filter(Boolean).sort();return dates.length?'In programma: '+dates.map(fmt).join(', '):'Da programmare'}
  const pending=interventions.some(i=>i.store_id===store.id&&i.stato==='in_attesa'&&!i.multi_day_open&&Date.parse(i.closed_at||i.created_at)>=Date.parse(r.requested_at)&&(i.data_fine||i.data_intervento)>=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(r.requested_at)));
  if(pending)return 'Passaggio eseguito · in attesa di convalida';
  const dates=scheduleItems.filter(i=>i.store_id===store.id&&i.tipo==='ordinario'&&effectiveScheduleState(i)==='da_fare').map(i=>schedules.find(s=>s.id===i.schedule_id)?.giorno).filter(Boolean).sort();
@@ -45,7 +46,7 @@ function prepareStoreReminderPlan(store){
 }
 function openStoreReminder(store){
  if(!admin()||!store)return;
- const r=activeStoreReminder(store);$('storeReminderId').value=store.id;$('storeReminderTitle').textContent=`Sollecito · ${store.nome}`;
+ const r=activeStoreReminder(store);$('storeReminderForm').dataset.service=typeof activeService!=='undefined'?activeService:'verde';$('storeReminderId').value=store.id;$('storeReminderTitle').textContent=`Sollecito · ${store.nome}`;
  $('storeReminderDate').value=r?.due_date||'';$('storeReminderNote').value=r?.note||'';$('removeStoreReminder').hidden=!r;
  openDialog('storeReminderDialog');
 }
@@ -55,7 +56,7 @@ async function saveStoreReminder(remove=false){
  if(remove&&!confirm(`Rimuovere il sollecito di ${st.nome}?`))return;
  await withFormBusy('storeReminderForm',async()=>{
   try{
-   const r=await sb.rpc('overgreen_set_store_reminder_v234',{p_store_id:id,p_due_date:remove?null:($('storeReminderDate').value||null),p_note:remove?null:($('storeReminderNote').value.trim()||null),p_active:!remove});
+   const r=await sb.rpc($('storeReminderForm').dataset.service==='pulizie'?'overgreen_set_cleaning_reminder_v311':'overgreen_set_store_reminder_v234',{p_store_id:id,p_due_date:remove?null:($('storeReminderDate').value||null),p_note:remove?null:($('storeReminderNote').value.trim()||null),p_active:!remove});
    if(r.error)throw r.error;
    $('storeReminderDialog').close();await loadAll();toast(remove?'Sollecito rimosso':'Sollecito salvato e visibile alla squadra');
   }catch(error){alert('Sollecito non salvato: '+error.message)}

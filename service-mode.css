@@ -22,3 +22,24 @@ body.service-cleaning .dashboard-line-job.ordinary [data-done]{background:#08703
 .cleaning-contract-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;background:#fff;border:1px solid #dce6ef;border-radius:12px}
 .cleaning-contract-row label{display:flex;align-items:center;gap:10px;margin:0}.cleaning-contract-row input{width:auto;accent-color:#1568c5}.cleaning-contract-row small{display:block;color:#687b8c;margin-top:3px}
 .cleaning-contract-row button{font-size:12px;flex-shrink:0}@media(max-width:480px){.cleaning-contract-row{align-items:flex-start;flex-wrap:wrap}.cleaning-contract-row button{margin-left:25px}}
+/* V310: compact planning list, readable on phones. */
+body.service-cleaning{--muted:#64788e;color:#213b55}
+body.service-cleaning .ogm-launch{background:linear-gradient(115deg,#124278,#1568c5)!important}
+body.service-cleaning .route-endpoints-panel>summary,body.service-cleaning .route-endpoint>strong,body.service-cleaning .journey-endpoint-card strong{color:#174d84}
+body.service-cleaning .route-endpoint-shortcuts button,body.service-cleaning .route-endpoint-search button{background:#eef5ff!important;color:#174d84!important;border-color:#d4e2f2!important}
+body.service-cleaning .secondary{color:#174d84;background-color:#eef5ff;border-color:#d4e2f2}
+body.service-cleaning input[type=checkbox]{accent-color:#1568c5}
+body.service-cleaning :is(#scheduleStores,#addScheduleStores){gap:0}
+body.service-cleaning .cleaning-picker-site{padding:10px 4px;margin:0;border:0;border-bottom:1px solid #e0e8f1;border-radius:0;box-shadow:none}
+body.service-cleaning .cleaning-picker-site>label{display:flex;align-items:center;gap:10px;margin:0;min-height:40px;font-size:14px;line-height:1.3;background:transparent}
+body.service-cleaning .cleaning-picker-site>label>span{min-width:0}
+body.service-cleaning .cleaning-picker-site>label input{width:20px;height:20px;flex:0 0 20px;margin:0}
+body.service-cleaning .cleaning-picker-site strong{font-size:14px;color:#213b55}
+body.service-cleaning .cleaning-picker-site small{font-size:12px;font-weight:400;margin-top:3px;line-height:1.35}
+.cleaning-plan-options[hidden]{display:none!important}
+.cleaning-target-detail{margin:3px 0 0 30px;font-size:12px;color:#64788e}
+.cleaning-target-detail summary{cursor:pointer;padding:4px 0;color:#175d9f}
+.cleaning-target-detail p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;font-size:13px;margin:8px 0}
+body.service-cleaning #app main .secondary,body.service-cleaning #scheduleSelectedCount,body.service-cleaning .fleet-badge{background:#eef5ff;color:#174d84;border-color:#d4e2f2}
+body.service-cleaning #app main #scheduleView .schedule-toolbar{background:#eef5ff}
+body.service-cleaning #scheduleStores .cleaning-picker-site>label,body.service-cleaning #addScheduleStores .cleaning-picker-site>label{border-radius:0;background:transparent;color:#213b55;padding:3px!important}

@@ -21,7 +21,7 @@ function cleaningPlannedCodes(store,day){
 }
 function cleaningPlanOptions(store,day){
  const codes=cleaningPlannedCodes(store,day),slot=OvergreenCleaning.slots(cleaningRows(),store.id,day.slice(0,4));
- return `<details class="cleaning-plan-options"><summary>Previste: ${esc(codes.join(' + '))} · D/2 libere ${slot.free}/2</summary>${cleaningCodeChoices(codes,'plan-'+store.id,slot.free===0&&!codes.includes('D/2'))}</details>`;
+ return `<details class="cleaning-plan-options"><summary>Lavorazioni previste</summary>${cleaningCodeChoices(codes,'plan-'+store.id,slot.free===0&&!codes.includes('D/2'))}<small>Semestrali disponibili: ${slot.free} su 2. Confermerai le lavorazioni eseguite alla chiusura.</small></details>`;
 }
 function cleaningCodeChoices(codes,prefix,disableSemester=false){return [
  ['weekly','Settimanale · A/1 + A/2',['A/1','A/2']],['c1','Mensile · C/1',['C/1']],['c2','Mensile · C/2',['C/2']],['d2','Semestrale · D/2',['D/2']]
@@ -35,11 +35,12 @@ function renderCleaningSchedulePicker(target='scheduleStores',day=$('scheduleDat
  for(const st of sites){
   const row=document.createElement('div');row.className='cleaning-picker-site';const planned=cleaningRows().find(e=>e.store_id===st.id&&e.giorno_intervento===day&&!['annullato','completato'].includes(e.stato));
   row.innerHTML=`<label><input type="checkbox" data-clean-store value="${st.id}" ${selected.has(st.id)?'checked':''}><span><strong>${esc(st.nome)}</strong><small>${esc([st.citta,st.indirizzo].filter(Boolean).join(' · '))}${planned?' · Pulizia già in programma':''}</small></span></label>${cleaningPlanOptions(st,day)}`;
-  row.querySelector('[data-clean-store]').onchange=e=>{if(add){e.target.checked?cleaningAddSelection.add(st.id):cleaningAddSelection.delete(st.id)}else setSchedulePickerValue(st.id,e.target.checked)};
-  row.querySelectorAll('[data-clean-codes]').forEach(input=>input.onchange=()=>{cleaningPlanDrafts.set(st.id,selectedCleaningCodes(row));row.querySelector('summary').textContent='Previste: '+cleaningPlanDrafts.get(st.id).join(' + ')});box.appendChild(row);
+  row.querySelector('.cleaning-plan-options').hidden=!selected.has(st.id);
+  row.querySelector('[data-clean-store]').onchange=e=>{row.querySelector('.cleaning-plan-options').hidden=!e.target.checked;if(add){e.target.checked?cleaningAddSelection.add(st.id):cleaningAddSelection.delete(st.id)}else setSchedulePickerValue(st.id,e.target.checked)};
+  row.querySelectorAll('[data-clean-codes]').forEach(input=>input.onchange=()=>{cleaningPlanDrafts.set(st.id,selectedCleaningCodes(row));row.querySelector('summary').textContent='Lavorazioni previste'});box.appendChild(row);
  }
  const available=add?existingExtrasForSchedulePicker($('addScheduleId').value):standaloneExtrasForPlanner();
- for(const e of available.filter(e=>e.categoria_target==='pulizie'&&clientType(e)==='eurospin'&&!OvergreenCleaning.contract(e)&&(!q||schedulePlannerExtraSearchText(e).includes(q)))){const l=document.createElement('label'),value='extra:'+e.id;l.innerHTML=`<input type="checkbox" data-clean-store value="${value}" ${selected.has(value)?'checked':''}><span>${esc(e.titolo)} · Target</span>`;l.querySelector('input').onchange=ev=>{if(add){ev.target.checked?cleaningAddSelection.add(value):cleaningAddSelection.delete(value)}else setSchedulePickerValue(value,ev.target.checked)};box.appendChild(l)}
+ for(const e of available.filter(e=>e.categoria_target==='pulizie'&&clientType(e)==='eurospin'&&!OvergreenCleaning.contract(e)&&(!q||schedulePlannerExtraSearchText(e).includes(q)))){const l=document.createElement('div'),value='extra:'+e.id,st=stores.find(s=>s.id===e.store_id);l.className='cleaning-picker-site cleaning-picker-target';l.innerHTML=`<label><input type="checkbox" data-clean-store value="${value}" ${selected.has(value)?'checked':''}><span><strong>${esc(st?.nome||e.nome_esterno||'Sede non indicata')}</strong><small>Target${e.numero_target?' · '+esc(e.numero_target):''}</small></span></label><details class="cleaning-target-detail"><summary>Descrizione richiesta</summary><p>${esc(e.titolo||'')}${e.descrizione&&e.descrizione!==e.titolo?'<br>'+esc(e.descrizione):''}</p></details>`;l.querySelector('input').onchange=ev=>{if(add){ev.target.checked?cleaningAddSelection.add(value):cleaningAddSelection.delete(value)}else setSchedulePickerValue(value,ev.target.checked)};box.appendChild(l)}
  if(!sites.length){const p=document.createElement('p');p.textContent='Nessun PV con affidamento pulizie attivo in questa data. Gestisci le sedi dal menu Affidamenti pulizie.';box.appendChild(p)}
  if(!add)updateScheduleSelectedCount();
 }

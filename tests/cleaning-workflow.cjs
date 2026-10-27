@@ -50,6 +50,8 @@ test('V309 UI: service switch, only entrusted sites, ordinary payload conversion
  c.capture=x=>captured=x;
  run(`sb.rpc=async(name,p)=>{capture({name,p});return {data:{id:'schedule'}}};session={user:{id:'admin'}};profile=realProfile={id:'admin',ruolo:'admin',attivo:true};profiles=[profile];stores=[{id:'s',nome:'AFFIDATO',client_type:'eurospin',attivo:true,cleaning_enabled:true,cleaning_start:'2026-01-01'},{id:'n',nome:'SOLO VERDE',client_type:'eurospin',attivo:true}];extras=[];switchService('pulizie');setView('schedule');`);
  assert(c.document.body.classList.contains('service-cleaning'));assert.match(c.document.getElementById('scheduleStores').textContent,/AFFIDATO/);assert.doesNotMatch(c.document.getElementById('scheduleStores').textContent,/SOLO VERDE/);
+ const options=c.document.querySelector('#scheduleStores .cleaning-plan-options');assert.equal(options.hidden,true);assert.equal(options.querySelector('summary').textContent,'Lavorazioni previste');
+ const checkbox=c.document.querySelector('#scheduleStores [data-clean-store]');checkbox.checked=true;checkbox.onchange({target:checkbox});assert.equal(options.hidden,false);
  run(`setSchedulePickerValue('s',true);cleaningPlanDrafts.set('s',['A/1','A/2','D/2']);`);
  await run(`adminOperation('schedule_create',{members:['admin'],stores:['s'],extras:[],day:'2026-10-27'})`);assert.equal(captured.name,'overgreen_cleaning_plan_v309');assert.equal(captured.p.p_payload.cleaning_stores[0].id,'s');
  run(`renderCleaningClosure({id:'visit',store_id:'s',cleaning_codes:['A/1','A/2'],stato:'programmato'});`);assert.equal(c.document.querySelectorAll('#cleaningClosureChoices [data-clean-codes]').length,4);assert.match(c.document.getElementById('closeExtraTitle').textContent,/pulizia/);

@@ -1,4 +1,4 @@
-const APP_VERSION='V317';
+const APP_VERSION='V318';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -2607,13 +2607,13 @@ function renderDailyReport(){
 function matchingStoresForBulkInterval(){
   const client=$('bulkIntervalClient')?.value||'eurospin';
   const siteType=$('bulkIntervalSiteType')?.value||'all';
-  return stores.filter(s=>clientType(s)===client&&(siteType==='all'||(s.site_type||'punto_vendita')===siteType));
+  return stores.filter(s=>storeHasInterval(s)&&clientType(s)===client&&(siteType==='all'||(s.site_type||'punto_vendita')===siteType));
 }
 function updateBulkIntervalPreview(){
   const box=$('bulkIntervalPreview');if(!box)return;
   const matches=matchingStoresForBulkInterval();
   const days=Math.max(1,Number($('bulkIntervalDays')?.value)||0);
-  box.innerHTML=`<strong>${matches.length} sedi interessate</strong><span>Il nuovo intervallo sarà di ${days} giorni.</span>`;
+  box.innerHTML=`<strong>${matches.length} sedi interessate</strong><span>Il nuovo intervallo sarà di ${days} giorni. Le sedi solo extra / su richiesta sono escluse.</span>`;
 }
 function openBulkIntervalDialog(){
  if(typeof serviceForView==='function'&&serviceForView()==='pulizie'){cleaningTab='due';setView('cleaning');return;}
@@ -2658,7 +2658,7 @@ function renderStores(){
  document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active',b.dataset.filter===storeFilter));
  const clientStores=serviceRows.filter(s=>storeClientFilter==='all'||clientType(s)===storeClientFilter);
  let list=clientStores.filter(s=>`${s.nome} ${s.citta||''} ${s.indirizzo||''} ${clientLabel(s)}`.toLowerCase().includes(q));
- if(storeFilter!=='all')list=list.filter(s=>storeFilter==='reminders'?!!activeStoreReminder(s):storeFilter==='today'?todayStoreIds.has(s.id):storeFilter==='due'?isOverdueStore(s):storeFilter==='scheduled'?programmedFor(s.id):storeFilter==='urgent'?isUrgentStore(s):status(s)===storeFilter);
+ if(storeFilter!=='all')list=list.filter(s=>storeFilter==='request'?!storeHasInterval(s):storeFilter==='reminders'?!!activeStoreReminder(s):storeFilter==='today'?todayStoreIds.has(s.id):storeFilter==='due'?isOverdueStore(s):storeFilter==='scheduled'?programmedFor(s.id):storeFilter==='urgent'?isUrgentStore(s):status(s)===storeFilter);
  list.sort((a,b)=>sort==='alpha'?a.nome.localeCompare(b.nome,'it'):compareStoreReminders(a,b)||OvergreenCounters.compare(a,b,today()));
  $('reminderCount').textContent=clientStores.filter(activeStoreReminder).length;
  $('storesList').innerHTML='';for(const s of list){const n=days(s.ultimo_passaggio),pending=cleaning?(cleaningIndex.get(s.id)||[]).some(e=>OvergreenCleaning.contract(e)&&e.stato==='in_attesa'):interventions.some(i=>i.store_id===s.id&&i.stato==='in_attesa'),storeState=status(s),programmed=programmedFor(s.id);const c=document.createElement('article');c.className=`card store-card ${storeState}`;c.innerHTML=`<div class="status-bar"></div><div><div class="card-top"><div><h3 data-detail>${esc(s.nome)}</h3><p class="muted">${esc(s.citta||s.indirizzo||'')}</p></div><div class="days">${!storeHasInterval(s)?'Su richiesta':n===null?'—':n+' gg'}</div></div>${storeReminderMarkup(s)}${programmed?'<p class="programmed-label">📅 In programma</p>':''}${!storeHasInterval(s)?'<p class="muted"><strong>↪ Nessun intervallo · solo su richiesta</strong></p>':''}${pending?'<p class="pending">⏳ In attesa di convalida</p>':''}${s.site_type==='atm'&&s.importo_fisso!==null&&s.importo_fisso!==undefined?`<p class="muted"><strong>Importo fisso:</strong> ${esc(euro(s.importo_fisso))}</p>`:''}<p class="muted">Ultimo ordinario: ${fmt(s.ultimo_passaggio)}</p><div class="actions"><button class="secondary" data-map>Maps</button><button data-history>Storico</button><button class="secondary" data-site-extras>Extra della sede</button>${!pending?'<button data-done>Registra ordinario</button>':''}${admin()?'<button class="secondary" data-reminder>⚑ Sollecito</button><button class="secondary" data-share>Condividi</button><button class="secondary" data-edit>Modifica</button>':''}</div></div>`;
@@ -2680,7 +2680,30 @@ function renderWorkers(){
 }
 function syncStoreIntervalUi(){const off=$('storeNoInterval')?.checked===true;if($('storeInterval')){$('storeInterval').disabled=off;$('storeInterval').required=!off}}
 function syncStoreTypeUi(){const atm=$('storeSiteType')?.value==='atm';$('storeFixedAmountWrap')?.classList.toggle('hidden',!atm);if(!atm&&$('storeFixedAmount'))$('storeFixedAmount').value=''}
-function openStore(s=null){if(s)activateClient(clientType(s));$('storeForm').reset();$('storeId').value=s?.id||'';$('storeClient').value=s?clientType(s):activeClient;$('storeSiteType').value=s?.site_type||'punto_vendita';$('storeFixedAmount').value=s?.importo_fisso??'';$('storeName').value=s?.nome||'';$('storeAddress').value=s?.indirizzo||'';$('storeCity').value=s?.citta||'';$('storeAddress').dataset.originalValue=s?.indirizzo||'';$('storeCity').dataset.originalValue=s?.citta||'';$('storeAddress').dataset.lookupLat='';$('storeAddress').dataset.lookupLon='';$('storeAddress').dataset.lookupLabel='';if($('storeAddressLookupStatus')){$('storeAddressLookupStatus').textContent='';$('storeAddressLookupStatus').classList.add('hidden')}$('storeLast').value=s?.ultimo_passaggio||'';const noInterval=!!s&&!storeHasInterval(s);$('storeNoInterval').checked=noInterval;$('storeInterval').value=storeHasInterval(s)?Number(s.intervallo_giorni):15;$('storeNotes').value=s?.note||'';syncStoreTypeUi();syncStoreIntervalUi();locationEditor().open(s);openDialog('storeDialog')}
+function openStore(s=null){delete $('storeForm').dataset.extraOrigin;$('storeClient').disabled=false;if(s)activateClient(clientType(s));$('storeForm').reset();$('storeId').value=s?.id||'';$('storeClient').value=s?clientType(s):activeClient;$('storeSiteType').value=s?.site_type||'punto_vendita';$('storeFixedAmount').value=s?.importo_fisso??'';$('storeName').value=s?.nome||'';$('storeAddress').value=s?.indirizzo||'';$('storeCity').value=s?.citta||'';$('storeAddress').dataset.originalValue=s?.indirizzo||'';$('storeCity').dataset.originalValue=s?.citta||'';$('storeAddress').dataset.lookupLat='';$('storeAddress').dataset.lookupLon='';$('storeAddress').dataset.lookupLabel='';if($('storeAddressLookupStatus')){$('storeAddressLookupStatus').textContent='';$('storeAddressLookupStatus').classList.add('hidden')}$('storeLast').value=s?.ultimo_passaggio||'';const noInterval=!!s&&!storeHasInterval(s);$('storeNoInterval').checked=noInterval;$('storeInterval').value=storeHasInterval(s)?Number(s.intervallo_giorni):15;$('storeNotes').value=s?.note||'';syncStoreTypeUi();syncStoreIntervalUi();locationEditor().open(s);openDialog('storeDialog')}
+function openExtraStore(prefix){
+  if(!admin())return;
+  openStore();
+  $('storeForm').dataset.extraOrigin=prefix;
+  $('storeClient').value=$(prefix+'Client').value;
+  $('storeClient').disabled=true;
+  const external=$(prefix+'Destination').value==='external';
+  $('storeName').value=external?$(prefix+'ExternalName').value:$(prefix+'StoreSearch').value.trim();
+  $('storeAddress').value=external?$(prefix+'ExternalAddress').value:'';
+  $('storeNoInterval').checked=true;
+  syncStoreIntervalUi();locationEditor().open(null);
+}
+function selectExtraStore(prefix,store){
+  if(!prefix)return;
+  // Keep every other field (including the uploaded PDF) in the open extra form.
+  $(prefix+'StoreSearch').value='';
+  $(prefix+'Destination').value='store';
+  if(prefix==='extra'){renderExtraStoreOptions(store.id);syncExtraDestinationUi()}
+  else{renderExtraEditStoreOptions(store.id);toggleExtraEditDestination()}
+  $(prefix+'Store').value=store.id;
+}
+$('extraNewStore')?.addEventListener('click',()=>openExtraStore('extra'));
+$('extraEditNewStore')?.addEventListener('click',()=>openExtraStore('extraEdit'));
 $('storeNoInterval')?.addEventListener('change',syncStoreIntervalUi);
 $('storeSiteType')?.addEventListener('change',syncStoreTypeUi);
 function ordinaryAssignedWorkerIds(scheduleItemId){
@@ -4907,13 +4930,14 @@ $('bulkIntervalForm').onsubmit=async e=>{e.preventDefault();
   const label=clientLabel({client_type:client});
   const detail=siteType==='all'?'tutte le sedi':$('bulkIntervalSiteType').selectedOptions[0].text.toLowerCase();
   if(!confirm(`Vuoi impostare l’intervallo a ${days} giorni per ${matches.length} ${detail} di ${label}?`))return;
-  let q=sb.from('stores').update({intervallo_giorni:days}).eq('client_type',client);
+  let q=sb.from('stores').update({intervallo_giorni:days}).eq('client_type',client).in('id',matches.map(s=>s.id));
   if(siteType!=='all')q=q.eq('site_type',siteType);
   const {error}=await q;if(error)return alert('Impossibile aggiornare gli intervalli: '+error.message);
   $('bulkIntervalDialog').close();toast(`Intervallo aggiornato per ${matches.length} sedi`);await loadAll();
 };
 $('storeForm').onsubmit=async e=>{
   e.preventDefault();await withFormBusy('storeForm',async()=>{
+    const extraOrigin=$('storeForm').dataset.extraOrigin;
     const id=$('storeId').value,address=$('storeAddress').value.trim(),city=$('storeCity').value.trim();
     const payload={client_type:$('storeClient').value,site_type:$('storeSiteType').value,
       importo_fisso:$('storeSiteType').value==='atm'&&$('storeFixedAmount').value!==''?Number($('storeFixedAmount').value):null,
@@ -4924,7 +4948,12 @@ $('storeForm').onsubmit=async e=>{
     const query=id?sb.from('stores').update(payload).eq('id',id):sb.from('stores').insert(payload);
     const {data,error}=await query.select('id').single();if(error)throw error;if(!data?.id)throw new Error('Sede non salvata. Verifica i permessi e riprova.');
     travelRenderToken++;scheduleTravelRenderToken++;
-    $('storeDialog').close();toast('Sede e posizione salvate');await loadAll();
+    const saved={...payload,id:data.id,attivo:true};
+    const existing=stores.find(s=>s.id===saved.id);
+    if(existing)Object.assign(existing,saved);else stores.push(saved);
+    selectExtraStore(extraOrigin,saved);
+    $('storeDialog').close();toast('Sede e posizione salvate');
+    try{await loadAll()}catch(error){console.warn('Aggiornamento dopo salvataggio sede',error);toast('Sede salvata. Aggiorna i dati quando torna la connessione.');}
   });
 };
 $('doneHasNextVisitNote').onchange=e=>{$('doneNextVisitWrap').classList.toggle('hidden',!e.target.checked);if(!e.target.checked)$('doneNextVisitNote').value=''};
@@ -5994,7 +6023,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=317').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=318').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

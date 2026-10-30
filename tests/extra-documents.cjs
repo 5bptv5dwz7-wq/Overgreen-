@@ -21,7 +21,7 @@ function saving(options={}){
  const workerRows=options.workerRows||[],workerWrites=[];
  // Document tests assume an authorized assignment; permission rules are tested in extra-readonly.cjs.
  const c=h.context;Object.assign(c,{extraDraftRestoring:false,recoveredGenericFile:null,saveCurrentExtraDraft:async()=>{},extraDrafts:{remove:async()=>{}},confirmExtraDateExecution:()=>true,canWorkOnExtra:()=>true,$,crypto:require('node:crypto'),attachments:[],extras:[{id:'extra1'}],extraWorkers:workerRows.map(w=>({...w})),profiles:[{id:'worker1',nome:'Mario',attivo:true},{id:'worker2',nome:'Gianni',attivo:true},{id:'inactive',nome:'Ex operatore',attivo:false}],profile:{id:'worker1'},admin:()=>!!options.admin,esc:s=>s,today:()=> '2026-10-03',closeExtraPhotoFiles:[],combinedExtraClosureQueue:[],workItemsForExtra:()=>[],structuredCloseRows:()=>[],renderCloseExtraPhotoSelection(){},toast(){},alert:m=>h.errors.push(m),refreshAfterSave:async()=>{},notifyAdminClosure:(...v)=>notifications.push(v),sb:{async rpc(name,args){
-   assert.equal(name,'overgreen_close_extra_v271');
+   assert.equal(name,options.defer?'overgreen_close_extra_deferred_v316':'overgreen_close_extra_v271');
    if(options.failWorkers&&args.p_workers)return {error:new Error('Squadra non salvata')};
    if(options.failClose)return {error:new Error('Chiusura non salvata')};
    if(args.p_workers){const old=workerRows.map(w=>w.profile_id),wanted=Array.from(args.p_workers);if(wanted.some(id=>!old.includes(id)))workerWrites.push('insert');if(old.some(id=>!wanted.includes(id)))workerWrites.push('delete');workerRows.splice(0,workerRows.length,...wanted.map(profile_id=>({extra_id:args.p_extra_id,profile_id})));}
@@ -118,3 +118,6 @@ test('V223 invalid night hours block uploads and unchecked night work explicitly
  h.$('closeExtraNightEnabled').checked=false;h.context.syncExtraNightWork();await h.context.saveExtraPartial();
  assert.equal(h.updates[0].night_hours,0);assert(h.$('closeExtraNightHours').disabled);
 });
+
+test('admin explicitly defers both reports and uses protected closure RPC',async()=>{const h=saving({admin:true,defer:true});chooseClosure(h);h.api.reset();h.$('closeExtraDeferReports').checked=true;await h.submit();assert.deepEqual(h.errors,[]);assert.equal(h.uploads.length,0);assert.equal(h.updates.length,1);});
+test('worker cannot bypass required reports by setting deferred checkbox',async()=>{const h=saving();h.$('closeExtraDeferReports').checked=true;await h.submit();assert.match(h.errors[0],/rapportino Eurospin/);assert.equal(h.updates.length,0);});

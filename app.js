@@ -1,4 +1,4 @@
-const APP_VERSION='V316';
+const APP_VERSION='V317';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -4128,9 +4128,10 @@ async function buildExtraClosurePdfBlob(e,packageQuality=.68,packageMaxSide=1500
 
 
 async function generateExtraClosurePdf(e,button){
+  if(!admin())return;
   await ensureLibraries('PDFLib');
   const reportEurospin=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_eurospin'),reportOvergreen=attachments.find(a=>a.extra_id===e.id&&a.tipo==='rapportino_overgreen'),requestFile=attachments.find(a=>a.extra_id===e.id&&a.tipo==='pdf_richiesta');
-  if(!requestFile||!reportOvergreen||!reportEurospin)return alert('Per generare la chiusura servono il file richiesta, il file Overgreen e il file Eurospin.');
+  if(!requestFile)return alert('Per generare la chiusura serve il file richiesta. I rapportini possono essere inseriti successivamente.');
   if(!window.PDFLib)return alert('La libreria PDF non è ancora caricata. Aggiorna la pagina e riprova.');
   const old=button?.textContent;if(button){button.disabled=true;button.textContent='Generazione…'}
   try{
@@ -4176,7 +4177,8 @@ async function generateExtraClosurePdf(e,button){
       }
     }
     page.drawText('Generato da Overgreen Cloud',{x:margin,y:22,size:8,font:regular,color:muted});
-    await appendAttachmentAsFullPage(doc,requestFile);await appendAttachmentAsFullPage(doc,reportOvergreen);await appendAttachmentAsFullPage(doc,reportEurospin);
+    // The single closure can be sent to obtain the client report; ZIP prerequisites remain strict.
+    for(const attachment of [requestFile,reportOvergreen,reportEurospin].filter(Boolean))await appendAttachmentAsFullPage(doc,attachment);
     addPdfGeneratedAtFooter(doc,regular,muted);
     const bytes=await doc.save(),blob=new Blob([bytes],{type:'application/pdf'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`chiusura-extra-${pdfSafeName(e.titolo)}-${e.giorno_intervento||today()}.pdf`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('Chiusura PDF generata');
   }catch(err){console.error(err);alert('Impossibile generare la chiusura: '+(err.message||String(err)))}finally{if(button){button.disabled=false;button.textContent=old}}
@@ -5992,7 +5994,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=316').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=317').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

@@ -12,6 +12,7 @@ function syncExtraEconomicsRole(){
   document.getElementById('exportDailyReportEconomics')?.classList.toggle('hidden',!admin());
   if(admin())return;window.PackageReview?.clearForRole();economicsExcludedIds.clear();extraEconomicsRecords=[];extraEconomicsBookRows=[];
   document.getElementById('extraEconomicsBook')?.close();
+  document.getElementById('extraDaysDialog')?.close();document.getElementById('extraDaysDialog')?.replaceChildren();
   for(const id of ['extraEconomicsBookList','extraEconomicsBookSummary'])document.getElementById(id)?.replaceChildren();
 }
 function rememberExtraEconomics(row,report){

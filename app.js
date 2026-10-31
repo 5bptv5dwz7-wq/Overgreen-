@@ -1,4 +1,4 @@
-const APP_VERSION='V318';
+const APP_VERSION='V319';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -2314,9 +2314,9 @@ async function createIntesaFullReportAsSingles(data=dailyReportData()){
   return {file,fileName,title:`Report Intesa Sanpaolo completo · ${jobs.length} report singoli`,sizeKb:Math.max(1,Math.round(file.size/1024))};
 }
 
-async function appendExtraEconomicsPdf(pdf,extra){
+async function appendExtraEconomicsPdf(pdf,extra,dayEconomics=null,dayReport=null){
   if(!admin())throw new Error('Accesso ai dati economici non consentito.');
-  const model=window.OvergreenEconomics,row=extraEconomicsRecords.find(r=>r.extra_id===extra.id);
+  const model=window.OvergreenEconomics,row=dayEconomics||extraEconomicsRecords.find(r=>r.extra_id===extra.id);
   const {StandardFonts,rgb}=PDFLib,regular=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold);
   const green=rgb(.06,.28,.20),ink=rgb(.13,.20,.17),muted=rgb(.40,.47,.43),soft=rgb(.94,.97,.95),white=rgb(1,1,1),border=rgb(.85,.90,.87);
   const left=42,right=553,width=511;let page,y,index=0;
@@ -2349,7 +2349,7 @@ async function appendExtraEconomicsPdf(pdf,extra){
   };
   newPage();paragraph(extra.titolo||'Lavoro extra',16,bold,green);
   if(!row){paragraph('Economia non compilata',11,bold,muted);return}
-  const c=model.review(row,extra,latestEconomicsReport(extra.id)),money=model.money,amount=v=>money(model.cents(v));
+  const c=model.review(row,extra,dayEconomics?dayReport:latestEconomicsReport(extra.id)),money=model.money,amount=v=>money(model.cents(v));
   const meta=[model.modes[row.pricing_mode],row.pricing_category==='verde'?'Verde':row.pricing_category==='pulizie'?'Pulizie':row.pricing_category==='manutenzioni'?'Manutenzioni':null,extra.giorno_intervento?fmt(extra.giorno_intervento):null].filter(Boolean).join('  /  ');
   if(meta)paragraph(meta,9,regular,muted);
   if(!c.ready)paragraph(economicsStatus(c,row),9,bold,rgb(.60,.36,.09));
@@ -4467,6 +4467,7 @@ function extraCard(e){
     c.querySelector('.actions').prepend(hoursButton);
     if(typeof appendExtraEconomicsSummary==='function')appendExtraEconomicsSummary(c,e);
   }
+  if(e.stato!=='annullato'&&typeof appendExtraDaysButton==='function')appendExtraDaysButton(c,e);
   if(admin()&&['ricevuto','programmato','da_integrare'].includes(e.stato)&&extraPlannedDates(e).length){const button=document.createElement('button');button.type='button';button.className='secondary';button.dataset.addExtraDay=e.id;button.textContent='＋ Aggiungi giornata';button.onclick=()=>openExtraDayDialog(extras.find(x=>x.id===e.id)||e);c.querySelector('.actions').appendChild(button)}
   c.querySelector('[data-extra-map]')?.addEventListener('click',()=>openExtraMaps(e,st));
   c.querySelector('[data-pdf]')?.addEventListener('click',()=>openAttachment(pdf));
@@ -5579,7 +5580,7 @@ function renderExtraClosureDetails(extra){
   $('closeExtraDetails').classList.toggle('hidden',!editable);
   date.disabled=!editable;
   const now=new Date(),pad=n=>String(n).padStart(2,'0');
-  date.value=`${extra.giorno_intervento||today()}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  date.value=`${extra.stato==='da_integrare'?today():extra.giorno_intervento||today()}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const selected=new Set(extraWorkers.filter(w=>w.extra_id===extra.id).map(w=>w.profile_id));
   workers.innerHTML=editable?profiles.filter(p=>p.attivo||selected.has(p.id)).map(p=>`<label><input type="checkbox" value="${esc(p.id)}"${selected.has(p.id)?' checked':''}> ${esc(p.nome||p.email||p.id)}</label>`).join(''):'';
 }
@@ -5637,10 +5638,12 @@ function openExtraClosureDialog(extra,fromOrdinary=false){
   if(!extra||extra.stato==='annullato'||!canWorkOnExtra(extra))return;
   $('closeExtraCancelBtn').classList.toggle('hidden',!admin());
   $('closeExtraForm').reset();
+  $('closeExtraForm').dataset.workDayId=crypto.randomUUID();
   closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
   $('closeExtraId').value=extra.id;
   $('closeExtraForm').dataset.plannedDay=extra.giorno_intervento||today();
   renderExtraClosureDetails(extra);
+  if(extra.stato==='da_integrare'){$('closeExtraNightEnabled').checked=false;$('closeExtraNightHours').value='';syncExtraNightWork()}
   window.ExtraClosureDocuments.reset();
   $('closeExtraForm').dataset.profile=closureProfile(extra);
   const euro=closureProfile(extra)==='eurospin'&&!(extra.cleaning_codes?.length&&!extra.cleaning_codes.includes('TARGET')),intesa=closureProfile(extra)==='intesa';
@@ -5652,12 +5655,12 @@ function openExtraClosureDialog(extra,fromOrdinary=false){
   // I requisiti della chiusura definitiva vengono verificati via JS: nel parziale
   // il file Eurospin non deve essere obbligatorio né caricato.
   $('reportEurospin').required=false;$('reportOvergreen').required=false;$('closeExtraTicket').required=false;
-  $('closeExtraNotes').value=extra.note_lorenzo||'';
+  $('closeExtraNotes').value=extra.stato==='da_integrare'?'':extra.note_lorenzo||'';
   const partialStatus=$('closeExtraPartialStatus');
-  if(partialStatus){const isPartial=extra.stato==='da_integrare';partialStatus.classList.toggle('hidden',!isPartial);partialStatus.innerHTML=isPartial?`<strong>↪ Extra già salvato come parziale</strong><p>Puoi aggiungere altre foto o un nuovo file Overgreen e lasciarlo ancora aperto, oppure eseguire ora la chiusura definitiva.</p>`:''}
+  if(partialStatus){const isPartial=extra.stato==='da_integrare';partialStatus.classList.toggle('hidden',!isPartial);partialStatus.innerHTML=isPartial?`<strong>↪ Extra già salvato come parziale</strong><p>Registra note, foto e documenti della nuova giornata. Le giornate precedenti restano consultabili in Giornate · rapportini, con la loro economia e il PDF.</p>`:''}
   renderStructuredClose(extra);
   const structured=isStructuredExtra(extra);
-  if($('closeExtraPartialBtn'))$('closeExtraPartialBtn').classList.toggle('hidden',structured);
+  if($('closeExtraPartialBtn'))$('closeExtraPartialBtn').classList.toggle('hidden',!!(extra.cleaning_codes?.length&&!extra.cleaning_codes.includes('TARGET')));
   const partialHelp=$('closeExtraPartialBtn')?.nextElementSibling;
   if(partialHelp)partialHelp.classList.toggle('hidden',structured);
   const st=stores.find(s=>s.id===extra.store_id);
@@ -5724,7 +5727,7 @@ window.AppleDocumentScanner?.init({
 
 const extraDrafts=window.OvergreenExtraDrafts.create({store:window.OvergreenPhotoSync.storage(indexedDB,'overgreen-extra-drafts-v271'),scope:attachmentMediaScope});
 let extraDraftRestoring=false,recoveredGenericFile=null,extraDraftTimer=null;
-function extraDraftFields(){return {...($('cleaningClosureChoices')&&!$('cleaningClosureChoices').hidden&&typeof selectedCleaningCodes==='function'?{cleaningCodes:selectedCleaningCodes($('cleaningClosureChoices'))}:{}),deferReports:admin()&&$('closeExtraDeferReports').checked,notes:$('closeExtraNotes').value,ticket:$('closeExtraTicket').value,closedAt:$('closeExtraClosedAt').value,nightEnabled:$('closeExtraNightEnabled').checked,nightHours:$('closeExtraNightHours')?.value,workers:[...$('closeExtraWorkers').querySelectorAll('input:checked')].map(x=>x.value)}}
+function extraDraftFields(){return {...($('cleaningClosureChoices')&&!$('cleaningClosureChoices').hidden&&typeof selectedCleaningCodes==='function'?{cleaningCodes:selectedCleaningCodes($('cleaningClosureChoices'))}:{}),workDayId:$('closeExtraForm').dataset.workDayId,deferReports:admin()&&$('closeExtraDeferReports').checked,notes:$('closeExtraNotes').value,ticket:$('closeExtraTicket').value,closedAt:$('closeExtraClosedAt').value,nightEnabled:$('closeExtraNightEnabled').checked,nightHours:$('closeExtraNightHours')?.value,workers:[...$('closeExtraWorkers').querySelectorAll('input:checked')].map(x=>x.value)}}
 function captureExtraDraft(){
  if(extraDraftRestoring||!$('closeExtraDialog').open)return null;
  const id=$('closeExtraId').value;if(!id)return null;
@@ -5750,7 +5753,7 @@ async function restoreExtraDraft(extra){
   const draft=await extraDrafts.load(extra.id);
   if(!$('closeExtraDialog').open||$('closeExtraId').value!==extra.id||attachmentMediaScope()!==owner)return;
   if(!draft)return;
-  const f=draft.fields;$('closeExtraDeferReports').checked=admin()&&closureProfile(extra)==='eurospin'&&!(extra.cleaning_codes?.length&&!extra.cleaning_codes.includes('TARGET'))&&!!f.deferReports;if(f.cleaningCodes)$('cleaningClosureChoices')?.querySelectorAll('[data-clean-codes]').forEach(x=>x.checked=x.dataset.cleanCodes.split(',').some(code=>f.cleaningCodes.includes(code)));$('closeExtraNotes').value=f.notes||'';$('closeExtraTicket').value=f.ticket||'';
+  const f=draft.fields;if(f.workDayId)$('closeExtraForm').dataset.workDayId=f.workDayId;$('closeExtraDeferReports').checked=admin()&&closureProfile(extra)==='eurospin'&&!(extra.cleaning_codes?.length&&!extra.cleaning_codes.includes('TARGET'))&&!!f.deferReports;if(f.cleaningCodes)$('cleaningClosureChoices')?.querySelectorAll('[data-clean-codes]').forEach(x=>x.checked=x.dataset.cleanCodes.split(',').some(code=>f.cleaningCodes.includes(code)));$('closeExtraNotes').value=f.notes||'';$('closeExtraTicket').value=f.ticket||'';
   if(f.closedAt)$('closeExtraClosedAt').value=f.closedAt;
   $('closeExtraNightEnabled').checked=!!f.nightEnabled;if($('closeExtraNightHours'))$('closeExtraNightHours').value=f.nightHours||'';
   $('closeExtraWorkers').querySelectorAll('input').forEach(x=>x.checked=f.workers?.includes(x.value));
@@ -5827,7 +5830,6 @@ async function cleanupReplacedAttachments(rows){
 }
 async function saveExtraPartial(){
   if(!canWorkOnExtra(extras.find(e=>e.id===$('closeExtraId').value)))return;
-  if(!confirmExtraDateExecution([extras.find(e=>e.id===$('closeExtraId').value)],today()))return;
   const btn=$('closeExtraPartialBtn');if(!btn)return;
   const oldText=btn.textContent;if(extraSaveBusy||extraDraftRestoring)return;extraSaveBusy=true;setExtraSaveBusy(true);
   btn.disabled=true;btn.textContent='Salvo parziale…';
@@ -5835,24 +5837,26 @@ async function saveExtraPartial(){
   try{
     const id=$('closeExtraId').value,extra=extras.find(x=>x.id===id),profileMode=$('closeExtraForm').dataset.profile||'eurospin';
     if(!extra)throw new Error('Extra non trovato. Aggiorna i dati e riprova.');
-    const nightWork=readExtraNightWork(extra);
+    const nightWork=readExtraNightWork(extra),closure=extraClosureDetails(extra),dayFiles=[];
+    if(!confirmExtraDateExecution([extra],closure.day))return;
     const notes=$('closeExtraNotes').value.trim()||null,photos=[...closeExtraPhotoFiles];
     const overgreenFile=profileMode==='eurospin'?window.ExtraClosureDocuments.get('overgreen'):null;
-    if(profileMode==='eurospin'&&window.ExtraClosureDocuments.get('eurospin'))throw new Error('Nel parziale non caricare il rapportino Eurospin: va inserito solo alla chiusura definitiva.');
-
+    const eurospinFile=profileMode==='eurospin'?window.ExtraClosureDocuments.get('eurospin'):null;
     await saveCurrentExtraDraft();
+    if(eurospinFile){const added=await saveExtraUpload(id,'rapportino_eurospin',eurospinFile,uploadedPaths);dayFiles.push(added.id);replacedAttachments.push(...attachments.filter(a=>a.extra_id===id&&a.tipo==='rapportino_eurospin'&&a.id!==added.id));}
+
     if(overgreenFile){
       btn.textContent='Carico file Overgreen…';
       const added=await saveExtraUpload(id,'rapportino_overgreen',overgreenFile,uploadedPaths,text=>{btn.textContent=text});
-      replacedAttachments.push(...attachments.filter(a=>a.extra_id===id&&a.tipo==='rapportino_overgreen'&&a.id!==added.id));
+      dayFiles.push(added.id);replacedAttachments.push(...attachments.filter(a=>a.extra_id===id&&a.tipo==='rapportino_overgreen'&&a.id!==added.id));
     }
     for(let n=0;n<photos.length;n++){
       btn.textContent='Carico foto '+(n+1)+'/'+photos.length+'…';
-      await saveExtraUpload(id,'foto_generica',photos[n],uploadedPaths);
+      dayFiles.push((await saveExtraUpload(id,'foto_generica',photos[n],uploadedPaths)).id);
     }
 
 
-    const {error}=await sb.rpc('overgreen_close_extra_v271',{p_extra_id:id,p_payload:{stato:'da_integrare',note_lorenzo:notes,...nightWork},p_workers:null});
+    const {error}=await sb.rpc('overgreen_close_extra_day_v319',{p_extra_id:id,p_payload:{stato:'da_integrare',giorno_intervento:closure.day,note_lorenzo:notes,...nightWork},p_workers:closure.workers,p_day_id:$('closeExtraForm').dataset.workDayId,p_attachments:dayFiles});
     if(error)throw error;
     // Un parziale non è una chiusura: nessuna falsa notifica di completamento.
     await cleanupReplacedAttachments(replacedAttachments);
@@ -5860,6 +5864,7 @@ async function saveExtraPartial(){
     $('closeExtraDialog').close();$('closeExtraForm').reset();window.ExtraClosureDocuments.reset();closeExtraPhotoFiles=[];renderCloseExtraPhotoSelection();
     toast(`Parziale salvato · extra ancora aperto${photos.length?' · '+photos.length+' foto':''}${overgreenFile?' · file Overgreen':''}`);
     await refreshAfterSave();
+    if(admin()&&!combinedExtraClosureQueue.length)void openExtraDays(extra);
     if(combinedExtraClosureQueue.length)setTimeout(()=>openNextCombinedExtraClosure(),250);
   }catch(err){
     // Non rimuovere file già caricati: possono essere registrati o recuperabili.
@@ -5893,7 +5898,7 @@ $('closeExtraForm').onsubmit=async e=>{
     }
     let notes=$('closeExtraNotes').value.trim()||null;
     if(ticket)notes=`Ticket/ordine: ${ticket}${notes?'\n'+notes:''}`;
-    const photos=[...closeExtraPhotoFiles];
+    const photos=[...closeExtraPhotoFiles],dayFiles=[];
     const existingEurospin=attachments.some(a=>a.extra_id===id&&a.tipo==='rapportino_eurospin');
     const existingOvergreen=attachments.some(a=>a.extra_id===id&&a.tipo==='rapportino_overgreen');
     const newEurospin=profileMode==='eurospin'?window.ExtraClosureDocuments.get('eurospin'):null;
@@ -5915,17 +5920,17 @@ $('closeExtraForm').onsubmit=async e=>{
     for(const [tipo,originalFile] of reports){
       btn.textContent='Carico documento…';
       const added=await saveExtraUpload(id,tipo,originalFile,uploadedPaths,text=>{btn.textContent=text});
-      replacedAttachments.push(...attachments.filter(a=>a.extra_id===id&&a.tipo===tipo&&a.id!==added.id));
+      dayFiles.push(added.id);replacedAttachments.push(...attachments.filter(a=>a.extra_id===id&&a.tipo===tipo&&a.id!==added.id));
     }
     for(let n=0;n<photos.length;n++){
       btn.textContent='Carico foto '+(n+1)+'/'+photos.length+'…';
-      await saveExtraUpload(id,'foto_generica',photos[n],uploadedPaths);
+      dayFiles.push((await saveExtraUpload(id,'foto_generica',photos[n],uploadedPaths)).id);
     }
 
 
 
     btn.textContent=deferReports?'Chiusura extra…':'Invio a Lorenzo…';
-    if(!registered){const {error}=await sb.rpc(cleaningClose?'overgreen_cleaning_close_v309':deferReports?'overgreen_close_extra_deferred_v316':'overgreen_close_extra_v271',{...(cleaningClose?{p_codes:cleaningDone}:{}),p_extra_id:id,p_payload:closurePayload,p_workers:closure.workers});
+    if(!registered){const {error}=await sb.rpc(cleaningClose?'overgreen_cleaning_close_v309':'overgreen_close_extra_day_v319',{...(cleaningClose?{p_codes:cleaningDone}:{p_day_id:$('closeExtraForm').dataset.workDayId,p_attachments:dayFiles,p_deferred:deferReports}),p_extra_id:id,p_payload:closurePayload,p_workers:closure.workers});
     if(error)throw error;}
     await cleanupReplacedAttachments(replacedAttachments);
     await extraDrafts.remove(id);if(draftId!==id)await extraDrafts.remove(draftId);
@@ -6023,7 +6028,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=318').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=319').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

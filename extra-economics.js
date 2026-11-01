@@ -99,8 +99,8 @@
     for(const extra of extras){
       if(!isBillableExtra(extra)||['annullato','rifiutato'].includes(extra.stato))continue;
       const row=byId.get(extra.id);
-      if(!row?.days||['open','undated'].includes(period(extra)))periods.add(period(extra));
-      for(const day of row?.days||[])if(day.economics)periods.add(day.day.slice(0,7));
+      periods.add(period(extra));
+      if(period(extra)==='open')for(const day of row?.days||[])if(day.economics)periods.add(day.day.slice(0,7));
     }
     return [...periods];
   }
@@ -109,8 +109,8 @@
     const reports=new Map();for(const a of [...attachments].sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))||String(b.id).localeCompare(String(a.id))))if(a.tipo==='rapportino_eurospin'&&!reports.has(a.extra_id))reports.set(a.extra_id,a);
     const monthly=/^\d{4}-\d{2}$/.test(filter.month||'');
     return extras.filter(e=>isBillableExtra(e)&&!['annullato','rifiutato'].includes(e.stato))
-      .map(e=>{let row=byId.get(e.id)||{};if(monthly&&row.days)row={...row,days:row.days.filter(d=>d.economics&&d.day.slice(0,7)===filter.month)};return {extra:e,row,calc:review(row,e,reports.get(e.id))}})
-      .filter(x=>(!filter.month||(monthly&&x.row.days?x.row.days.length>0:period(x.extra)===filter.month))&&(!filter.category||x.extra.categoria_target===filter.category)&&(!filter.mode||x.row.pricing_mode===filter.mode)&&(!filter.state||x.extra.stato===filter.state))
+      .map(e=>{let row=byId.get(e.id)||{};if(monthly&&row.days&&period(e)==='open')row={...row,days:row.days.filter(d=>d.economics&&d.day.slice(0,7)===filter.month)};return {extra:e,row,calc:review(row,e,reports.get(e.id))}})
+      .filter(x=>(!filter.month||(monthly&&x.row.days&&period(x.extra)==='open'?x.row.days.length>0:period(x.extra)===filter.month))&&(!filter.category||x.extra.categoria_target===filter.category)&&(!filter.mode||x.row.pricing_mode===filter.mode)&&(!filter.state||x.extra.stato===filter.state))
       .sort((a,b)=>period(a.extra).localeCompare(period(b.extra))||closureDate(a.extra).localeCompare(closureDate(b.extra))||String(a.extra.numero_target||'').localeCompare(String(b.extra.numero_target||'')));
   }
   return {economicsPeriods,dailyRecord,expandDailyRows,cleaningInvoiceLabel,closureDate,period,periodLabel,isBillableExtra,modes,quoteStates,decimal,cents,money,rates,calculate,review,filterRows};

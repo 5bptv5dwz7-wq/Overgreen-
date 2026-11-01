@@ -48,7 +48,7 @@ function economicsBookFilter(){return {month:$('extraEconomicsMonth').value,cate
 function populateEconomicsPeriods(){
   const model=window.OvergreenEconomics,select=$('extraEconomicsMonth');
   const value=select.value||select.dataset.initialPeriod||'';delete select.dataset.initialPeriod;
-  const periods=new Set(model.filterRows(extras.filter(workspaceMatches),[],[]).map(x=>model.period(x.extra)));
+  const periods=new Set(model.economicsPeriods(extras.filter(workspaceMatches),extraEconomicsRecords));
   if(value)periods.add(value);
   select.replaceChildren();
   for(const period of ['', 'open', ...[...periods].filter(p=>!['open','undated'].includes(p)).sort().reverse(), ...(periods.has('undated')?['undated']:[])]){

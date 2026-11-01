@@ -188,7 +188,8 @@ test('V320 Goito daily totals replace generic economy and export exact dated lin
  c.readAllRows=async table=>({data:table==='extra_work_days'?days:table==='extra_day_economics'?economics:[{...base,total_hours:999,night_hours:0,operator_count:6,dedicated_trip:true}]});
  assert.equal(await c.loadExtraEconomics(),true);
  const records=vm.runInContext('extraEconomicsRecords',c);assert.equal(records.length,1);
- const rows=model.filterRows(c.extras,records,[],{month:'2026-11'});assert.equal(rows.length,1);assert.equal(rows[0].calc.total,180000);assert.equal(rows[0].calc.ready,true);
+ const november=model.filterRows(c.extras,records,[],{month:'2026-11'});assert.equal(november[0].calc.total,12000);assert.deepEqual(Array.from(model.expandDailyRows(november),x=>x.extra.giorno_intervento),['2026-11-01']);
+ const rows=model.filterRows(c.extras,records,[]);assert.equal(rows.length,1);assert.equal(rows[0].calc.total,180000);assert.equal(rows[0].calc.ready,true);
  const expanded=model.expandDailyRows(rows);assert.deepEqual(Array.from(expanded,x=>x.calc.total),[168000,12000]);assert.deepEqual(Array.from(expanded,x=>x.extra.giorno_intervento),['2026-10-31','2026-11-01']);assert.equal(expanded[0].calc.exit,30000);assert.equal(expanded[1].calc.exit,0);
  economics.pop();await c.loadExtraEconomics();const incomplete=model.filterRows(c.extras,vm.runInContext('extraEconomicsRecords',c),[])[0];assert.equal(incomplete.calc.ready,false);assert.equal(incomplete.calc.total,null);assert(model.expandDailyRows([incomplete]).every(x=>!x.calc.ready));
  c.readAllRows=async table=>table==='extra_day_economics'?{error:Error('offline')}:{data:[]};assert.equal(await c.loadExtraEconomics(),false);assert.equal(vm.runInContext('extraEconomicsRecords.length',c),0);

@@ -59,7 +59,7 @@ window.PackageReview=(()=>{
   function button(label,handler,cls='secondary'){const b=text('button',label);b.type='button';b.className=cls;b.onclick=()=>run(handler);return b}
   function formatCell(c){if(c.isMerged&&c.master?.address!==c.address)return '';const raw=c.value,v=raw&&typeof raw==='object'&&'result' in raw?raw.result:raw;if(v instanceof Date)return v.toLocaleDateString('it-IT');if(typeof v==='number'&&String(c.numFmt).includes('€'))return window.OvergreenEconomics.money(Math.round(v*100));return v==null?'—':String(v)}
   function rowTable(book,container){const ws=book.worksheets[0],headers=ws.getRow(2),table=document.createElement('table');table.className='pr-values';
-    for(let i=1;i<=ws.columnCount;i++){const tr=document.createElement('tr');tr.append(text('th',headers.getCell(i).value),text('td',formatCell(ws.getRow(3).getCell(i))));table.append(tr)}container.append(table)}
+    for(let n=3;n<=ws.rowCount;n++){if(!ws.getRow(n).getCell(4).value)continue;for(let i=1;i<=ws.columnCount;i++){const tr=document.createElement('tr');tr.append(text('th',headers.getCell(i).value),text('td',formatCell(ws.getRow(n).getCell(i))));table.append(tr)}}container.append(table)}
   async function render(){
     const s=state;if(!current(s)||!s.rows.length)return;dispose();s.final=null;
     const x=item(),e=x.extra,c=context(),r=validReview(c),st=stores.find(v=>v.id===e.store_id),done=s.ids.filter(id=>approved(s.context.get(id))).length;

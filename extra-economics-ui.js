@@ -4,8 +4,15 @@ let extraEconomicsRecords=[],extraEconomicsError='',extraEconomicsBookRows=[];
 async function loadExtraEconomics(){
   if(!admin()){extraEconomicsRecords=[];extraEconomicsError='';return false}
   try{
-    const r=await readAllRows('extra_labor_hours',q=>q,['extra_id']);if(!admin())return false;if(r.error)throw r.error;
-    extraEconomicsRecords=r.data||[];extraEconomicsError='';return true;
+    const scope=attachmentMediaScope();
+    const [r,d,e]=await Promise.all([readAllRows('extra_labor_hours',q=>q,['extra_id']),readAllRows('extra_work_days',q=>q,['id']),readAllRows('extra_day_economics',q=>q,['day_id'])]);
+    if(!admin()||scope!==attachmentMediaScope())return false;
+    for(const result of [r,d,e])if(result.error)throw result.error;
+    const byDay=new Map((e.data||[]).map(v=>[v.day_id,v.record])),groups=new Map();
+    for(const day of d.data||[]){if(!groups.has(day.extra_id))groups.set(day.extra_id,[]);groups.get(day.extra_id).push({...day,economics:byDay.get(day.id)||null})}
+    const daily=[...groups].filter(([,days])=>days.some(d=>d.economics));
+    const ids=new Set(daily.map(([id])=>id));
+    extraEconomicsRecords=[...(r.data||[]).filter(v=>!ids.has(v.extra_id)),...daily.map(([id,days])=>window.OvergreenEconomics.dailyRecord(id,days.sort((a,b)=>a.day.localeCompare(b.day)||String(a.created_at).localeCompare(String(b.created_at)))))];extraEconomicsError='';return true;
   }catch(error){extraEconomicsRecords=[];extraEconomicsError='Dati economici non caricati. Premi Aggiorna per riprovare.';return false}
 }
 function syncExtraEconomicsRole(){
@@ -90,6 +97,7 @@ function openExtraEconomicsBook(){
   dialog.showModal();renderExtraEconomicsBook();void refreshExtraEconomicsBook();
 }
 function addEconomicsWorksheet(workbook,rows,period=$('extraEconomicsMonth').value){
+  rows=window.OvergreenEconomics.expandDailyRows(rows);
   if(rows.length&&rows.every(x=>(x.extra.categoria_target||x.row.pricing_category)==='manutenzioni'))return addMaintenanceWorksheet(workbook,rows,period);
   const model=window.OvergreenEconomics,ws=workbook.addWorksheet('Foglio1');
   // Green exports retain the template; cleaning exports expose the equipment surcharge.
@@ -276,6 +284,7 @@ async function buildEconomicsZipUnderLimit(groups,status){
 }
 
 function addMaintenanceWorksheet(workbook,rows,period){
+  rows=window.OvergreenEconomics.expandDailyRows(rows);
   const model=window.OvergreenEconomics,ws=workbook.addWorksheet('Manutenzioni');
   const headers=['PUNTO VENDITA','DATA INTERVENTO','NUMERO INTERVENTO','NUMERO CHIUSURA','DESCRIZIONE','ADDETTI','USCITA','ORE ORDINARIE','TARIFFA ORDINARIA','ORE NOTTURNE/FESTIVE','TARIFFA NOTTURNA/FESTIVA','MANODOPERA','ELETTROUTENSILI €/H','COSTO ELETTROUTENSILI','SPESE','SCONTO','MODALITÀ','IMPONIBILE','IVA 22%','TOTALE IVA INCLUSA','NOTE'];
   ws.columns=headers.map((_,i)=>({width:[0,4,20].includes(i)?34:18}));

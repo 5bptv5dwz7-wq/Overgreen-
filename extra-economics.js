@@ -1,6 +1,6 @@
 /* Monetary arithmetic in integer cents; hours are the sum for the whole crew. */
 (function(root,factory){const model=factory();if(typeof module==='object'&&module.exports)module.exports=model;else root.OvergreenEconomics=model})(typeof window!=='undefined'?window:globalThis,()=>{
-  const modes={tariffa:'A tariffa',preventivo:'A preventivo',consuntivo:'A consuntivo'};
+  const modes={tariffa:'A tariffa',preventivo:'A preventivo',consuntivo:'A consuntivo',giornate:'Per giornata'};
   const quoteStates={bozza:'Bozza',inviato:'Inviato',accettato:'Accettato',rifiutato:'Rifiutato'};
   function decimal(value,maxDigits=7){
     const text=String(value??'').trim();if(!text)return null;
@@ -18,7 +18,20 @@
     const profile=profiles.includes(extra?.closure_profile)?extra.closure_profile:client;
     return client==='eurospin'&&profile==='eurospin';
   }
+  function dailyRecord(extraId,days){
+    return {extra_id:extraId,pricing_mode:'giornate',pricing_category:days.find(d=>d.economics)?.economics.pricing_category,days};
+  }
+  function dailyReview(row,extra={}){
+    const results=row.days.map(d=>review(d.economics,{...extra,night_hours:d.night_hours},(d.attachments||[]).find(a=>a.tipo==='rapportino_eurospin')));
+    const complete=results.every(c=>c.complete),issues=results.flatMap((c,i)=>c.issues.map(v=>row.days[i].day+': '+v));
+    const sum=k=>results.every(c=>c[k]!=null)?results.reduce((n,c)=>n+c[k],0):null;
+    return {complete,missing:results.flatMap((c,i)=>c.missing.map(v=>row.days[i].day+': '+v)),issues,ready:results.every(c=>c.ready),quotePending:results.some(c=>c.quotePending),...Object.fromEntries(['labor','laborDay','laborNight','dayHours','nightHours','base','exit','expenses','subtotal','discount','total'].map(k=>[k,sum(k)]))};
+  }
+  function expandDailyRows(rows){
+    return rows.flatMap(x=>x.row.days?x.row.days.map(d=>{const extra={...x.extra,giorno_intervento:d.day,night_hours:d.night_hours};const row=d.economics||{};const calc=review(row,extra,(d.attachments||[]).find(a=>a.tipo==='rapportino_eurospin'));return {...x,extra,row,calc:{...calc,ready:x.calc.ready&&calc.ready}}}):[x]);
+  }
   function calculate(row={}){
+    if(row.days)return dailyReview(row);
     const missing=[];if(!modes[row.pricing_mode])missing.push('modalità');
     if(!['verde','pulizie','manutenzioni'].includes(row.pricing_category))missing.push('categoria');
     if(typeof row.dedicated_trip!=='boolean')missing.push('scelta addebito uscita');
@@ -51,11 +64,13 @@
     return {complete,missing:[...new Set(missing)],labor,laborDay,laborNight,dayHours:dayHours==null?null:dayHours/100,nightHours:night/100,base,exit,exitIncluded,expenses,subtotal,discount,total,quotePending:quoted&&row.quote_status!=='accettato'};
   }
   function cleaningInvoiceLabel(row,category=row?.pricing_category){
+    if(row?.days){const labels=[...new Set(row.days.map(d=>cleaningInvoiceLabel(d.economics,category)))];return labels.filter(Boolean).join(' / ')}
     if(category==='manutenzioni')return 'Manutenzioni · IVA 22%';
     if(category!=='pulizie')return '';
     return row?.cleaning_scope==='interni'?'Pulizie interne · Reverse charge':row?.cleaning_scope==='esterni'?'Pulizie esterne · IVA ordinaria':'Pulizie: interni/esterni da indicare';
   }
   function review(row,extra,report){
+    if(row?.days)return dailyReview(row,extra);
     const result=calculate(row||{}),issues=[];
     if(['pulizie','manutenzioni'].includes(row?.pricing_category)&&Number(row.night_hours||0)!==Number(extra?.night_hours||0))issues.push('Ore notturne cambiate: ricontrolla Economia');
     if(row?.pricing_category&&extra?.categoria_target&&row.pricing_category!==extra.categoria_target)issues.push('Categoria cambiata: ricontrolla le tariffe');
@@ -87,7 +102,7 @@
       .filter(x=>(!filter.month||period(x.extra)===filter.month)&&(!filter.category||x.extra.categoria_target===filter.category)&&(!filter.mode||x.row.pricing_mode===filter.mode)&&(!filter.state||x.extra.stato===filter.state))
       .sort((a,b)=>period(a.extra).localeCompare(period(b.extra))||closureDate(a.extra).localeCompare(closureDate(b.extra))||String(a.extra.numero_target||'').localeCompare(String(b.extra.numero_target||'')));
   }
-  return {cleaningInvoiceLabel,closureDate,period,periodLabel,isBillableExtra,modes,quoteStates,decimal,cents,money,rates,calculate,review,filterRows};
+  return {dailyRecord,expandDailyRows,cleaningInvoiceLabel,closureDate,period,periodLabel,isBillableExtra,modes,quoteStates,decimal,cents,money,rates,calculate,review,filterRows};
 });
 
 

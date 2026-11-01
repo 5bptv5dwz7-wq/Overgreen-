@@ -1,4 +1,4 @@
-const APP_VERSION='V319';
+const APP_VERSION='V320';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -989,8 +989,7 @@ async function loadAll(options={}){
   profile=impersonatedTarget||realProfile;
 
   if(typeof extraEconomicsRecords!=='undefined'){
-   extraEconomicsRecords=admin()?keep('extra_labor_hours',extraEconomicsRecords):[];
-   extraEconomicsError=admin()&&d.extra_labor_hours?.error?'Dati economici non aggiornati. Premi Aggiorna.':'';
+   await loadExtraEconomics();
   }
   const warnings=wanted.filter(k=>d[k]?.error||!Array.isArray(d[k]?.data));if(warnings.length)toast('Alcuni dati non sono aggiornati. Premi Aggiorna per riprovare.');
   ensureCloudSettingsUi();syncImpersonationUi();if(typeof operationsDataUpdatedAt!=='undefined')operationsDataUpdatedAt=new Date();
@@ -2354,6 +2353,12 @@ async function appendExtraEconomicsPdf(pdf,extra,dayEconomics=null,dayReport=nul
   if(meta)paragraph(meta,9,regular,muted);
   if(!c.ready)paragraph(economicsStatus(c,row),9,bold,rgb(.60,.36,.09));
   heading();
+  if(row.days){
+    for(const day of row.days){const result=model.review(day.economics,{...extra,night_hours:day.night_hours},(day.attachments||[]).find(a=>a.tipo==='rapportino_eurospin'));entry('Giornata del '+fmt(day.day),economicsStatus(result,day.economics||{}),money(result.total))}
+    entry(c.ready?'TOTALE INTERVENTO':'TOTALE DA VERIFICARE','IVA esclusa',money(c.total));
+    for(const day of row.days)await appendExtraEconomicsPdf(pdf,{...extra,titolo:extra.titolo+' · '+fmt(day.day),giorno_intervento:day.day,night_hours:day.night_hours},day.economics||{},(day.attachments||[]).find(a=>a.tipo==='rapportino_eurospin'));
+    return;
+  }
   if(row.pricing_mode==='preventivo'){
     entry('Importo a preventivo',[row.quote_reference,c.exitIncluded?'Forfait viaggio incluso':null].filter(Boolean).join(' · '),amount(row.quote_amount));
   }else{
@@ -6028,7 +6033,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=319').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=320').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

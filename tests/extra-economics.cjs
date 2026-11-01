@@ -18,7 +18,7 @@ test('month/category/mode filters include drafts and exclude other clients or ca
 function uiSetup(){
   const dom=parseHTML(fs.readFileSync(__dirname+'/../index.html','utf8')),document=dom.document;
   Object.defineProperty(dom.HTMLSelectElement.prototype,'value',{configurable:true,get(){return (this.querySelector('option[selected]')||this.querySelector('option'))?.value||''},set(v){for(const o of this.querySelectorAll('option'))if(o.value===String(v))o.setAttribute('selected','');else o.removeAttribute('selected')}});
-  const c={excelDateValue:s=>s?new Date(s):null,extraRequestDate:e=>e.data_richiesta||null,document,window:{OvergreenEconomics:model},console,$:id=>document.getElementById(id),admin:()=>c.isAdmin,isAdmin:true,stores:[],extras:[{id:'e',client_type:'eurospin',categoria_target:'verde',nome_esterno:'<img src=x>',stato:'completato',closed_at:'2026-09-08T10:00:00Z',giorno_intervento:'2026-08-08'}],attachments:[],today:()=> '2026-09-08',esc:s=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'),readAllRows:async()=>({data:[{extra_id:'e',...cases[0].input,...model.rates('verde')}]}),loadAll:async()=>{},openExtraHours:()=>{},renderExtras:()=>{}};
+  const c={attachmentMediaScope:()=> 'test',excelDateValue:s=>s?new Date(s):null,extraRequestDate:e=>e.data_richiesta||null,document,window:{OvergreenEconomics:model},console,$:id=>document.getElementById(id),admin:()=>c.isAdmin,isAdmin:true,stores:[],extras:[{id:'e',client_type:'eurospin',categoria_target:'verde',nome_esterno:'<img src=x>',stato:'completato',closed_at:'2026-09-08T10:00:00Z',giorno_intervento:'2026-08-08'}],attachments:[],today:()=> '2026-09-08',esc:s=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'),readAllRows:async table=>({data:table==='extra_labor_hours'?[{extra_id:'e',...cases[0].input,...model.rates('verde')}]:[]}),loadAll:async()=>{},openExtraHours:()=>{},renderExtras:()=>{}};
   c.$('extraEconomicsBook').showModal=()=>c.$('extraEconomicsBook').setAttribute('open','');c.$('extraEconomicsBook').close=()=>c.$('extraEconomicsBook').removeAttribute('open');
   Object.assign(c,{activeClient:'eurospin',clientLabel:c.clientLabel||((v)=>typeof v==='string'?v:v?.client_type||'eurospin'),workspaceMatches:r=>(r?.client_type||'eurospin')===c.activeClient,workspaceStoreMatches:id=>!c.stores?.length||c.stores.some(st=>st.id===id&&(st.client_type||'eurospin')===c.activeClient),syncClientWorkspace(){},activateClient(client){c.activeClient=client;c.extraClientFilter=client;c.storeClientFilter=client;c.scheduleClientFilter=client;}});vm.createContext(c);vm.runInContext(fs.readFileSync(__dirname+'/../extra-economics-ui.js','utf8'),c);return c;
 }
@@ -124,7 +124,7 @@ test('Cleaning export separates 5 euros per crew hour without duplicating equipm
 test('ZIP selection exports matching PDFs and category workbooks; deselected extras stay out',async()=>{
  const c=uiSetup(),files=[],books=[];
  c.extras.push({...c.extras[0],id:'clean',numero_target:'22',categoria_target:'pulizie'},{...c.extras[0],id:'omit',numero_target:'33'});
- c.readAllRows=async()=>({data:c.extras.map(e=>({extra_id:e.id,...cases[0].input,pricing_category:e.categoria_target,...model.rates(e.categoria_target)}))});
+ c.readAllRows=async table=>({data:table==='extra_labor_hours'?c.extras.map(e=>({extra_id:e.id,...cases[0].input,pricing_category:e.categoria_target,...model.rates(e.categoria_target)})):[]});
  await c.loadExtraEconomics();c.renderExtraEconomicsBook();
  const checks=c.$('extraEconomicsBookList').querySelectorAll('input');checks[2].checked=false;checks[2].onchange();
  c.eurospinPackagePrerequisites=()=>({missing:[]});c.ensureLibraries=async()=>{};c.window.PDFLib={};
@@ -178,4 +178,25 @@ test('maintenance Excel separates base labor, tools, night/holiday hours and VAT
  const row={pricing_category:'manutenzioni',pricing_mode:'tariffa',total_hours:6,night_hours:2,operator_count:2,dedicated_trip:true,equipment:true,...model.rates('manutenzioni',true)};
  c.addEconomicsWorksheet(book,[{extra,row,calc:model.review(row,extra)}]);
  const sheet=book.sheets[0],v=sheet.rows[2].values;assert.equal(sheet.name,'Manutenzioni');assert.equal(v[7],4);assert.equal(v[8],28);assert.equal(v[9],2);assert.equal(v[10],36);assert.equal(v[11],184);assert.equal(v[13],30);assert.equal(v[17],314);assert.equal(v[18],69.08);assert.equal(v[19],383.08);assert.match(v[20],/IVA 22%/);assert.doesNotMatch(v[20],/Reverse/);
+});
+
+test('V320 Goito daily totals replace generic economy and export exact dated lines',async()=>{
+ const c=uiSetup();c.extras=[{id:'e',client_type:'eurospin',categoria_target:'pulizie',stato:'completato',closed_at:'2026-11-01T12:00:00Z',numero_target:'3465361'}];
+ const base={extra_id:'e',pricing_mode:'tariffa',pricing_category:'pulizie',cleaning_scope:'esterni',equipment:true,...model.rates('pulizie',true)};
+ const days=[{id:'d1',extra_id:'e',day:'2026-10-31',night_hours:0,attachments:[]},{id:'d2',extra_id:'e',day:'2026-11-01',night_hours:4,attachments:[]}];
+ const economics=[{day_id:'d1',record:{...base,total_hours:60,night_hours:0,operator_count:6,dedicated_trip:true}},{day_id:'d2',record:{...base,total_hours:4,night_hours:4,operator_count:1,dedicated_trip:false}}];
+ c.readAllRows=async table=>({data:table==='extra_work_days'?days:table==='extra_day_economics'?economics:[{...base,total_hours:999,night_hours:0,operator_count:6,dedicated_trip:true}]});
+ assert.equal(await c.loadExtraEconomics(),true);
+ const records=vm.runInContext('extraEconomicsRecords',c);assert.equal(records.length,1);
+ const rows=model.filterRows(c.extras,records,[],{month:'2026-11'});assert.equal(rows.length,1);assert.equal(rows[0].calc.total,180000);assert.equal(rows[0].calc.ready,true);
+ const expanded=model.expandDailyRows(rows);assert.deepEqual(Array.from(expanded,x=>x.calc.total),[168000,12000]);assert.deepEqual(Array.from(expanded,x=>x.extra.giorno_intervento),['2026-10-31','2026-11-01']);assert.equal(expanded[0].calc.exit,30000);assert.equal(expanded[1].calc.exit,0);
+ economics.pop();await c.loadExtraEconomics();const incomplete=model.filterRows(c.extras,vm.runInContext('extraEconomicsRecords',c),[])[0];assert.equal(incomplete.calc.ready,false);assert.equal(incomplete.calc.total,null);assert(model.expandDailyRows([incomplete]).every(x=>!x.calc.ready));
+ c.readAllRows=async table=>table==='extra_day_economics'?{error:Error('offline')}:{data:[]};assert.equal(await c.loadExtraEconomics(),false);assert.equal(vm.runInContext('extraEconomicsRecords.length',c),0);
+});
+test('V320 daily review preserves per-day quotes discounts rates and stale-report checks',()=>{
+ const base={pricing_mode:'tariffa',pricing_category:'verde',...model.rates('verde'),total_hours:1,operator_count:1,dedicated_trip:false};
+ const days=[{day:'2026-10-31',economics:{...base,discount_amount:2,expenses:[{description:'Materiali',amount:3}]}},{day:'2026-11-01',economics:{...base,pricing_mode:'preventivo',quote_amount:80,quote_status:'accettato',total_hours:99}}];
+ const row=model.dailyRecord('e',days);assert.equal(model.review(row,{}).total,10100);assert.equal(model.review(row,{}).ready,true);
+ days[1].economics.quote_status='bozza';assert.equal(model.review(row,{}).ready,false);
+ days[1].economics.quote_status='accettato';days[0].attachments=[{id:'changed',tipo:'rapportino_eurospin'}];assert.equal(model.review(row,{}).ready,false);
 });

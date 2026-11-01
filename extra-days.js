@@ -11,9 +11,10 @@ async function readExtraDays(extraId){
  if(admin()&&r.data.length){const e=await sb.from('extra_day_economics').select('*').in('day_id',r.data.map(d=>d.id));if(e.error)throw e.error;economics=e.data;}
  return r.data.map(d=>({...d,economics:economics.find(e=>e.day_id===d.id)?.record||null}));
 }
-async function openExtraDays(extra){
+async function openExtraDays(extra,options={}){
  let dialog=$('extraDaysDialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='extraDaysDialog';dialog.className='wide-dialog';document.body.appendChild(dialog)}
  dialog.innerHTML='<div class="dialog-body"><div class="dialog-head"><h2>Giornate del lavoro</h2><button type="button" class="secondary" data-close-days>Chiudi</button></div><p data-context></p><div data-days>Caricamento…</div></div>';
+ dialog.onclose=()=>{if(admin()){if(options.onClose)void options.onClose();else if(options.returnToEconomics)restoreExtraEconomicsBook()}};
  dialog.querySelector('[data-close-days]').onclick=()=>dialog.close();dialog.querySelector('[data-context]').textContent=[extra.numero_target?'Target '+extra.numero_target:extra.titolo,stores.find(s=>s.id===extra.store_id)?.nome||extra.nome_esterno].filter(Boolean).join(' · ');
  dialog.dataset.extraId=extra.id;if(!dialog.open)dialog.showModal();const scope=attachmentMediaScope();
  try{
@@ -23,7 +24,7 @@ async function openExtraDays(extra){
   if(admin()){
    const complete=days.filter(d=>d.economics&&window.OvergreenEconomics.review(d.economics,{...extra,night_hours:d.night_hours},(d.attachments||[]).find(a=>a.tipo==='rapportino_eurospin')).ready);
    const total=complete.reduce((n,d)=>n+window.OvergreenEconomics.calculate(d.economics).total,0),summary=document.createElement('p');
-   summary.textContent=`Totale giornate compilate: ${window.OvergreenEconomics.money(total)} · ${complete.length}/${days.length} · IVA esclusa. Il riepilogo mensile usa l’economia complessiva del target: questi importi giornalieri non vengono aggiunti una seconda volta.`;box.appendChild(summary);
+   summary.textContent=`Totale giornate compilate: ${window.OvergreenEconomics.money(total)} · ${complete.length}/${days.length} · IVA esclusa. Il totale del target, i PDF e gli Excel usano queste giornate una sola volta. Completa tutte le giornate per includere il target nei totali fatturabili.`;box.appendChild(summary);
   }
   for(const day of days){
    const card=document.createElement('article');card.className='card';
@@ -34,7 +35,7 @@ async function openExtraDays(extra){
    if(admin()){
     const calc=day.economics&&window.OvergreenEconomics.calculate(day.economics),line=document.createElement('p');line.textContent=calc?`Economia: ${window.OvergreenEconomics.money(calc.total)}${!calc.complete?' · da completare':''}`:'Economia da compilare';actions.before(line);
     if(window.OvergreenEconomics.isBillableExtra(extra)){
-     button('Economia giornata',()=>{dialog.close();return openExtraHours(extra,{day,onClose:()=>openExtraDays(extra)})});
+     button('Economia giornata',()=>{dialog.onclose=null;dialog.close();return openExtraHours(extra,{day,onClose:()=>openExtraDays(extra,options)})});
      button('PDF con economia',()=>generateExtraDayReport(extra,day,true));
     }
    }

@@ -1,4 +1,4 @@
-const APP_VERSION='V321';
+const APP_VERSION='V322';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -2211,10 +2211,21 @@ async function createSingleExtraEconomicsReport(extra){
   if(!admin())throw new Error('Accesso ai dati economici non consentito.');
   const scope=attachmentMediaScope();
   if(!await loadExtraEconomics())throw new Error(extraEconomicsError);
-  const base=await createSingleClientReportFile('extra',extra);
-  const pdf=await PDFLib.PDFDocument.load(await base.file.arrayBuffer());
+  const days=await readExtraDays(extra.id);
+  if(!admin()||scope!==attachmentMediaScope())throw new Error('Sessione cambiata. Riprova.');
+  let base,pdf,included=new Set();
+  if(days.length){
+    await ensureLibraries('PDFLib');pdf=await PDFLib.PDFDocument.create();
+    base={fileName:`Report - ${pdfSafeName(extra.titolo||'Extra')} - ${extra.numero_target||extra.id}.pdf`};
+    included=await appendExtraDayDetails(pdf,extra,days);
+    // Use the same fresh day snapshot for photos/notes and monetary detail.
+    if(days.some(d=>d.economics))extraEconomicsRecords=extraEconomicsRecords.filter(r=>r.extra_id!==extra.id).concat(window.OvergreenEconomics.dailyRecord(extra.id,days));
+  }else{
+    base=await createSingleClientReportFile('extra',extra);
+    pdf=await PDFLib.PDFDocument.load(await base.file.arrayBuffer());
+  }
   await appendExtraEconomicsPdf(pdf,extra);
-  const documents=attachments.filter(a=>a.extra_id===extra.id&&['pdf_richiesta','rapportino_overgreen','rapportino_eurospin'].includes(a.tipo));
+  const documents=attachments.filter(a=>a.extra_id===extra.id&&['pdf_richiesta','rapportino_overgreen','rapportino_eurospin'].includes(a.tipo)&&!included.has(a.id||a.storage_path));
   for(const attachment of documents){
     try{await appendAttachmentForPackage(pdf,attachment)}catch(error){throw new Error(`${attachmentLabel(attachment)} non incluso: ${error.message}`)}
   }
@@ -6033,7 +6044,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=321').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=322').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

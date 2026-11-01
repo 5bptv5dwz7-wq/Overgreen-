@@ -48,3 +48,13 @@ test('daily PDF uses fresh isolated notes/photos/documents/economics, never the 
  day.economics=null;await assert.rejects(c.generateExtraDayReport({id:'e1'},day,true),/Completa e salva/);
  c.admin=()=>false;await assert.rejects(c.generateExtraDayReport({id:'e1'},day,true),/Accesso/);
 });
+test('complete report includes both days, all photos and long notes; unreadable files block export',async()=>{
+ const texts=[],files=[],pages=[];
+ const c={PDFLib:{StandardFonts:{},rgb:()=>0},pdfSafeText:String,wrapPdfText:s=>[s],fmt:s=>s,stores:[],profiles:[{id:'p',nome:'Lorenzo'}],appendAttachmentForPackage:async(pdf,a)=>files.push(a.id)};
+ vm.createContext(c);vm.runInContext(fs.readFileSync(__dirname+'/../extra-days.js','utf8'),c);
+ const pdf={embedFont:async()=>({}),addPage:()=>{pages.push(1);return {drawText:(t,o)=>{assert(o.y>=60);texts.push(t)}}}};
+ const days=[{day:'2026-10-31',workers:['p'],notes:Array.from({length:70},(_,i)=>'Nota prima '+i).join('\n'),attachments:Array.from({length:6},(_,i)=>({id:'photo'+i,tipo:'foto_generica'}))},{day:'2026-11-01',final:true,notes:'Note seconda giornata',attachments:[{id:'photo-last',tipo:'foto_generica'},{id:'report',tipo:'rapportino_overgreen'}]}];
+ const included=await c.appendExtraDayDetails(pdf,{id:'e',titolo:'Goito'},days);
+ assert(texts.includes('Nota prima 69'));assert(texts.includes('Note seconda giornata'));assert(texts.includes('Operatori: Lorenzo'));assert.equal(files.length,8);assert(included.has('photo0'));assert(included.has('photo-last'));assert(pages.length>2);
+ c.appendAttachmentForPackage=async()=>{throw Error('unreadable')};await assert.rejects(c.appendExtraDayDetails(pdf,{id:'e'},days),/2026-10-31.*unreadable/);
+});

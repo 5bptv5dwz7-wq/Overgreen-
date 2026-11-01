@@ -65,3 +65,29 @@ async function generateExtraDayReport(extra,day,withEconomics){
  const fileName=`Rapportino ${day.day} - ${String(extra.numero_target||extra.titolo||'extra').replace(/[^a-zA-Z0-9 -]/g,'-')}${withEconomics?' - economia':''}.pdf`;
  const file=new File([await pdf.save()],fileName,{type:'application/pdf'});await shareClientReportData({file,fileName,title:fileName,sizeKb:Math.ceil(file.size/1024)});
 }
+
+// Complete reports read fresh daily snapshots, including superseded daily attachments.
+async function appendExtraDayDetails(pdf,extra,days){
+ const {StandardFonts,rgb}=PDFLib,font=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold);
+ const included=new Set(),key=a=>a.id||a.storage_path;
+ for(const day of days){
+  let page,y;
+  const newPage=()=>{page=pdf.addPage([595.28,841.89]);y=790};
+  const text=(value,size=11,strong=false)=>{for(const line of wrapPdfText(pdfSafeText(value),strong?bold:font,size,499)){if(y<size+60)newPage();page.drawText(line,{x:48,y,size,font:strong?bold:font,color:rgb(.08,.23,.16)});y-=size+6}y-=8};
+  newPage();text('OVERGREEN · GIORNATA DEL '+fmt(day.day),16,true);
+  text([extra.numero_target?'Target '+extra.numero_target:'',extra.titolo].filter(Boolean).join(' · '),12,true);
+  text(stores.find(s=>s.id===extra.store_id)?.nome||extra.nome_esterno||'');
+  text(day.final?'Giornata conclusiva del lavoro':'Avanzamento parziale');
+  text('Operatori: '+((day.workers||[]).map(id=>profiles.find(p=>p.id===id)?.nome||'Operatore').join(', ')||'Non indicati'));
+  text('Lavorazioni e note',12,true);
+  for(const line of (day.notes||'Nessuna nota').split('\n'))text(line);
+  const files=day.attachments||[];
+  text(`${files.filter(a=>a.tipo==='foto_generica').length} foto · ${files.filter(a=>a.tipo!=='foto_generica').length} documenti allegati`);
+  for(const a of files){
+   if(included.has(key(a)))continue;
+   try{await appendAttachmentForPackage(pdf,a);included.add(key(a))}
+   catch(error){throw Error('Allegato del '+fmt(day.day)+' non incluso: '+(a.nome_file||a.id)+'. '+error.message)}
+  }
+ }
+ return included;
+}

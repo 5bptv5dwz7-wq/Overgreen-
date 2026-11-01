@@ -1,4 +1,4 @@
-const APP_VERSION='V322';
+const APP_VERSION='V323';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -2060,13 +2060,31 @@ function createSingleClientReportFile(kind,row){
  const promise=buildSingleClientReportFile(kind,row).catch(error=>{singleReportCache.delete(key);throw error});
  singleReportCache.set(key,promise);while(singleReportCache.size>6)singleReportCache.delete(singleReportCache.keys().next().value);return promise;
 }
-async function buildSingleClientReportFile(kind,row){
+async function buildSingleClientReportFile(kind,row,daySnapshot=null){
+ if(kind==='extra'&&!daySnapshot){
+  const days=await readExtraDays(row.id);
+  if(days.length){
+   await ensureLibraries('PDFLib');
+   const combined=await PDFLib.PDFDocument.create();
+   for(const day of days){
+    const report=await buildSingleClientReportFile(kind,row,day);
+    const source=await PDFLib.PDFDocument.load(await report.file.arrayBuffer());
+    const pages=await combined.copyPages(source,source.getPageIndices());
+    pages.forEach(page=>combined.addPage(page));
+   }
+   const fileName=`Report - ${pdfSafeName(row.titolo||'Extra')} - ${row.numero_target||row.id} - completo.pdf`;
+   combined.setTitle(`Report intervento completo - ${pdfSafeText(row.titolo||'Extra')}`);
+   const file=new File([await combined.save()],fileName,{type:'application/pdf'});
+   return {file,fileName,title:row.titolo||'Lavoro extra',sizeKb:Math.max(1,Math.round(file.size/1024))};
+  }
+ }
+
   await ensureLibraries('PDFLib');
   if(!window.PDFLib)throw new Error('Libreria PDF non caricata. Ricarica la pagina e riprova.');
-  const {PDFDocument,StandardFonts,rgb}=PDFLib,isOrd=kind==='ordinary',st=stores.find(s=>s.id===row.store_id),names=reportWorkerNames(kind,row.id),pics=attachments.filter(a=>a.tipo==='foto_generica'&&(isOrd?a.intervention_id===row.id:a.extra_id===row.id)),linkedOrdinaryExtras=isOrd?ordinaryIncludedExtrasForReport(row):[];
+  const {PDFDocument,StandardFonts,rgb}=PDFLib,isOrd=kind==='ordinary',st=stores.find(s=>s.id===row.store_id),names=daySnapshot?(daySnapshot.workers||[]).map(id=>profiles.find(p=>p.id===id)?.nome||'Operatore'):reportWorkerNames(kind,row.id),pics=daySnapshot?(daySnapshot.attachments||[]).filter(a=>a.tipo==='foto_generica'):attachments.filter(a=>a.tipo==='foto_generica'&&(isOrd?a.intervention_id===row.id:a.extra_id===row.id)),linkedOrdinaryExtras=isOrd?ordinaryIncludedExtrasForReport(row):[];
   const title=isOrd?(st?.nome||'Intervento ordinario'):(row.titolo||'Lavoro extra');
   const place=isOrd?([st?.indirizzo,st?.citta].filter(Boolean).join(', ')):(st?([st.nome,st.indirizzo,st.citta].filter(Boolean).join(', ')):[row.nome_esterno,row.indirizzo_esterno].filter(Boolean).join(', '));
-  const date=isOrd?row.data_intervento:row.giorno_intervento,notes=(isOrd?row.note:(row.note_lorenzo||row.descrizione))||'Nessuna nota';
+  const date=daySnapshot?daySnapshot.day:(isOrd?row.data_intervento:row.giorno_intervento),notes=(daySnapshot?daySnapshot.notes:(isOrd?row.note:(row.note_lorenzo||row.descrizione)))||'Nessuna nota';
   const pdf=await PDFDocument.create(),regular=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold),green=rgb(.02,.35,.18),dark=rgb(.08,.18,.13),muted=rgb(.38,.45,.41),border=rgb(.82,.87,.84),pageW=595.28,pageH=841.89,margin=48;
   let page=pdf.addPage([pageW,pageH]),y=pageH-56;
   const newPage=()=>{page=pdf.addPage([pageW,pageH]);y=pageH-55;return page};
@@ -2082,7 +2100,7 @@ async function buildSingleClientReportFile(kind,row){
   page.drawText('Report intervento per il cliente',{x:margin,y:y-20,size:10,font:regular,color:muted});page.drawLine({start:{x:margin,y:y-35},end:{x:pageW-margin,y:y-35},thickness:3,color:green});y-=65;
   page.drawText(pdfSafeText(clientLabel(st||row)).toUpperCase(),{x:margin,y,size:9,font:bold,color:muted});y-=24;
   page.drawText(pdfSafeText(title),{x:margin,y,size:18,font:bold,color:green});y-=18;if(place){y=drawWrappedPdfText(page,regular,place,margin,y,pageW-margin*2,10,muted,13);y-=8}
-  const boxes=[['DATA INTERVENTO',fmt(date)],['ORARIO DI CHIUSURA',fmtClosedAt(row.closed_at)],['OPERATORI',names.join(', ')||'Non indicati'],['TIPOLOGIA',isOrd?'Intervento ordinario':'Lavoro extra']];
+  const boxes=[['DATA INTERVENTO',fmt(date)],['ORARIO DI CHIUSURA',fmtClosedAt(daySnapshot?(daySnapshot.final?(row.closed_at||daySnapshot.created_at):daySnapshot.created_at):row.closed_at)],['OPERATORI',names.join(', ')||'Non indicati'],['TIPOLOGIA',daySnapshot?(daySnapshot.final?'Chiusura finale':'Chiusura parziale'):(isOrd?'Intervento ordinario':'Lavoro extra')]];
   const boxW=(pageW-margin*2-10)/2,boxH=52;for(let i=0;i<4;i++){const col=i%2,rowN=Math.floor(i/2),x=margin+col*(boxW+10),by=y-rowN*(boxH+10)-boxH;page.drawRectangle({x,y:by,width:boxW,height:boxH,borderColor:border,borderWidth:1});page.drawText(boxes[i][0],{x:x+10,y:by+34,size:7,font:regular,color:muted});drawWrappedPdfText(page,bold,boxes[i][1],x+10,by+18,boxW-20,10,dark,11)}y-=boxH*2+28;
   const noteLines=Math.max(2,Math.ceil(pdfSafeText(notes).length/75)),noteH=Math.min(110,34+noteLines*13);page.drawRectangle({x:margin,y:y-noteH,width:pageW-margin*2,height:noteH,borderColor:border,borderWidth:1});page.drawText("Note dell'intervento",{x:margin+11,y:y-20,size:10,font:bold,color:dark});drawWrappedPdfText(page,regular,notes,margin+11,y-36,pageW-margin*2-22,10,dark,13);y-=noteH+24;
 

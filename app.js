@@ -1,4 +1,4 @@
-const APP_VERSION='V320';
+const APP_VERSION='V321';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -2363,7 +2363,7 @@ async function appendExtraEconomicsPdf(pdf,extra,dayEconomics=null,dayReport=nul
     entry('Importo a preventivo',[row.quote_reference,c.exitIncluded?'Forfait viaggio incluso':null].filter(Boolean).join(' · '),amount(row.quote_amount));
   }else{
     if(c.dayHours>0||c.labor==null)entry(c.nightHours>0?'Manodopera diurna':'Manodopera',`${c.dayHours??'Ore da compilare'} ore squadra × ${amount(row.hourly_rate)}/h${row.equipment?' · attrezzature incluse':''}`,money(c.laborDay));
-    if(c.nightHours>0)entry(row.pricing_category==='manutenzioni'?'Manodopera notturna/festiva':'Manodopera notturna',`${c.nightHours} ore squadra × ${amount(row.night_hourly_rate)}/h${row.equipment?' · attrezzature incluse':''}`,money(c.laborNight));
+    if(c.nightHours>0)entry('Manodopera notturna/festiva',`${c.nightHours} ore squadra × ${amount(row.night_hourly_rate)}/h${row.equipment?' · attrezzature incluse':''}`,money(c.laborNight));
   }
   if(c.exit>0)entry('Forfait viaggio',`${row.operator_count} operatori × ${amount(row.exit_rate)}`,money(c.exit));
   for(const expense of row.expenses||[])entry(expense.description||'Spesa senza descrizione','',amount(expense.amount));
@@ -5606,7 +5606,7 @@ function readExtraNightWork(extra){
   if(!['pulizie','manutenzioni'].includes(extra?.categoria_target))return {};
   if(!$('closeExtraNightEnabled').checked)return {night_hours:0};
   const text=$('closeExtraNightHours').value.trim();
-  if(!/^\d{1,5}([.,]\d{1,2})?$/.test(text)||Number(text.replace(',','.'))<=0)throw new Error('Indica le ore notturne della squadra, maggiori di zero e con al massimo due decimali. Esempio: 2,5.');
+  if(!/^\d{1,5}([.,]\d{1,2})?$/.test(text)||Number(text.replace(',','.'))<=0)throw new Error('Indica le ore notturne/festive della squadra, maggiori di zero e con al massimo due decimali. Esempio: 2,5.');
   return {night_hours:Number(text.replace(',','.'))};
 }
 function extraClosureDetails(extra){
@@ -6033,7 +6033,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=320').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=321').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

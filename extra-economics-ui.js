@@ -117,7 +117,7 @@ function addEconomicsWorksheet(workbook,rows,period=$('extraEconomicsMonth').val
     if(r.economic_notes)notes.push(r.economic_notes);
     if(r.quote_reference)notes.push('Riferimento preventivo: '+r.quote_reference);
     if(q)notes.push('Preventivo: '+(model.quoteStates[r.quote_status]||'da verificare')+(c.exitIncluded?' · trasferta inclusa':''));
-    if(c.nightHours>0)notes.push('Ore notturne incluse: '+c.nightHours+' × '+model.money(model.cents(r.night_hourly_rate)));
+    if(c.nightHours>0)notes.push('Ore notturne/festive incluse: '+c.nightHours+' × '+model.money(model.cents(r.night_hourly_rate)));
     if(r.equipment)notes.push('Tariffa con attrezzature');
     if((r.expenses||[]).length)notes.push('Spese: '+r.expenses.map(s=>s.description+': '+model.money(model.cents(s.amount))).join('; '));
     if(c.discount)notes.push('Sconto: '+model.money(c.discount));

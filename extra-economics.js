@@ -44,8 +44,8 @@
     if(hourly==null||exitRate==null)missing.push('tariffe');
     const night=decimal(row.night_hours??0,5),nightRate=cents(row.night_hourly_rate);
     if(night>0&&!['pulizie','manutenzioni'].includes(row.pricing_category))missing.push('notturno/festivo solo per pulizie e manutenzioni');
-    if(hours!=null&&night>hours)missing.push('ore notturne superiori al totale');
-    if(night>0&&nightRate==null)missing.push('tariffa notturna');
+    if(hours!=null&&night>hours)missing.push('ore notturne/festive superiori al totale');
+    if(night>0&&nightRate==null)missing.push('tariffa notturna/festiva');
     const validHours=hours!=null&&night<=hours;
     const dayHours=validHours?hours-night:null;
     const laborDay=validHours&&hourly!=null?Math.round(dayHours*hourly/100):null;
@@ -72,7 +72,7 @@
   function review(row,extra,report){
     if(row?.days)return dailyReview(row,extra);
     const result=calculate(row||{}),issues=[];
-    if(['pulizie','manutenzioni'].includes(row?.pricing_category)&&Number(row.night_hours||0)!==Number(extra?.night_hours||0))issues.push('Ore notturne cambiate: ricontrolla Economia');
+    if(['pulizie','manutenzioni'].includes(row?.pricing_category)&&Number(row.night_hours||0)!==Number(extra?.night_hours||0))issues.push('Ore notturne/festive cambiate: ricontrolla Economia');
     if(row?.pricing_category&&extra?.categoria_target&&row.pricing_category!==extra.categoria_target)issues.push('Categoria cambiata: ricontrolla le tariffe');
     if(row?.total_hours!=null&&(row?.source_attachment_id||null)!==(report?.id||null))issues.push('Rapportino cambiato: ricontrolla le ore');
     return {...result,issues,ready:result.complete&&!result.quotePending&&!issues.length};

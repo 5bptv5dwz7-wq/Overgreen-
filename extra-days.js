@@ -46,47 +46,37 @@ async function openExtraDays(extra,options={}){
 }
 async function generateExtraDayReport(extra,day,withEconomics){
  const scope=attachmentMediaScope();if(withEconomics&&!admin())throw Error('Accesso ai dati economici non consentito');
- // Fresh values: never export a stale financial card after another session saved.
  const fresh=(await readExtraDays(extra.id)).find(d=>d.id===day.id);if(!fresh)throw Error('Giornata non disponibile');day=fresh;
- const dailyExtra={...extra,giorno_intervento:day.day,night_hours:day.night_hours,titolo:`${extra.titolo} · ${fmt(day.day)}`};
- const report=day.attachments.find(a=>a.tipo==='rapportino_eurospin')||null;
+ const dailyExtra={...extra,giorno_intervento:day.day,night_hours:day.night_hours};
+ const report=(day.attachments||[]).find(a=>a.tipo==='rapportino_eurospin')||null;
  if(withEconomics&&(!day.economics||!window.OvergreenEconomics.review(day.economics,dailyExtra,report).ready))throw Error('Completa e salva l’economia di questa giornata prima di generare il PDF con gli importi.');
- await ensureLibraries('PDFLib');const {PDFDocument,StandardFonts,rgb}=PDFLib,pdf=await PDFDocument.create(),font=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold);let page,y;
- const newPage=()=>{page=pdf.addPage([595.28,841.89]);y=790};
- const text=(value,size=11,strong=false)=>{for(const line of wrapPdfText(pdfSafeText(value),strong?bold:font,size,499)){if(y<60)newPage();page.drawText(line,{x:48,y,size,font:strong?bold:font,color:rgb(.08,.23,.16)});y-=size+6}y-=8};
- newPage();text('OVERGREEN · RAPPORTINO GIORNALIERO',18,true);text(`Data: ${fmt(day.day)}`,13,true);
- text([stores.find(s=>s.id===extra.store_id)?.nome||extra.nome_esterno,extra.numero_target?'Target '+extra.numero_target:null,extra.titolo].filter(Boolean).join(' · '),12,true);
- text(day.final?'Giornata conclusiva del lavoro':'Avanzamento parziale · target da continuare');
- text('Operatori: '+(day.workers.map(id=>profiles.find(p=>p.id===id)?.nome||'Operatore').join(', ')||'Non indicati'));
- text('Lavorazioni e note',12,true);for(const line of (day.notes||'Nessuna nota').split('\n'))text(line);
- for(const a of day.attachments){try{await appendAttachmentForPackage(pdf,a)}catch(error){throw Error('Allegato della giornata non leggibile: '+(a.nome_file||a.id)+'. '+error.message)}}
+ const base=await buildSingleClientReportFile('extra',extra,day);
+ await ensureLibraries('PDFLib');
+ const pdf=await PDFLib.PDFDocument.load(await base.file.arrayBuffer());
+ for(const attachment of day.attachments||[]){
+  if(attachment.tipo==='foto_generica')continue;
+  try{await appendAttachmentForPackage(pdf,attachment)}catch(error){throw Error('Allegato della giornata non leggibile: '+(attachment.nome_file||attachment.id)+'. '+error.message)}
+ }
  if(withEconomics)await appendExtraEconomicsPdf(pdf,dailyExtra,day.economics,report);
  if(scope!==attachmentMediaScope()||(withEconomics&&!admin()))throw Error('Sessione cambiata. Riprova.');
  const fileName=`Rapportino ${day.day} - ${String(extra.numero_target||extra.titolo||'extra').replace(/[^a-zA-Z0-9 -]/g,'-')}${withEconomics?' - economia':''}.pdf`;
- const file=new File([await pdf.save()],fileName,{type:'application/pdf'});await shareClientReportData({file,fileName,title:fileName,sizeKb:Math.ceil(file.size/1024)});
+ const file=new File([await pdf.save()],fileName,{type:'application/pdf'});
+ await shareClientReportData({file,fileName,title:fileName,sizeKb:Math.ceil(file.size/1024)});
 }
 
 // Complete reports read fresh daily snapshots, including superseded daily attachments.
 async function appendExtraDayDetails(pdf,extra,days){
- const {StandardFonts,rgb}=PDFLib,font=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold);
  const included=new Set(),key=a=>a.id||a.storage_path;
  for(const day of days){
-  let page,y;
-  const newPage=()=>{page=pdf.addPage([595.28,841.89]);y=790};
-  const text=(value,size=11,strong=false)=>{for(const line of wrapPdfText(pdfSafeText(value),strong?bold:font,size,499)){if(y<size+60)newPage();page.drawText(line,{x:48,y,size,font:strong?bold:font,color:rgb(.08,.23,.16)});y-=size+6}y-=8};
-  newPage();text('OVERGREEN · GIORNATA DEL '+fmt(day.day),16,true);
-  text([extra.numero_target?'Target '+extra.numero_target:'',extra.titolo].filter(Boolean).join(' · '),12,true);
-  text(stores.find(s=>s.id===extra.store_id)?.nome||extra.nome_esterno||'');
-  text(day.final?'Giornata conclusiva del lavoro':'Avanzamento parziale');
-  text('Operatori: '+((day.workers||[]).map(id=>profiles.find(p=>p.id===id)?.nome||'Operatore').join(', ')||'Non indicati'));
-  text('Lavorazioni e note',12,true);
-  for(const line of (day.notes||'Nessuna nota').split('\n'))text(line);
-  const files=day.attachments||[];
-  text(`${files.filter(a=>a.tipo==='foto_generica').length} foto · ${files.filter(a=>a.tipo!=='foto_generica').length} documenti allegati`);
-  for(const a of files){
-   if(included.has(key(a)))continue;
-   try{await appendAttachmentForPackage(pdf,a);included.add(key(a))}
-   catch(error){throw Error('Allegato del '+fmt(day.day)+' non incluso: '+(a.nome_file||a.id)+'. '+error.message)}
+  const report=await buildSingleClientReportFile('extra',extra,day);
+  const part=await PDFLib.PDFDocument.load(await report.file.arrayBuffer());
+  const pages=await pdf.copyPages(part,part.getPageIndices());
+  pages.forEach(page=>pdf.addPage(page));
+  for(const attachment of day.attachments||[]){
+   if(attachment.tipo==='foto_generica'){included.add(key(attachment));continue;}
+   if(included.has(key(attachment)))continue;
+   try{await appendAttachmentForPackage(pdf,attachment);included.add(key(attachment))}
+   catch(error){throw Error('Allegato del '+fmt(day.day)+' non incluso: '+(attachment.nome_file||attachment.id)+'. '+error.message)}
   }
  }
  return included;

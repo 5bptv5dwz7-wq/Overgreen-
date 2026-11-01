@@ -99,7 +99,7 @@
     const reports=new Map();for(const a of [...attachments].sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))||String(b.id).localeCompare(String(a.id))))if(a.tipo==='rapportino_eurospin'&&!reports.has(a.extra_id))reports.set(a.extra_id,a);
     return extras.filter(e=>isBillableExtra(e)&&!['annullato','rifiutato'].includes(e.stato))
       .map(e=>{const row=byId.get(e.id)||{};return {extra:e,row,calc:review(row,e,reports.get(e.id))}})
-      .filter(x=>(!filter.month||period(x.extra)===filter.month)&&(!filter.category||x.extra.categoria_target===filter.category)&&(!filter.mode||x.row.pricing_mode===filter.mode)&&(!filter.state||x.extra.stato===filter.state))
+      .filter(x=>(!filter.month||period(x.extra)===filter.month||(filter.month!=='open'&&filter.month!=='undated'&&x.row.days?.some(d=>d.economics&&d.day.slice(0,7)===filter.month)))&&(!filter.category||x.extra.categoria_target===filter.category)&&(!filter.mode||x.row.pricing_mode===filter.mode)&&(!filter.state||x.extra.stato===filter.state))
       .sort((a,b)=>period(a.extra).localeCompare(period(b.extra))||closureDate(a.extra).localeCompare(closureDate(b.extra))||String(a.extra.numero_target||'').localeCompare(String(b.extra.numero_target||'')));
   }
   return {dailyRecord,expandDailyRows,cleaningInvoiceLabel,closureDate,period,periodLabel,isBillableExtra,modes,quoteStates,decimal,cents,money,rates,calculate,review,filterRows};

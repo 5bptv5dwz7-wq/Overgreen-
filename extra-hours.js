@@ -98,12 +98,18 @@ const ExtraHoursUi=(()=>{
     if(s.image){s.image.onload=null;s.image.onerror=null;s.image.removeAttribute('src')}
     s.pdf=null;s.loadingTask=null;s.image=null;
   }
-  function close(force=false){
+  function close(force=false,discard=false){
     const s=state;if(!s)return;
     if(!force&&s.saving)return;
-    if(!force&&s.loaded&&formKey()!==s.savedForm&&!confirm('Chiudere senza salvare le modifiche economiche?'))return;
+    if(!force&&!discard&&s.inline&&s.loaded&&formKey()!==s.savedForm){
+      tell('Salva le modifiche oppure premi Annulla modifiche prima di proseguire.',true);
+      el('extraHoursFeedback').scrollIntoView({block:'nearest'});return;
+    }
+    if(!force&&!discard&&s.loaded&&formKey()!==s.savedForm&&!confirm('Chiudere senza salvare le modifiche economiche?'))return;
     state=null;dispose(s);el('extraHoursCanvas').replaceChildren();el('extraHoursInput').value='';
-    el('extraHoursDialog').close();
+    if(s.inline){
+      el('extraHoursDialog').append(...s.inline.childNodes);s.inline.hidden=true;
+    }else el('extraHoursDialog').close();
     if(!force&&s.onClose&&admin())void s.onClose();
     else if(!force&&s.returnToEconomics&&admin())restoreExtraEconomicsBook();
   }
@@ -170,13 +176,16 @@ const ExtraHoursUi=(()=>{
   async function open(extra,options={}){
     if(!admin()||!model().isBillableExtra(extra))return;
     bind();if(state){close();if(state)return}
-    el('extraHoursSave').textContent=options.nextDay?'Salva e passa alla successiva':'Salva e esci';
-    const s={onSaved:options.onSaved,day:options.day||null,onClose:typeof options.onClose==='function'?options.onClose:null,returnToEconomics:options.returnToEconomics===true,extraId:extra.id,row:null,report:null,page:1,zoom:1,loaded:false,saving:false,savedText:'',savedForm:'',extraCategory:extra.categoria_target||null,nightHours:extra.night_hours??0,suggestedOperators:typeof extraWorkers==='undefined'?0:new Set(extraWorkers.filter(w=>w.extra_id===extra.id).map(w=>w.profile_id)).size,pdf:null,image:null};state=s;
+    el('extraHoursSave').textContent=options.nextDay?'Salva e passa alla successiva':(options.inline?'Salva giornata':'Salva e esci');
+    const s={inline:options.inline,onSaved:options.onSaved,day:options.day||null,onClose:typeof options.onClose==='function'?options.onClose:null,returnToEconomics:options.returnToEconomics===true,extraId:extra.id,row:null,report:null,page:1,zoom:1,loaded:false,saving:false,savedText:'',savedForm:'',extraCategory:extra.categoria_target||null,nightHours:extra.night_hours??0,suggestedOperators:typeof extraWorkers==='undefined'?0:new Set(extraWorkers.filter(w=>w.extra_id===extra.id).map(w=>w.profile_id)).size,pdf:null,image:null};state=s;
     const store=stores.find(x=>x.id===extra.store_id);
     el('extraHoursContext').textContent=[store?.nome||extra.nome_esterno,extra.numero_target?'Target '+extra.numero_target:'',extra.titolo,options.day?'Giornata del '+fmt(options.day.day):''].filter(Boolean).join(' · ');
     el('extraHoursInput').value='';el('extraHoursMeta').textContent='Caricamento ore…';el('extraHoursChanged').hidden=true;el('extraHoursOriginal').hidden=true;
     el('extraHoursPreviewStatus').textContent='Caricamento del rapportino…';el('extraHoursCanvas').replaceChildren();tell('');fillEconomics(s);controls(s);
-    el('extraHoursDialog').showModal();
+    el('extraHoursClose').textContent=s.inline?'Annulla modifiche':'Chiudi';
+    if(s.inline){
+      s.inline.hidden=false;s.inline.append(...el('extraHoursDialog').childNodes);
+    }else el('extraHoursDialog').showModal();
     el('extraHoursForm').hidden=true;el('extraHoursForm').style.display='none';
     const loading=document.createElement('p');loading.className='eh-meta';loading.textContent='Caricamento dati economici salvati…';el('extraHoursForm').before(loading);
     try{
@@ -215,9 +224,9 @@ const ExtraHoursUi=(()=>{
   function bind(){
     if(bound)return;bound=true;
     el('extraHoursForm').onsubmit=event=>{event.preventDefault();void save()};
-    el('extraHoursClose').onclick=()=>close();
+    el('extraHoursClose').onclick=()=>close(false,!!state?.inline);
     el('extraHoursDialog').addEventListener('cancel',event=>{event.preventDefault();close()});
-    el('extraHoursDialog').addEventListener('close',()=>{if(state&&!el('extraHoursDialog').open)close(true)});
+    el('extraHoursDialog').addEventListener('close',()=>{if(state&&!state.inline&&!el('extraHoursDialog').open)close(true)});
     el('extraHoursForm').addEventListener('input',()=>{tell('');syncEconomics()});
     el('extraHoursForm').addEventListener('change',()=>{tell('');syncEconomics()});
     el('extraEconomicsAddExpense').onclick=()=>{if(state?.loaded&&!state.saving){expenseRow();syncEconomics()}};
@@ -229,7 +238,11 @@ const ExtraHoursUi=(()=>{
     el('extraHoursFit').onclick=()=>{if(state){state.zoom=1;void render(state)}};
     window.addEventListener('resize',()=>{if(state?.pdf||state?.image)void render(state)});
   }
-  return {open,close,save};
+  function leaveInline(){
+    if(state?.inline)close();
+    return !state?.inline;
+  }
+  return {open,close,save,leaveInline};
 })();
 async function openExtraHours(extra,options={}){
  if(!admin())return;

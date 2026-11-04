@@ -1,6 +1,7 @@
 /* Admin-only saved summaries and monthly Excel; no financial data in worker views. */
 let economicsExcludedIds=new Set(),economicsZipBusy=false;
 let extraEconomicsRecords=[],extraEconomicsError='',extraEconomicsBookRows=[];
+let economicsDaysByExtra=new Map(), expandedEconomics=null;
 async function loadExtraEconomics(){
   if(!admin()){extraEconomicsRecords=[];extraEconomicsError='';return false}
   try{
@@ -10,6 +11,8 @@ async function loadExtraEconomics(){
     for(const result of [r,d,e])if(result.error)throw result.error;
     const byDay=new Map((e.data||[]).map(v=>[v.day_id,v.record])),groups=new Map();
     for(const day of d.data||[]){if(!groups.has(day.extra_id))groups.set(day.extra_id,[]);groups.get(day.extra_id).push({...day,economics:byDay.get(day.id)||null})}
+    for(const days of groups.values())days.sort((a,b)=>a.day.localeCompare(b.day)||a.created_at.localeCompare(b.created_at));
+    economicsDaysByExtra=groups;
     const daily=[...groups].filter(([,days])=>days.some(d=>d.economics));
     const ids=new Set(daily.map(([id])=>id));
     extraEconomicsRecords=[...(r.data||[]).filter(v=>!ids.has(v.extra_id)),...daily.map(([id,days])=>window.OvergreenEconomics.dailyRecord(id,days.sort((a,b)=>a.day.localeCompare(b.day)||String(a.created_at).localeCompare(String(b.created_at)))))];extraEconomicsError='';return true;
@@ -17,7 +20,7 @@ async function loadExtraEconomics(){
 }
 function syncExtraEconomicsRole(){
   document.getElementById('exportDailyReportEconomics')?.classList.toggle('hidden',!admin());
-  if(admin())return;window.PackageReview?.clearForRole();economicsExcludedIds.clear();extraEconomicsRecords=[];extraEconomicsBookRows=[];
+  if(admin())return;clearInlineEconomics(true);economicsDaysByExtra.clear();window.PackageReview?.clearForRole();economicsExcludedIds.clear();extraEconomicsRecords=[];extraEconomicsBookRows=[];
   document.getElementById('extraEconomicsBook')?.close();
   document.getElementById('extraDaysDialog')?.close();document.getElementById('extraDaysDialog')?.replaceChildren();
   for(const id of ['extraEconomicsBookList','extraEconomicsBookSummary'])document.getElementById(id)?.replaceChildren();
@@ -56,8 +59,58 @@ function populateEconomicsPeriods(){
   }
   select.value=value;
 }
+function clearInlineEconomics(force=false){
+  if(!expandedEconomics)return true;
+  if(force)ExtraHoursUi.close(true);
+  else if(!ExtraHoursUi.leaveInline())return false;
+  expandedEconomics.panel.remove();
+  expandedEconomics.button.setAttribute('aria-expanded','false');
+  expandedEconomics=null;return true;
+}
+function expandEconomicsRow(extra,article,button){
+  const same=expandedEconomics?.id===extra.id;
+  if(!clearInlineEconomics()||same)return;
+  const panel=document.createElement('section');
+  panel.className='economic-inline-days';article.after(panel);
+  button.setAttribute('aria-expanded','true');
+  expandedEconomics={id:extra.id,panel,button};
+  const days=economicsDaysByExtra.get(extra.id)||[];
+  const daily=days.length>1||days.some(day=>!day.final||day.economics);
+  const entries=daily?days:[null],slots=[];
+  function edit(index){
+    if(!ExtraHoursUi.leaveInline())return;
+    const slot=slots[index],next=index+1<slots.length;
+    slot.toggle.setAttribute('aria-expanded','true');
+    const collapse=()=>slot.toggle.setAttribute('aria-expanded','false');
+    void ExtraHoursUi.open(extra,{day:entries[index],inline:slot.host,nextDay:next,onClose:collapse,onSaved:()=>{
+      collapse();
+      if(!expandedEconomics||expandedEconomics.panel!==panel)return;
+      label(index);renderExtraEconomicsBook();
+      if(next&&panel.isConnected){edit(index+1);slots[index+1].toggle.scrollIntoView({block:'start'})}
+    }});
+  }
+  function label(index){
+    const day=entries[index];
+    if(!day)return;
+    const fresh=economicsDaysByExtra.get(extra.id)?.find(d=>d.id===day.id)||day;
+    entries[index]=fresh;
+    const amount=fresh.economics?window.OvergreenEconomics.calculate(fresh.economics).total:null;
+    slots[index].toggle.textContent=fmt(fresh.day)+' · '+(fresh.final?'Conclusiva':'Parziale')+' · '+(amount==null?'Da compilare':window.OvergreenEconomics.money(amount));
+  }
+  entries.forEach((day,index)=>{
+    const toggle=document.createElement('button'),host=document.createElement('div');
+    toggle.type='button';toggle.className='secondary';toggle.textContent='Economia intervento';
+    toggle.setAttribute('aria-expanded','false');host.className='economic-inline-editor';host.hidden=true;
+    toggle.onclick=()=>{if(host.hidden)edit(index);else ExtraHoursUi.leaveInline()};
+    slots.push({toggle,host});panel.append(toggle,host);label(index);
+  });
+  if(!daily)edit(0);
+}
 function renderExtraEconomicsBook(){
-  if(!admin())return;const model=window.OvergreenEconomics,list=$('extraEconomicsBookList');list.replaceChildren();
+  if(!admin())return;const model=window.OvergreenEconomics,list=$('extraEconomicsBookList');
+  const visible=extraEconomicsError?[]:model.filterRows(extras.filter(workspaceMatches),extraEconomicsRecords,attachments,economicsBookFilter());
+  if(expandedEconomics&&!visible.some(x=>x.extra.id===expandedEconomics.id)&&!clearInlineEconomics())return;
+  list.replaceChildren();
   $('extraEconomicsBookExport').disabled=!!extraEconomicsError;
   if(extraEconomicsError){$('extraEconomicsBookStatus').textContent=extraEconomicsError;$('extraEconomicsBookSummary').replaceChildren();extraEconomicsBookRows=[];updateEconomicsSelection();return}
   populateEconomicsPeriods();
@@ -69,10 +122,14 @@ function renderExtraEconomicsBook(){
   for(const x of extraEconomicsBookRows){const st=stores.find(s=>s.id===x.extra.store_id),article=document.createElement('article');article.className='economic-book-row';
     article.innerHTML=`<div><strong>${esc(st?.nome||x.extra.nome_esterno||'Extra')} · ${esc(x.extra.numero_target||'Target non indicato')}</strong><p>${esc(x.extra.titolo||'')}</p><small>${esc(model.periodLabel(model.period(x.extra)))}${model.closureDate(x.extra)?' · Chiusura '+esc(model.closureDate(x.extra).split('-').reverse().join('/')):''} · ${esc(model.modes[x.row.pricing_mode]||'Modalità da scegliere')} · ${esc(economicsStatus(x.calc,x.row))}</small>${x.extra.categoria_target==='pulizie'?`<p><strong>${esc(model.cleaningInvoiceLabel(x.row,'pulizie'))}</strong></p>`:''}</div><div><strong>${esc(model.money(x.calc.total))}</strong><button type="button" class="secondary">Apri</button></div>`;
     const select=document.createElement('input');select.type='checkbox';select.checked=!economicsExcludedIds.has(x.extra.id);select.setAttribute('aria-label','Includi '+(x.extra.numero_target||x.extra.titolo||'extra')+' nello ZIP');select.onchange=()=>{if(select.checked)economicsExcludedIds.delete(x.extra.id);else economicsExcludedIds.add(x.extra.id);updateEconomicsSelection()};article.prepend(select);
-    const open=()=>{$('extraEconomicsBook').close();void openExtraHours(x.extra,{returnToEconomics:true})};
+    const button=article.querySelector('button');
+    button.textContent=(economicsDaysByExtra.get(x.extra.id)||[]).length>1?'Giornate':'Apri';
+    button.setAttribute('aria-expanded',String(expandedEconomics?.id===x.extra.id));
+    const open=()=>expandEconomicsRow(x.extra,article,button);
     article.querySelector('button').onclick=open;
     article.onclick=event=>{if(!event.target.closest('button,input,label'))open()};
     list.appendChild(article);
+    if(expandedEconomics?.id===x.extra.id){expandedEconomics.button=button;article.after(expandedEconomics.panel)}
   }
   updateEconomicsSelection();
 }
@@ -91,7 +148,9 @@ function openExtraEconomicsBook(){
   if(!admin())return;const dialog=$('extraEconomicsBook');
   if(!dialog.dataset.bound){dialog.dataset.bound='true';$('extraEconomicsMonth').dataset.initialPeriod=today().slice(0,7);
     for(const id of ['extraEconomicsMonth','extraEconomicsBookCategory','extraEconomicsBookMode','extraEconomicsBookState'])$(id).onchange=renderExtraEconomicsBook;
-    $('extraEconomicsBookClose').onclick=()=>dialog.close();$('extraEconomicsBookRefresh').onclick=refreshExtraEconomicsBook;$('extraEconomicsBookExport').onclick=exportExtraEconomics;
+    dialog.addEventListener('cancel',event=>{if(!clearInlineEconomics())event.preventDefault()});
+    dialog.addEventListener('close',()=>{if(!dialog.open)clearInlineEconomics(true)});
+    $('extraEconomicsBookClose').onclick=()=>{if(clearInlineEconomics())dialog.close()};$('extraEconomicsBookRefresh').onclick=refreshExtraEconomicsBook;$('extraEconomicsBookExport').onclick=exportExtraEconomics;
     $('extraEconomicsBookZip').onclick=exportEconomicsZip;
     $('extraEconomicsBookReview').onclick=()=>window.PackageReview.open();
     $('extraEconomicsSelectAll').onclick=()=>{extraEconomicsBookRows.forEach(x=>economicsExcludedIds.delete(x.extra.id));renderExtraEconomicsBook()};

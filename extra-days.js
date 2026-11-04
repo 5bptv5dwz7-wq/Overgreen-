@@ -26,6 +26,12 @@ async function openExtraDays(extra,options={}){
    const total=complete.reduce((n,d)=>n+window.OvergreenEconomics.calculate(d.economics).total,0),summary=document.createElement('p');
    summary.textContent=`Totale giornate compilate: ${window.OvergreenEconomics.money(total)} · ${complete.length}/${days.length} · IVA esclusa. Il totale del target, i PDF e gli Excel usano queste giornate una sola volta. Completa tutte le giornate per includere il target nei totali fatturabili.`;box.appendChild(summary);
   }
+  const economic=options.returnToEconomics===true;
+  function editEconomics(index){
+   const day=days[index],next=index+1<days.length;
+   dialog.onclose=null;if(dialog.open)dialog.close();
+   return ExtraHoursUi.open(extra,{day,nextDay:next,onSaved:next?()=>editEconomics(index+1):null,onClose:()=>openExtraDays(extra,options)});
+  }
   for(const day of days){
    const card=document.createElement('article');card.className='card';
    card.innerHTML=`<h3>${esc(fmt(day.day))} · ${day.final?'Giornata conclusiva':'Da continuare'}</h3><p>${esc(day.workers.map(id=>profiles.find(p=>p.id===id)?.nome||'Operatore').join(', '))}</p><p style="white-space:pre-wrap">${esc(day.notes||'Nessuna nota')}</p><p>${day.attachments.filter(a=>a.tipo==='foto_generica').length} foto · ${day.attachments.filter(a=>a.tipo!=='foto_generica').length} documenti</p><div class="actions"></div>`;
@@ -33,9 +39,10 @@ async function openExtraDays(extra,options={}){
    const button=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent=label;b.onclick=async()=>{b.disabled=true;try{await fn()}catch(e){alert(e.message)}finally{b.disabled=false}};actions.appendChild(b)};
    button('PDF giornata',()=>generateExtraDayReport(extra,day,false));
    if(admin()){
+    if(!economic)button('Modifica giornata',()=>editSavedExtraDay(extra,day,()=>openExtraDays(extra,options)));
     const calc=day.economics&&window.OvergreenEconomics.calculate(day.economics),line=document.createElement('p');line.textContent=calc?`Economia: ${window.OvergreenEconomics.money(calc.total)}${!calc.complete?' · da completare':''}`:'Economia da compilare';actions.before(line);
     if(window.OvergreenEconomics.isBillableExtra(extra)){
-     button('Economia giornata',()=>{dialog.onclose=null;dialog.close();return openExtraHours(extra,{day,onClose:()=>openExtraDays(extra,options)})});
+     if(economic)button('Economia giornata',()=>editEconomics(days.indexOf(day)));
      button('PDF con economia',()=>generateExtraDayReport(extra,day,true));
     }
    }
@@ -80,4 +87,52 @@ async function appendExtraDayDetails(pdf,extra,days){
   }
  }
  return included;
+}
+
+function editSavedExtraDay(extra,day,afterSave){
+ if(!admin())return;
+ const dialog=document.createElement('dialog');
+ dialog.className='wide-dialog';
+ dialog.innerHTML='<form><div class="dialog-head"><h2>Modifica giornata</h2></div><label>Data del passaggio<input name="day" type="date" required></label><fieldset data-workers><legend>Operatori</legend></fieldset><label>Note<textarea name="notes" maxlength="20000"></textarea></label><fieldset data-files><legend>Allegati da mantenere</legend></fieldset><label>Aggiungi foto<input name="photos" type="file" accept="image/*" multiple></label><label>Sostituisci rapportino Eurospin<input name="eurospin" type="file" accept="image/*,application/pdf"></label><label>Sostituisci rapportino Overgreen<input name="overgreen" type="file" accept="image/*,application/pdf"></label><p role="status"></p><div class="actions"><button type="button">Annulla</button><button type="submit">Salva giornata</button></div></form>';
+ const form=dialog.querySelector('form'),fields=form.elements,status=form.querySelector('[role=status]');
+ fields.day.value=day.day;fields.notes.value=day.notes||'';
+ function check(group,name,value,label,selected){
+  const row=document.createElement('label'),input=document.createElement('input');
+  input.type='checkbox';input.name=name;input.value=value;input.checked=selected;
+  row.append(input,document.createTextNode(label));form.querySelector(group).append(row);
+ }
+ for(const id of new Set([...day.workers,...profiles.filter(p=>p.attivo).map(p=>p.id)]))
+  check('[data-workers]','worker',id,profiles.find(p=>p.id===id)?.nome||'Operatore',day.workers.includes(id));
+ for(const a of day.attachments)check('[data-files]','keep',a.id,a.nome_file||attachmentLabel(a),true);
+ const staged=new Map(),scope=attachmentMediaScope();let busy=false;
+ dialog.oncancel=e=>{if(busy)e.preventDefault()};dialog.onclose=()=>dialog.remove();form.querySelector('button').onclick=()=>dialog.close();
+ form.onsubmit=async event=>{
+  event.preventDefault();if(busy||!admin()||scope!==attachmentMediaScope())return;
+  const data=new FormData(form),workers=data.getAll('worker');
+  if(!workers.length){status.textContent='Seleziona almeno un operatore.';return}
+  busy=true;form.inert=true;status.textContent='Salvataggio…';
+  try{
+   const added=[],replaced=new Set();
+   for(const [tipo,files] of [['foto_generica',fields.photos.files],['rapportino_eurospin',fields.eurospin.files],['rapportino_overgreen',fields.overgreen.files]]){
+    for(const original of files){
+     let entry=staged.get(original);
+     if(!entry){
+      const file=original.type.startsWith('image/')?await compressImage(original):original;
+      const id=crypto.randomUUID(),name=file.name||original.name;
+      const path='extra/'+extra.id+'/'+id+'-'+name.replace(/[^a-zA-Z0-9._-]/g,'-');
+      await uploadFile(path,file);
+      entry={id,tipo,storage_path:path,nome_file:name,mime_type:file.type,dimensione_bytes:file.size};staged.set(original,entry);
+     }
+     added.push(entry);if(tipo!=='foto_generica')replaced.add(tipo);
+    }
+   }
+   if(!admin()||scope!==attachmentMediaScope())throw Error('Sessione cambiata. Riapri la giornata.');
+   const keep=data.getAll('keep').filter(id=>!replaced.has(day.attachments.find(a=>a.id===id)?.tipo));
+   const {error}=await sb.rpc('edit_extra_day_v326',{p_id:day.id,p_revision:day.revision,p_day:fields.day.value,p_notes:fields.notes.value,p_workers:workers,p_keep:keep,p_new:added});
+   if(error)throw error;
+   dialog.close();toast('Giornata aggiornata');await afterSave();await loadAll();
+  }catch(error){status.textContent=error.message||'Salvataggio non riuscito.'}
+  finally{busy=false;form.inert=false}
+ };
+ document.body.append(dialog);dialog.showModal();
 }

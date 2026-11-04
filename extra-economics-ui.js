@@ -69,7 +69,10 @@ function renderExtraEconomicsBook(){
   for(const x of extraEconomicsBookRows){const st=stores.find(s=>s.id===x.extra.store_id),article=document.createElement('article');article.className='economic-book-row';
     article.innerHTML=`<div><strong>${esc(st?.nome||x.extra.nome_esterno||'Extra')} · ${esc(x.extra.numero_target||'Target non indicato')}</strong><p>${esc(x.extra.titolo||'')}</p><small>${esc(model.periodLabel(model.period(x.extra)))}${model.closureDate(x.extra)?' · Chiusura '+esc(model.closureDate(x.extra).split('-').reverse().join('/')):''} · ${esc(model.modes[x.row.pricing_mode]||'Modalità da scegliere')} · ${esc(economicsStatus(x.calc,x.row))}</small>${x.extra.categoria_target==='pulizie'?`<p><strong>${esc(model.cleaningInvoiceLabel(x.row,'pulizie'))}</strong></p>`:''}</div><div><strong>${esc(model.money(x.calc.total))}</strong><button type="button" class="secondary">Apri</button></div>`;
     const select=document.createElement('input');select.type='checkbox';select.checked=!economicsExcludedIds.has(x.extra.id);select.setAttribute('aria-label','Includi '+(x.extra.numero_target||x.extra.titolo||'extra')+' nello ZIP');select.onchange=()=>{if(select.checked)economicsExcludedIds.delete(x.extra.id);else economicsExcludedIds.add(x.extra.id);updateEconomicsSelection()};article.prepend(select);
-    article.querySelector('button').onclick=()=>{$('extraEconomicsBook').close();void openExtraHours(x.extra,{returnToEconomics:true})};list.appendChild(article);
+    const open=()=>{$('extraEconomicsBook').close();void openExtraHours(x.extra,{returnToEconomics:true})};
+    article.querySelector('button').onclick=open;
+    article.onclick=event=>{if(!event.target.closest('button,input,label'))open()};
+    list.appendChild(article);
   }
   updateEconomicsSelection();
 }

@@ -1,3 +1,28 @@
+// Optional operational details, independent of billable hours and assigned users.
+function extraWorkDetailsFields(prefix){
+ return `<fieldset id="${prefix}WorkDetails"><legend>Tecnici e orario di lavoro (facoltativi)</legend><div class="planner-grid"><label>Numero di tecnici<input id="${prefix}TechnicianCount" type="number" min="1" max="999" step="1" inputmode="numeric" placeholder="Es. 5"></label><label>Ora di inizio<input id="${prefix}WorkStart" type="time"></label><label>Ora di fine<input id="${prefix}WorkEnd" type="time"></label></div><p class="muted">Puoi lasciare tutto vuoto o indicare solo i tecnici o solo l’orario. Se la fine precede l’inizio, si intende il giorno successivo. Le ore da fatturare si compilano in Economia.</p></fieldset>`;
+}
+function parseExtraWorkDetails(count,start,end){
+ const n=String(count??'').trim(),from=String(start??'').trim(),to=String(end??'').trim();
+ if(n&&!/^[1-9]\d{0,2}$/.test(n))throw Error('Indica un numero intero di tecnici da 1 a 999, oppure lascia vuoto.');
+ if(Boolean(from)!==Boolean(to))throw Error('Indica sia l’ora di inizio sia l’ora di fine, oppure lasciale entrambe vuote.');
+ if(from&&(!/^([01]\d|2[0-3]):[0-5]\d$/.test(from)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(to)||from===to))throw Error('Indica un orario di inizio e fine valido, con orari diversi.');
+ return {technician_count:n?Number(n):null,work_start:from||null,work_end:to||null};
+}
+function readExtraWorkDetails(prefix){
+ return parseExtraWorkDetails($(prefix+'TechnicianCount').value,$(prefix+'WorkStart').value,$(prefix+'WorkEnd').value);
+}
+function fillExtraWorkDetails(prefix,details={}){
+ $(prefix+'TechnicianCount').value=details.technician_count??'';
+ $(prefix+'WorkStart').value=(details.work_start||'').slice(0,5);
+ $(prefix+'WorkEnd').value=(details.work_end||'').slice(0,5);
+}
+function extraWorkDetailsText(day){
+ if(!day)return '';
+ const start=(day.work_start||'').slice(0,5),end=(day.work_end||'').slice(0,5);
+ return [day.technician_count!=null?'Tecnici: '+day.technician_count:'',start&&end?'Orario di lavoro: '+start+' – '+end+(end<start?' (giorno successivo)':''):''].filter(Boolean).join(' · ');
+}
+
 /* A work-day snapshot survives replacement of the target's active reports. */
 function appendExtraDaysButton(card,extra){
  if(extra.cleaning_codes?.length&&!extra.cleaning_codes.includes('TARGET'))return;
@@ -35,6 +60,7 @@ async function openExtraDays(extra,options={}){
   for(const day of days){
    const card=document.createElement('article');card.className='card';
    card.innerHTML=`<h3>${esc(fmt(day.day))} · ${day.final?'Giornata conclusiva':'Da continuare'}</h3><p>${esc(day.workers.map(id=>profiles.find(p=>p.id===id)?.nome||'Operatore').join(', '))}</p><p style="white-space:pre-wrap">${esc(day.notes||'Nessuna nota')}</p><p>${day.attachments.filter(a=>a.tipo==='foto_generica').length} foto · ${day.attachments.filter(a=>a.tipo!=='foto_generica').length} documenti</p><div class="actions"></div>`;
+   const detail=extraWorkDetailsText(day);if(detail){const line=document.createElement('p');line.textContent=detail;card.querySelector('.actions').before(line)}
    const actions=card.querySelector('.actions');
    const button=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent=label;b.onclick=async()=>{b.disabled=true;try{await fn()}catch(e){alert(e.message)}finally{b.disabled=false}};actions.appendChild(b)};
    button('PDF giornata',()=>generateExtraDayReport(extra,day,false));
@@ -96,6 +122,8 @@ function editSavedExtraDay(extra,day,afterSave){
  dialog.innerHTML='<form><div class="dialog-head"><h2>Modifica giornata</h2></div><label>Data del passaggio<input name="day" type="date" required></label><fieldset data-workers><legend>Operatori</legend></fieldset><label>Note<textarea name="notes" maxlength="20000"></textarea></label><fieldset data-files><legend>Allegati da mantenere</legend></fieldset><label>Aggiungi foto<input name="photos" type="file" accept="image/*" multiple></label><label>Sostituisci rapportino Eurospin<input name="eurospin" type="file" accept="image/*,application/pdf"></label><label>Sostituisci rapportino Overgreen<input name="overgreen" type="file" accept="image/*,application/pdf"></label><p role="status"></p><div class="actions"><button type="button">Annulla</button><button type="submit">Salva giornata</button></div></form>';
  const form=dialog.querySelector('form'),fields=form.elements,status=form.querySelector('[role=status]');
  fields.day.value=day.day;fields.notes.value=day.notes||'';
+ form.querySelector('[data-workers]').insertAdjacentHTML('afterend',extraWorkDetailsFields('editDay'));
+ document.body.append(dialog);fillExtraWorkDetails('editDay',day);
  function check(group,name,value,label,selected){
   const row=document.createElement('label'),input=document.createElement('input');
   input.type='checkbox';input.name=name;input.value=value;input.checked=selected;
@@ -112,6 +140,7 @@ function editSavedExtraDay(extra,day,afterSave){
   if(!workers.length){status.textContent='Seleziona almeno un operatore.';return}
   busy=true;form.inert=true;status.textContent='Salvataggio…';
   try{
+   const workDetails=readExtraWorkDetails('editDay');
    const added=[],replaced=new Set();
    for(const [tipo,files] of [['foto_generica',fields.photos.files],['rapportino_eurospin',fields.eurospin.files],['rapportino_overgreen',fields.overgreen.files]]){
     for(const original of files){
@@ -128,7 +157,7 @@ function editSavedExtraDay(extra,day,afterSave){
    }
    if(!admin()||scope!==attachmentMediaScope())throw Error('Sessione cambiata. Riapri la giornata.');
    const keep=data.getAll('keep').filter(id=>!replaced.has(day.attachments.find(a=>a.id===id)?.tipo));
-   const {error}=await sb.rpc('edit_extra_day_v326',{p_id:day.id,p_revision:day.revision,p_day:fields.day.value,p_notes:fields.notes.value,p_workers:workers,p_keep:keep,p_new:added});
+   const {error}=await sb.rpc('edit_extra_day_v328',{p_work_details:workDetails,p_id:day.id,p_revision:day.revision,p_day:fields.day.value,p_notes:fields.notes.value,p_workers:workers,p_keep:keep,p_new:added});
    if(error)throw error;
    dialog.close();toast('Giornata aggiornata');await afterSave();await loadAll();
   }catch(error){status.textContent=error.message||'Salvataggio non riuscito.'}

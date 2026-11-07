@@ -21,7 +21,8 @@ function saving(options={}){
  const workerRows=options.workerRows||[],workerWrites=[];
  // Document tests assume an authorized assignment; permission rules are tested in extra-readonly.cjs.
  const c=h.context;Object.assign(c,{extraDraftRestoring:false,recoveredGenericFile:null,saveCurrentExtraDraft:async()=>{},extraDrafts:{remove:async()=>{}},confirmExtraDateExecution:()=>true,canWorkOnExtra:()=>true,$,crypto:require('node:crypto'),attachments:[],extras:[{id:'extra1'}],extraWorkers:workerRows.map(w=>({...w})),profiles:[{id:'worker1',nome:'Mario',attivo:true},{id:'worker2',nome:'Gianni',attivo:true},{id:'inactive',nome:'Ex operatore',attivo:false}],profile:{id:'worker1'},admin:()=>!!options.admin,esc:s=>s,today:()=> '2026-10-03',closeExtraPhotoFiles:[],combinedExtraClosureQueue:[],workItemsForExtra:()=>[],structuredCloseRows:()=>[],renderCloseExtraPhotoSelection(){},toast(){},alert:m=>h.errors.push(m),refreshAfterSave:async()=>{},notifyAdminClosure:(...v)=>notifications.push(v),sb:{async rpc(name,args){
-   assert.equal(name,options.defer?'overgreen_close_extra_deferred_v316':'overgreen_close_extra_v271');
+   assert.equal(name,'overgreen_close_extra_day_v319');
+   if(args.p_payload.stato==='in_attesa')assert.equal(!!args.p_deferred,!!options.defer);
    if(options.failWorkers&&args.p_workers)return {error:new Error('Squadra non salvata')};
    if(options.failClose)return {error:new Error('Chiusura non salvata')};
    if(args.p_workers){const old=workerRows.map(w=>w.profile_id),wanted=Array.from(args.p_workers);if(wanted.some(id=>!old.includes(id)))workerWrites.push('insert');if(old.some(id=>!wanted.includes(id)))workerWrites.push('delete');workerRows.splice(0,workerRows.length,...wanted.map(profile_id=>({extra_id:args.p_extra_id,profile_id})));}
@@ -39,8 +40,10 @@ function saving(options={}){
    }).then(resolve,reject)}
   };return q;
  }}});
+ vm.runInContext(fs.readFileSync(__dirname+'/../extra-days.js','utf8'),c);
  vm.runInContext(src.slice(src.indexOf('function renderExtraClosureDetails('),src.indexOf('function openExtraClosureDialog(')),c);
  const a=src.indexOf('let extraSaveBusy=false;'),b=src.indexOf('function isRecoverableJwtError',a);vm.runInContext(src.slice(a,b),c);
+ c.openExtraDays=async()=>{};
  c.saveExtraUpload=async(id,type,file)=>{uploads.push({id,type,file});return {id:'new-'+type};};c.cleanupReplacedAttachments=async()=>{};
  c.renderExtraClosureDetails(c.extras[0]);
  return {...h,$,uploads,updates,notifications,workerRows,workerWrites,options,submit:()=>$('closeExtraForm').onsubmit({preventDefault(){},submitter:$('closeExtraFinalBtn')})};
@@ -48,7 +51,7 @@ function saving(options={}){
 test('final closure uploads camera/photo and PDF to correct report types',async()=>{const h=saving();h.pick('doc-eurospin-camera',photo);h.pick('reportOvergreen',pdf);await h.submit();assert.deepEqual(h.errors,[]);assert.equal(h.uploads[0].type,'rapportino_eurospin');assert.equal(h.uploads[0].file,photo);assert.equal(h.uploads[1].type,'rapportino_overgreen');assert.equal(h.uploads[1].file,pdf);assert.equal(h.updates[0].stato,'in_attesa');assert.equal(h.notifications.length,1);});
 test('missing report blocks final save before uploading',async()=>{const h=saving();h.pick('doc-eurospin-camera',photo);await h.submit();assert.match(h.errors[0],/file Overgreen/);assert.equal(h.uploads.length,0);assert.equal(h.updates.length,0);assert.equal(h.api.get('eurospin'),photo);});
 test('partial accepts Overgreen and keeps the extra open without notification',async()=>{const h=saving();h.pick('doc-overgreen-camera',photo);await h.context.saveExtraPartial();assert.deepEqual(h.errors,[]);assert.equal(h.uploads[0].file,photo);assert.equal(h.updates[0].stato,'da_integrare');assert.equal(h.notifications.length,0);});
-test('partial rejects Eurospin without losing either document',async()=>{const h=saving();h.pick('doc-eurospin-camera',photo);h.pick('reportOvergreen',pdf);await h.context.saveExtraPartial();assert.match(h.errors[0],/solo alla chiusura definitiva/);assert.equal(h.uploads.length,0);assert.equal(h.api.get('eurospin'),photo);assert.equal(h.api.get('overgreen'),pdf);});
+test('partial accepts both daily reports and leaves the extra open',async()=>{const h=saving();h.pick('doc-eurospin-camera',photo);h.pick('reportOvergreen',pdf);await h.context.saveExtraPartial();assert.deepEqual(h.errors,[]);assert.equal(h.uploads.length,2);assert.equal(h.updates[0].stato,'da_integrare');});
 test('failed upload retains selected files and permits retry',async()=>{const h=saving();h.pick('doc-eurospin-camera',photo);h.pick('reportOvergreen',pdf);const upload=h.context.saveExtraUpload;h.context.saveExtraUpload=async()=>{throw new Error('Rete assente')};await h.submit();assert.equal(h.api.get('eurospin'),photo);assert.equal(h.api.get('overgreen'),pdf);assert.equal(h.updates.length,0);h.context.saveExtraUpload=upload;await h.submit();assert.equal(h.updates[0].stato,'in_attesa');});
 
 test('unplanned extra closes without workers and records execution date and closing user',async()=>{const h=saving();h.pick('reportEurospin',pdf);h.pick('reportOvergreen',pdf);await h.submit();assert.deepEqual(h.errors,[]);assert.equal(h.updates[0].giorno_intervento,'2026-10-03');assert.equal(h.updates[0].closed_by,'worker1');assert.equal(h.updates[0].stato,'in_attesa');});
@@ -86,7 +89,7 @@ test('worker save failure leaves extra open and retry retains chosen values and 
 });
 test('employee does not edit team/date and a partial does not persist closure details',async()=>{
  const employee=saving();assert(employee.$('closeExtraDetails').classList.contains('hidden'));assert(employee.$('closeExtraClosedAt').disabled);
- const h=saving({admin:true});h.pick('reportOvergreen',pdf);await h.context.saveExtraPartial();assert.deepEqual(h.errors,[]);
+ const h=saving({admin:true,workerRows:[{extra_id:'extra1',profile_id:'worker1'}]});h.pick('reportOvergreen',pdf);await h.context.saveExtraPartial();assert.deepEqual(h.errors,[]);
  assert.equal(h.updates[0].stato,'da_integrare');assert.equal(h.updates[0].closed_at,null);assert.equal(h.workerWrites.length,0);
 });
 test('failed atomic closure rolls back its team and retry commits without duplicates',async()=>{
@@ -121,3 +124,14 @@ test('V223 invalid night hours block uploads and unchecked night work explicitly
 
 test('admin explicitly defers both reports and uses protected closure RPC',async()=>{const h=saving({admin:true,defer:true});chooseClosure(h);h.api.reset();h.$('closeExtraDeferReports').checked=true;await h.submit();assert.deepEqual(h.errors,[]);assert.equal(h.uploads.length,0);assert.equal(h.updates.length,1);});
 test('worker cannot bypass required reports by setting deferred checkbox',async()=>{const h=saving();h.$('closeExtraDeferReports').checked=true;await h.submit();assert.match(h.errors[0],/rapportino Eurospin/);assert.equal(h.updates.length,0);});
+
+for(const partial of [false,true])test('optional work details persist through actual '+(partial?'partial':'final')+' closure handler',async()=>{
+ const h=saving();h.pick('reportEurospin',pdf);h.pick('reportOvergreen',pdf);
+ h.$('closeExtraTechnicianCount').value='5';h.$('closeExtraWorkStart').value='22:00';h.$('closeExtraWorkEnd').value='02:30';
+ if(partial)await h.context.saveExtraPartial();else await h.submit();
+ assert.deepEqual(h.errors,[]);assert.equal(h.updates[0].technician_count,5);assert.equal(h.updates[0].work_start,'22:00');assert.equal(h.updates[0].work_end,'02:30');assert.equal(h.updates[0].total_hours,undefined);
+});
+test('incomplete optional work hours block uploads and remain available to correct',async()=>{
+ const h=saving();h.pick('reportEurospin',pdf);h.pick('reportOvergreen',pdf);h.$('closeExtraWorkStart').value='08:00';await h.submit();
+ assert.match(h.errors[0],/sia l’ora/);assert.equal(h.uploads.length,0);assert.equal(h.$('closeExtraWorkStart').value,'08:00');
+});

@@ -94,26 +94,32 @@
     const [year,month]=value.split('-').map(Number);
     return new Intl.DateTimeFormat('it-IT',{month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(Date.UTC(year,month-1,1)));
   }
+  // Open multi-day targets belong wholly to their latest recorded work month.
+  // Closing the target moves the entire amount to its closing month.
+  function accountingPeriod(extra,row){
+    const statePeriod=period(extra);
+    if(statePeriod!=='open'||!row?.days?.length)return statePeriod;
+    const latest=row.days.map(d=>d.day||'').filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)).sort().pop();
+    return latest?latest.slice(0,7):statePeriod;
+  }
   function economicsPeriods(extras,records){
     const byId=new Map(records.map(r=>[r.extra_id,r])),periods=new Set();
     for(const extra of extras){
       if(!isBillableExtra(extra)||['annullato','rifiutato'].includes(extra.stato))continue;
-      const row=byId.get(extra.id);
       periods.add(period(extra));
-      if(period(extra)==='open')for(const day of row?.days||[])if(day.economics)periods.add(day.day.slice(0,7));
+      periods.add(accountingPeriod(extra,byId.get(extra.id)));
     }
     return [...periods];
   }
   function filterRows(extras,records,attachments,filter={}){
     const byId=new Map(records.map(r=>[r.extra_id,r]));
     const reports=new Map();for(const a of [...attachments].sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))||String(b.id).localeCompare(String(a.id))))if(a.tipo==='rapportino_eurospin'&&!reports.has(a.extra_id))reports.set(a.extra_id,a);
-    const monthly=/^\d{4}-\d{2}$/.test(filter.month||'');
     return extras.filter(e=>isBillableExtra(e)&&!['annullato','rifiutato'].includes(e.stato))
-      .map(e=>{let row=byId.get(e.id)||{};if(monthly&&row.days&&period(e)==='open')row={...row,days:row.days.filter(d=>d.economics&&d.day.slice(0,7)===filter.month)};return {extra:e,row,calc:review(row,e,reports.get(e.id))}})
-      .filter(x=>(!filter.month||(monthly&&x.row.days&&period(x.extra)==='open'?x.row.days.length>0:period(x.extra)===filter.month))&&(!filter.category||x.extra.categoria_target===filter.category)&&(!filter.mode||x.row.pricing_mode===filter.mode)&&(!filter.state||x.extra.stato===filter.state))
-      .sort((a,b)=>period(a.extra).localeCompare(period(b.extra))||closureDate(a.extra).localeCompare(closureDate(b.extra))||String(a.extra.numero_target||'').localeCompare(String(b.extra.numero_target||'')));
+      .map(e=>{const row=byId.get(e.id)||{};return {extra:e,row,calc:review(row,e,reports.get(e.id))}})
+      .filter(x=>(!filter.month||(filter.month==='open'?period(x.extra)==='open':accountingPeriod(x.extra,x.row)===filter.month))&&(!filter.category||x.extra.categoria_target===filter.category)&&(!filter.mode||x.row.pricing_mode===filter.mode)&&(!filter.state||x.extra.stato===filter.state))
+      .sort((a,b)=>accountingPeriod(a.extra,a.row).localeCompare(accountingPeriod(b.extra,b.row))||closureDate(a.extra).localeCompare(closureDate(b.extra))||String(a.extra.numero_target||'').localeCompare(String(b.extra.numero_target||'')));
   }
-  return {economicsPeriods,dailyRecord,expandDailyRows,cleaningInvoiceLabel,closureDate,period,periodLabel,isBillableExtra,modes,quoteStates,decimal,cents,money,rates,calculate,review,filterRows};
+  return {accountingPeriod,economicsPeriods,dailyRecord,expandDailyRows,cleaningInvoiceLabel,closureDate,period,periodLabel,isBillableExtra,modes,quoteStates,decimal,cents,money,rates,calculate,review,filterRows};
 });
 
 

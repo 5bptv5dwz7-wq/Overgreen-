@@ -24,7 +24,9 @@ function setup(options={}){
       db.row={...args.p_values,...model.rates(args.p_values.pricing_category,args.p_values.equipment),extra_id:args.p_extra_id,source_attachment_id:args.p_source_attachment_id,revision:(db.row?.revision||0)+1,updated_at:'2026-09-08T10:00:00Z'};return {data:{record:db.row,calculation:model.calculate(db.row)}};
     }}
   };
-  vm.createContext(c);vm.runInContext(code,c);
+  vm.createContext(c);vm.runInContext(fs.readFileSync(__dirname+'/../extra-days.js','utf8'),c);
+  c.readExtraDays=async()=>options.workDay?[options.workDay]:[];
+  c.attachmentMediaScope=()=>'test';vm.runInContext(code,c);
   const $=id=>document.getElementById(id);
   const extra={id:'e1',client_type:'eurospin',titolo:'<img src=x onerror=alert(1)>'};
   const open=async()=>{await c.openExtraHours(extra);if(options.category==='pulizie'&&!options.row?.cleaning_scope)document.getElementById('extraEconomicsCleaningScope').value='esterni';await tick()},save=()=>vm.runInContext('ExtraHoursUi.save()',c);
@@ -138,4 +140,13 @@ test('V223 Economia loads night hours from closure, calculates the split and sav
  assert.match($('extraEconomicsRates').textContent,/30,00/);assert.match($('extraEconomicsNightSplit').textContent,/3,5 ore diurne/);
  await h.save();const saved=h.calls.find(x=>x[0]==='save_extra_economics_v202')[1].p_values;
  assert.equal(saved.night_hours,2.5);assert.equal(saved.expected_night_hours,2.5);assert.equal(saved.equipment,true);assert.equal(saved.total_hours,6);
+});
+
+test('single closure suggests net crew hours and saved overrides survive reopening',async()=>{
+ const h=setup({workDay:{final:true,technician_count:3,work_start:'08:00',work_end:'17:00',break_minutes:60}});
+ await h.open();
+ assert.equal(h.$('extraEconomicsOperators').value,'3');
+ assert.equal(h.$('extraHoursInput').value,'24');
+ h.$('extraHoursInput').value='22';await h.save();await h.open();
+ assert.equal(h.$('extraHoursInput').value,'22');
 });

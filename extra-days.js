@@ -1,18 +1,30 @@
 // Optional operational details, independent of billable hours and assigned users.
 function extraWorkDetailsFields(prefix){
- return `<fieldset id="${prefix}WorkDetails"><legend>Tecnici e orario di lavoro (facoltativi)</legend><div class="planner-grid"><label>Numero di tecnici<input id="${prefix}TechnicianCount" type="number" min="1" max="999" step="1" inputmode="numeric" placeholder="Es. 5"></label><label>Ora di inizio<input id="${prefix}WorkStart" type="time"></label><label>Ora di fine<input id="${prefix}WorkEnd" type="time"></label></div><p class="muted">Puoi lasciare tutto vuoto o indicare solo i tecnici o solo l’orario. Se la fine precede l’inizio, si intende il giorno successivo. Le ore da fatturare si compilano in Economia.</p></fieldset>`;
+ return `<fieldset id="${prefix}WorkDetails"><legend>Tecnici e orario di lavoro (facoltativi)</legend><div class="planner-grid"><label>Numero di tecnici<input id="${prefix}TechnicianCount" type="number" min="1" max="999" step="1" inputmode="numeric" placeholder="Es. 5"></label><label>Ora di inizio<input id="${prefix}WorkStart" type="time"></label><label>Ora di fine<input id="${prefix}WorkEnd" type="time"></label><label>Pause totali (minuti)<input id="${prefix}BreakMinutes" type="number" min="0" max="1439" step="1" inputmode="numeric" placeholder="Es. 60"></label></div><p class="muted">Puoi lasciare tutto vuoto o indicare solo i tecnici o solo l’orario. Se la fine precede l’inizio, si intende il giorno successivo. Somma il pranzo e le altre pause per tecnico. Con tecnici e orario indicati, Economia propone le ore nette della squadra.</p></fieldset>`;
 }
-function parseExtraWorkDetails(count,start,end){
+function shiftMinutes(start,end){
+ const minutes=time=>Number(time.slice(0,2))*60+Number(time.slice(3,5));
+ return (minutes(end)-minutes(start)+1440)%1440;
+}
+function suggestedCrewHours(day){
+ if(!day?.technician_count||!day.work_start||!day.work_end)return null;
+ const net=shiftMinutes(day.work_start,day.work_end)-(day.break_minutes??0);
+ return Math.round(net*day.technician_count*100/60)/100;
+}
+function parseExtraWorkDetails(count,start,end,pause){
  const n=String(count??'').trim(),from=String(start??'').trim(),to=String(end??'').trim();
  if(n&&!/^[1-9]\d{0,2}$/.test(n))throw Error('Indica un numero intero di tecnici da 1 a 999, oppure lascia vuoto.');
  if(Boolean(from)!==Boolean(to))throw Error('Indica sia l’ora di inizio sia l’ora di fine, oppure lasciale entrambe vuote.');
  if(from&&(!/^([01]\d|2[0-3]):[0-5]\d$/.test(from)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(to)||from===to))throw Error('Indica un orario di inizio e fine valido, con orari diversi.');
- return {technician_count:n?Number(n):null,work_start:from||null,work_end:to||null};
+ const duration=String(pause??'').trim();
+ if(duration&&(!/^\d{1,4}$/.test(duration)||!from||Number(duration)>shiftMinutes(from,to)))throw Error('Indica gli orari e una pausa in minuti interi entro la durata del turno.');
+ return {break_minutes:duration?Number(duration):null,technician_count:n?Number(n):null,work_start:from||null,work_end:to||null};
 }
 function readExtraWorkDetails(prefix){
- return parseExtraWorkDetails($(prefix+'TechnicianCount').value,$(prefix+'WorkStart').value,$(prefix+'WorkEnd').value);
+ return parseExtraWorkDetails($(prefix+'TechnicianCount').value,$(prefix+'WorkStart').value,$(prefix+'WorkEnd').value,$(prefix+'BreakMinutes').value);
 }
 function fillExtraWorkDetails(prefix,details={}){
+ $(prefix+'BreakMinutes').value=details.break_minutes??'';
  $(prefix+'TechnicianCount').value=details.technician_count??'';
  $(prefix+'WorkStart').value=(details.work_start||'').slice(0,5);
  $(prefix+'WorkEnd').value=(details.work_end||'').slice(0,5);
@@ -20,7 +32,7 @@ function fillExtraWorkDetails(prefix,details={}){
 function extraWorkDetailsText(day){
  if(!day)return '';
  const start=(day.work_start||'').slice(0,5),end=(day.work_end||'').slice(0,5);
- return [day.technician_count!=null?'Tecnici: '+day.technician_count:'',start&&end?'Orario di lavoro: '+start+' – '+end+(end<start?' (giorno successivo)':''):''].filter(Boolean).join(' · ');
+ return [day.technician_count!=null?'Tecnici: '+day.technician_count:'',start&&end?'Orario di lavoro: '+start+' – '+end+(end<start?' (giorno successivo)':''):'',day.break_minutes!=null?'Pause: '+day.break_minutes+' min':''].filter(Boolean).join(' · ');
 }
 
 /* A work-day snapshot survives replacement of the target's active reports. */

@@ -1,4 +1,4 @@
-const APP_VERSION='V329';
+const APP_VERSION='V330';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -5765,7 +5765,7 @@ window.AppleDocumentScanner?.init({
 
 const extraDrafts=window.OvergreenExtraDrafts.create({store:window.OvergreenPhotoSync.storage(indexedDB,'overgreen-extra-drafts-v271'),scope:attachmentMediaScope});
 let extraDraftRestoring=false,recoveredGenericFile=null,extraDraftTimer=null;
-function extraDraftFields(){return {workDetails:{technician_count:$('closeExtraTechnicianCount')?.value,work_start:$('closeExtraWorkStart')?.value,work_end:$('closeExtraWorkEnd')?.value},...($('cleaningClosureChoices')&&!$('cleaningClosureChoices').hidden&&typeof selectedCleaningCodes==='function'?{cleaningCodes:selectedCleaningCodes($('cleaningClosureChoices'))}:{}),workDayId:$('closeExtraForm').dataset.workDayId,deferReports:admin()&&$('closeExtraDeferReports').checked,notes:$('closeExtraNotes').value,ticket:$('closeExtraTicket').value,closedAt:$('closeExtraClosedAt').value,nightEnabled:$('closeExtraNightEnabled').checked,nightHours:$('closeExtraNightHours')?.value,workers:[...$('closeExtraWorkers').querySelectorAll('input:checked')].map(x=>x.value)}}
+function extraDraftFields(){return {workDetails:{break_minutes:$('closeExtraBreakMinutes')?.value,technician_count:$('closeExtraTechnicianCount')?.value,work_start:$('closeExtraWorkStart')?.value,work_end:$('closeExtraWorkEnd')?.value},...($('cleaningClosureChoices')&&!$('cleaningClosureChoices').hidden&&typeof selectedCleaningCodes==='function'?{cleaningCodes:selectedCleaningCodes($('cleaningClosureChoices'))}:{}),workDayId:$('closeExtraForm').dataset.workDayId,deferReports:admin()&&$('closeExtraDeferReports').checked,notes:$('closeExtraNotes').value,ticket:$('closeExtraTicket').value,closedAt:$('closeExtraClosedAt').value,nightEnabled:$('closeExtraNightEnabled').checked,nightHours:$('closeExtraNightHours')?.value,workers:[...$('closeExtraWorkers').querySelectorAll('input:checked')].map(x=>x.value)}}
 function captureExtraDraft(){
  if(extraDraftRestoring||!$('closeExtraDialog').open)return null;
  const id=$('closeExtraId').value;if(!id)return null;
@@ -6069,7 +6069,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=329').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=330').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

@@ -82,7 +82,7 @@ function expandEconomicsRow(extra,article,button){
     const slot=slots[index],next=index+1<slots.length;
     slot.toggle.setAttribute('aria-expanded','true');
     const collapse=()=>slot.toggle.setAttribute('aria-expanded','false');
-    void ExtraHoursUi.open(extra,{day:entries[index],inline:slot.host,nextDay:next,onClose:collapse,onSaved:()=>{
+    void ExtraHoursUi.open(extra,{day:entries[index],workDay:daily?null:days[0],inline:slot.host,nextDay:next,onClose:collapse,onSaved:()=>{
       collapse();
       if(!expandedEconomics||expandedEconomics.panel!==panel)return;
       label(index);renderExtraEconomicsBook();

@@ -87,6 +87,7 @@ const ExtraHoursUi=(()=>{
   function metadata(s){
     const row=s.row,stamp=row?.updated_at?new Date(row.updated_at).toLocaleString('it-IT',{dateStyle:'short',timeStyle:'short'}):'';
     el('extraHoursMeta').textContent=row?`${row.total_hours==null?'Ore non indicate':`Ore salvate: ${valueText(row.total_hours)}`}${stamp?' · '+stamp:''}`:'Ore non ancora inserite';
+    if(row?.total_hours==null&&s.suggestedHours!=null)el('extraHoursMeta').textContent='Ore squadra calcolate dalla chiusura, modificabili prima di salvare.';
     el('extraHoursChanged').hidden=!(row?.total_hours!=null&&row.source_attachment_id!==(s.report?.id||null));
   }
   function dispose(s){
@@ -201,8 +202,11 @@ const ExtraHoursUi=(()=>{
       if(hours.error)throw hours.error;if(report.error)throw report.error;if(freshExtra.error)throw freshExtra.error;
       if(!model().isBillableExtra(freshExtra.data)){close(true);return}
       s.extraCategory=freshExtra.data.categoria_target||null;s.nightHours=s.day?.night_hours??freshExtra.data.night_hours??0;if(s.day)s.suggestedOperators=s.day.workers?.length||0;
+      const workDay=s.day||options.workDay;
+      if(workDay?.technician_count!=null)s.suggestedOperators=workDay.technician_count;
+      s.suggestedHours=workDay&&!hours.data?suggestedCrewHours(workDay):null;
       s.row=hours.data;s.report=report.data;s.loaded=true;s.savedText=valueText(s.row?.total_hours);
-      el('extraHoursInput').value=s.savedText;fillEconomics(s);s.savedForm=formKey();metadata(s);controls(s);
+      el('extraHoursInput').value=valueText(s.row?.total_hours??s.suggestedHours);fillEconomics(s);s.savedForm=formKey();metadata(s);controls(s);
     }catch(error){if(current(s)){tell('Impossibile caricare i dati. Chiudi e riapri la scheda per riprovare.',true);el('extraHoursMeta').textContent='Dati non caricati';el('extraHoursPreviewStatus').textContent='Rapportino non caricato'}}
     finally{loading.remove();if(current(s)){el('extraHoursForm').hidden=false;el('extraHoursForm').style.display=''}}
   }
@@ -252,6 +256,7 @@ async function openExtraHours(extra,options={}){
     if(!options.returnToEconomics)return openExtraEconomicsBook();
     return openExtraDays(extra,options);
    }
+   options={...options,workDay:days[0]};
   }catch(error){alert('Impossibile verificare le economie giornaliere. Riprova.');return}
  }
  return ExtraHoursUi.open(extra,options);

@@ -23,7 +23,7 @@ function uiSetup(){
   Object.assign(c,{activeClient:'eurospin',clientLabel:c.clientLabel||((v)=>typeof v==='string'?v:v?.client_type||'eurospin'),workspaceMatches:r=>(r?.client_type||'eurospin')===c.activeClient,workspaceStoreMatches:id=>!c.stores?.length||c.stores.some(st=>st.id===id&&(st.client_type||'eurospin')===c.activeClient),syncClientWorkspace(){},activateClient(client){c.activeClient=client;c.extraClientFilter=client;c.storeClientFilter=client;c.scheduleClientFilter=client;}});vm.createContext(c);vm.runInContext(fs.readFileSync(__dirname+'/../extra-economics-ui.js','utf8'),c);return c;
 }
 test('monthly summary renders money and literal labels, opens exact extra, and clears on role change',async()=>{
-  const c=uiSetup();let opened;c.openExtraHours=e=>opened=e;await c.loadExtraEconomics();c.openExtraEconomicsBook();await new Promise(r=>setImmediate(r));
+  const c=uiSetup();let opened;c.ExtraHoursUi={open:e=>opened=e,leaveInline:()=>true,close(){}};await c.loadExtraEconomics();c.openExtraEconomicsBook();await new Promise(r=>setImmediate(r));
   assert.equal(c.$('extraEconomicsBookList').querySelectorAll('img').length,0);assert.match(c.$('extraEconomicsBookSummary').textContent,/320,00/);
   c.$('extraEconomicsBookList').querySelector('button').click();assert.equal(opened.id,'e');
   c.isAdmin=false;c.syncExtraEconomicsRole();assert.equal(c.$('extraEconomicsBookList').childElementCount,0);assert.equal(vm.runInContext('extraEconomicsRecords.length',c),0);

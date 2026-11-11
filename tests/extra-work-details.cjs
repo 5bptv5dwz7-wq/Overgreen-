@@ -2,6 +2,16 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const {parseHTML}=require('linkedom');
 const code=fs.readFileSync('extra-days.js','utf8'),src=fs.readFileSync('app.js','utf8');
 function setup(){const {document}=parseHTML(fs.readFileSync('index.html','utf8'));const c={document,$:id=>document.getElementById(id)};vm.createContext(c);vm.runInContext(code,c);c.$('closeExtraWorkDetailsSlot').innerHTML=c.extraWorkDetailsFields('closeExtra');return c;}
-test('all blank, count only, times only and overnight are optional valid combinations',()=>{const c=setup();assert.equal(JSON.stringify(c.readExtraWorkDetails('closeExtra')),JSON.stringify({technician_count:null,work_start:null,work_end:null}));assert.equal(c.parseExtraWorkDetails('5','','').technician_count,5);assert.equal(c.parseExtraWorkDetails('','08:30','17:00').technician_count,null);const d=c.parseExtraWorkDetails('3','22:00','02:30');assert.match(c.extraWorkDetailsText(d),/Tecnici: 3.*22:00.*02:30.*giorno successivo/);});
+test('all blank, count only, times only and overnight are optional valid combinations',()=>{const c=setup();assert.equal(JSON.stringify(c.readExtraWorkDetails('closeExtra')),JSON.stringify({break_minutes:null,technician_count:null,work_start:null,work_end:null}));assert.equal(c.parseExtraWorkDetails('5','','').technician_count,5);assert.equal(c.parseExtraWorkDetails('','08:30','17:00').technician_count,null);const d=c.parseExtraWorkDetails('3','22:00','02:30');assert.match(c.extraWorkDetailsText(d),/Tecnici: 3.*22:00.*02:30.*giorno successivo/);});
 test('invalid counts and incomplete hours fail before submission',()=>{const c=setup();for(const n of ['0','-1','1.5','abc','1000'])assert.throws(()=>c.parseExtraWorkDetails(n,'',''),/numero intero/);for(const times of [['08:00',''],['','17:00'],['25:00','17:00'],['08:00','08:00']])assert.throws(()=>c.parseExtraWorkDetails('',...times),/orario|ora/);});
 test('database time values round trip, clearing removes values, old days show no invented values',()=>{const c=setup();c.fillExtraWorkDetails('closeExtra',{technician_count:6,work_start:'08:30:00',work_end:'17:00:00'});assert.equal(c.readExtraWorkDetails('closeExtra').work_start,'08:30');assert.match(c.extraWorkDetailsText(c.readExtraWorkDetails('closeExtra')),/Tecnici: 6/);c.fillExtraWorkDetails('closeExtra');assert.equal(c.readExtraWorkDetails('closeExtra').technician_count,null);assert.equal(c.extraWorkDetailsText({workers:['p1']}),'');});
+
+test('breaks reduce crew hours before rounding, even across midnight',()=>{
+ const c=setup();
+ const day=c.parseExtraWorkDetails('3','22:00','02:30','45');
+ assert.equal(c.suggestedCrewHours(day),11.25);
+ assert.match(c.extraWorkDetailsText(day),/Pause: 45 min/);
+ assert.equal(c.suggestedCrewHours({...day,break_minutes:null}),13.5);
+ assert.equal(c.suggestedCrewHours({...day,technician_count:null}),null);
+ assert.throws(()=>c.parseExtraWorkDetails('2','08:00','09:00','61'),/pausa/);
+});

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Overgreen · Pulizie Eurospin</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color:#173c29;background:#f3f6f3}body{max-width:920px;margin:auto;padding:18px}h1{font-size:1.5rem}h2{font-size:1.12rem}section{background:white;border:1px solid #dce6de;border-radius:16px;padding:16px;margin:14px 0}label{display:block;font-size:.85rem;font-weight:650;margin:9px 0 4px}input,select,button{font:inherit;padding:10px;border:1px solid #c9d9ce;border-radius:9px;max-width:100%;box-sizing:border-box}input,select{width:100%}button{background:#17683e;color:white;border:0;cursor:pointer}button.secondary{background:#e8f1eb;color:#155c36}button:disabled{opacity:.45}small,.muted{color:#61776a}table{width:100%;border-collapse:collapse;font-size:.86rem}th,td{text-align:left;padding:9px 5px;border-bottom:1px solid #e4ebe5}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}.pill{background:#e7f2e9;border-radius:30px;padding:4px 9px;font-size:.76rem}details{margin:9px 0}summary{cursor:pointer;font-weight:600}.warn{background:#fff6df;border:1px solid #ead8a4;padding:10px;border-radius:10px}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.row>*{flex:1}.error{color:#a12d22} @media(max-width:600px){table{font-size:.75rem}th,td{padding:7px 3px}}
+</style></head><body>
+<header><h1>Overgreen · Pulizie Eurospin</h1><p class="warn"><strong>Modulo pilota locale:</strong> i dati rimangono in questo browser, non sono sincronizzati con Supabase, Dashboard o fatturazione. Non usarlo come registro ufficiale.</p></header>
+<section><h2>Capitolato · legenda rapida</h2><div id="legend"></div></section>
+<section><h2>Punti vendita</h2><div class="grid"><div><label for="storeName">Nome punto vendita</label><input id="storeName" placeholder="Es. GENOVA ..."></div><div><label for="managed">Pulizie ordinarie in gestione</label><select id="managed"><option value="1">Sì — abilita tutti i pacchetti</option><option value="0">No — solo richieste affidate</option></select></div></div><p><button id="addStore">Salva punto vendita</button></p><div id="stores"></div></section>
+<section><h2>Registra lavorazione</h2><div class="grid"><div><label for="store">Punto vendita</label><select id="store"></select></div><div><label for="type">Lavorazione</label><select id="type"></select></div><div><label for="date">Data intervento</label><input type="date" id="date"></div><div><label for="year">Annualità D/2</label><input id="year" type="number" min="2020" max="2100"></div></div>
+<label for="notes">Note / riferimento autorizzazione</label><input id="notes" maxlength="500" placeholder="Descrizione, autorizzazione...">
+<p id="hint" class="muted"></p><p class="row"><button id="record">Registra eseguito</button><button class="secondary" id="suggest">Valuta Target → D/2</button></p><p id="feedback" role="status"></p></section>
+<section><h2>Storico Pulizie</h2><div id="history"></div><p><button class="secondary" id="export">Esporta CSV storico</button></p></section>
+<script>
+'use strict';
+const KEY='overgreen-pulizie-pilota-v1';
+const catalog={
+'A/1':['Settimanale · Bagni e spogliatoi','Sanificazione sanitari e superfici, pavimenti, pareti lavabili, cestini, specchi e rifornimenti.'],
+'A/2':['Settimanale · Aree esterne','Pulizia esterni, parcheggi, marciapiedi, carrelli, stazioni carrelli, cestini e posacenere.'],
+'C/1':['Mensile · Bagni e spogliatoi','Lavaggio vetri, davanzali, infissi e zanzariere di bagni e spogliatoi.'],
+'C/2':['Mensile · Aree esterne','Pulizia pavimentazioni esterne, carrelli e stazioni carrelli, raccolta rifiuti prevista.'],
+'D/2':['Semestrale · Interni ed esterni','Deragnatura, vetrate e rivestimenti esterni presenti, lavaggio bidoni e rifiuti previsti.'],
+'TARGET':['Extra · A ore','Prestazione extra autorizzata, da valorizzare a ore nel gestionale principale.']
+};
+const $=id=>document.getElementById(id);
+let data;try{data=JSON.parse(localStorage.getItem(KEY))}catch{};if(!data||!Array.isArray(data.stores)||!Array.isArray(data.jobs))data={stores:[],jobs:[]};
+const save=()=>localStorage.setItem(KEY,JSON.stringify(data));
+const escapeHTML=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const today=new Date();$('date').value=[today.getFullYear(),String(today.getMonth()+1).padStart(2,'0'),String(today.getDate()).padStart(2,'0')].join('-');$('year').value=today.getFullYear();
+$('legend').innerHTML=Object.entries(catalog).map(([code,v])=>'<details><summary>'+code+' · '+escapeHTML(v[0])+'</summary><p>'+escapeHTML(v[1])+'</p></details>').join('');
+$('type').innerHTML=Object.entries(catalog).map(([k,v])=>'<option value="'+k+'">'+k+' · '+escapeHTML(v[0])+'</option>').join('');
+function render(){
+$('store').innerHTML=data.stores.map(s=>'<option value="'+escapeHTML(s.id)+'">'+escapeHTML(s.name)+'</option>').join('');
+$('stores').innerHTML=data.stores.length?'<table><tr><th>PV</th><th>Ordinarie</th><th>D/2 anno</th><th>Azioni</th></tr>'+data.stores.map(s=>{const n=data.jobs.filter(j=>j.storeId===s.id&&j.type==='D/2'&&j.year===Number($('year').value)).length;return '<tr><td>'+escapeHTML(s.name)+'</td><td>'+(s.managed?'Tutte':'Non affidate')+'</td><td>'+n+'/2</td><td><button class="secondary" data-toggle="'+escapeHTML(s.id)+'">Cambia</button></td></tr>'}).join('')+'</table>':'<p class="muted">Nessun punto vendita inserito.</p>';
+$('history').innerHTML=data.jobs.length?'<table><tr><th>Data</th><th>PV</th><th>Tipo</th><th>Note</th></tr>'+data.jobs.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(j=>'<tr><td>'+escapeHTML(j.date)+'</td><td>'+escapeHTML(data.stores.find(s=>s.id===j.storeId)?.name||'PV non trovato')+'</td><td>'+escapeHTML(j.type)+'</td><td>'+escapeHTML(j.notes)+'</td></tr>').join('')+'</table>':'<p class="muted">Nessun intervento registrato.</p>';
+updateHint();
+}
+function updateHint(){
+const s=data.stores.find(x=>x.id===$('store').value),t=$('type').value,y=Number($('year').value);
+const count=data.jobs.filter(j=>j.storeId===s?.id&&j.type==='D/2'&&j.year===y).length;
+$('hint').textContent=!s?'Inserisci prima un PV.':t==='D/2'?'D/2 eseguiti nel '+y+': '+count+'/2. '+(s.managed?'Pacchetto attivo.':'PV non in gestione: serve affidamento specifico.') :s.managed?'Pacchetti ordinari attivi.':'PV non in gestione: le prestazioni devono essere affidate singolarmente.';
+$('record').disabled=!s||(t==='D/2'&&count>=2);
+}
+$('addStore').onclick=()=>{const name=$('storeName').value.trim();if(!name)return alert('Inserisci il nome del PV');const existing=data.stores.find(s=>s.name.toLowerCase()===name.toLowerCase());if(existing){existing.managed=$('managed').value==='1'}else data.stores.push({id:crypto.randomUUID(),name,managed:$('managed').value==='1'});save();$('storeName').value='';render()};
+$('stores').onclick=e=>{const id=e.target.dataset.toggle;if(!id)return;const s=data.stores.find(x=>x.id===id);if(!s)return;s.managed=!s.managed;save();render()};
+$('store').onchange=updateHint;$('type').onchange=updateHint;$('year').onchange=render;
+$('suggest').onclick=()=>{const s=data.stores.find(x=>x.id===$('store').value);if(!s)return;const y=Number($('year').value),count=data.jobs.filter(j=>j.storeId===s.id&&j.type==='D/2'&&j.year===y).length;const ok=count<2&&s.managed;$('feedback').textContent=ok?'Slot D/2 disponibile ('+(2-count)+' residui). Verifica che la richiesta sia effettivamente compresa nel D/2 e seleziona D/2 per registrarla.':'Non convertire automaticamente: slot esauriti o pacchetto D/2 non affidato.'};
+$('record').onclick=()=>{const s=data.stores.find(x=>x.id===$('store').value),type=$('type').value,date=$('date').value,year=Number($('year').value),notes=$('notes').value.trim();if(!s||!date)return alert('Seleziona PV e data');if(type==='D/2'){if(!s.managed&&!confirm('Questo PV non è in gestione: confermi un affidamento D/2 specifico?'))return;const count=data.jobs.filter(j=>j.storeId===s.id&&j.type==='D/2'&&j.year===year).length;if(count>=2)return alert('Due D/2 già eseguiti: registrare eventualmente come Target autorizzato.')}else if(type!=='TARGET'&&!s.managed&&!confirm('Questo PV non è in gestione: confermi affidamento specifico?'))return;
+data.jobs.push({id:crypto.randomUUID(),storeId:s.id,type,date,year,notes});save();$('notes').value='';$('feedback').textContent='Registrato soltanto nel modulo pilota locale.';render()};
+$('export').onclick=()=>{const rows=[['data','punto_vendita','lavorazione','annualita','note'],...data.jobs.map(j=>[j.date,data.stores.find(s=>s.id===j.storeId)?.name||'',j.type,j.year,j.notes])];const csv=rows.map(row=>row.map(x=>'"'+String(x??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));a.download='pulizie-eurospin-pilota.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+render();
+</script></body></html>

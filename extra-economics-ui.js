@@ -13,7 +13,10 @@ async function loadExtraEconomics(){
     for(const day of d.data||[]){if(!groups.has(day.extra_id))groups.set(day.extra_id,[]);groups.get(day.extra_id).push({...day,economics:byDay.get(day.id)||null})}
     for(const days of groups.values())days.sort((a,b)=>a.day.localeCompare(b.day)||a.created_at.localeCompare(b.created_at));
     economicsDaysByExtra=groups;
-    const daily=[...groups].filter(([,days])=>days.some(d=>d.economics));
+    // Unpriced partial days must already be visible in their work month.
+    // Preserve an existing target-level economy until daily pricing is started.
+    const targetPricedIds=new Set((r.data||[]).map(row=>row.extra_id));
+    const daily=[...groups].filter(([id,days])=>days.some(d=>d.economics)||(!targetPricedIds.has(id)&&(days.length>1||days.some(d=>!d.final))));
     const ids=new Set(daily.map(([id])=>id));
     extraEconomicsRecords=[...(r.data||[]).filter(v=>!ids.has(v.extra_id)),...daily.map(([id,days])=>window.OvergreenEconomics.dailyRecord(id,days.sort((a,b)=>a.day.localeCompare(b.day)||String(a.created_at).localeCompare(String(b.created_at)))))];extraEconomicsError='';return true;
   }catch(error){extraEconomicsRecords=[];extraEconomicsError='Dati economici non caricati. Premi Aggiorna per riprovare.';return false}

@@ -4,6 +4,7 @@ const store=()=>{const m=new Map();return {getItem:k=>m.get(k)||null,setItem:(k,
 const c={window,document,console,localStorage:store(),sessionStorage:store(),navigator:{userAgent:'test',onLine:true},location:{href:'https://example.test/',origin:'https://example.test/',search:'',pathname:'/'},history:{replaceState(){}},File,Blob,URL,URLSearchParams,crypto:require('node:crypto').webcrypto,performance,AbortController,AbortSignal,TextEncoder,TextDecoder,setTimeout:()=>1,clearTimeout(){},setInterval:()=>1,clearInterval(){},queueMicrotask,requestAnimationFrame:fn=>fn(),matchMedia:()=>({matches:false,addEventListener(){}}),fetch:async()=>({ok:true,json:async()=>({}),text:async()=>''}),indexedDB:require('fake-indexeddb').indexedDB,alert(){},confirm:()=>true,MutationObserver:window.MutationObserver};
 Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:true,get(){return (this.querySelector('option[selected]')||this.querySelector('option'))?.value||''},set(value){for(const o of this.querySelectorAll('option'))if(o.value===String(value))o.setAttribute('selected','');else o.removeAttribute('selected')}});
 window.HTMLElement.prototype.showModal=function(){this.setAttribute('open','')};window.HTMLElement.prototype.close=function(){this.removeAttribute('open')};window.HTMLElement.prototype.reset=function(){};window.HTMLElement.prototype.scrollIntoView=function(){};
+for(const dialog of document.querySelectorAll('dialog'))Object.defineProperty(dialog,'open',{get(){return this.hasAttribute('open')}});
 window.fetch=c.fetch;window.matchMedia=c.matchMedia;window.setInterval=c.setInterval;window.setTimeout=c.setTimeout;window.clearTimeout=c.clearTimeout;window.URL=URL;
 window.supabase={createClient:()=>({auth:{onAuthStateChange(){},getSession:async()=>({data:{session:null}})},functions:{invoke:async()=>({data:{users:[]}})},from:()=>({select(){return this},eq(){return this},order(){return this},then(resolve){return Promise.resolve({data:[]}).then(resolve)}})})};
 vm.createContext(c);
@@ -36,6 +37,20 @@ vm.runInContext(`(async()=>{
  await window.OvergreenExtraShare.saved();
  if(deleteCalls!==1||location.href.includes('extra-import'))throw Error('Import not cleaned up after save');
  document.getElementById('extraDialog').close();window.OvergreenExtraShare.reset();
+ // Launching webapp:// drops the hash: the installed app must use the owner queue.
+ const pendingId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';let pendingCalls=0;
+ fetch=async url=>{if(url.includes('action=pending')){pendingCalls++;return {ok:true,json:async()=>({imports:[{id:pendingId}]})}}downloadCalls++;return {ok:true,blob:async()=>new Blob(['%PDF-1.4 pending'],{type:'application/pdf'})}};
+ await window.OvergreenExtraShare.receive();if(pendingCalls)throw Error('Browser without explicit import queried standalone queue');
+ navigator.standalone=true;
+ document.getElementById('newExtraBtn').click();document.getElementById('extraTitle').value='Lavoro in corso';
+ await window.OvergreenExtraShare.receive();
+ if(pendingCalls||document.getElementById('extraTitle').value!=='Lavoro in corso')throw Error('Import replaced an open form');
+ document.getElementById('extraDialog').close();
+ await window.OvergreenExtraShare.receive();
+ if(pendingCalls!==1||downloadCalls!==2||autofillCalls!==2||!document.getElementById('extraDialog').hasAttribute('open'))throw Error('Standalone launch did not retrieve pending PDF');
+ await window.OvergreenExtraShare.receive();if(downloadCalls!==2)throw Error('Foreground repeated the import');
+ document.getElementById('extraDialog').close();window.OvergreenExtraShare.reset();navigator.standalone=false;
+ console.log('PASS standalone launch without URL parameters, pending queue and preservation of open forms');
  fetch=originalFetch;readPdfText=originalReadPdf;autoFillExtraFromPdf=originalAutofill;
  console.log('PASS iPhone PDF import: login, attachment, autofill, single handling and cleanup after save');
  setView('stores',{reuse:true});const original=renderStores;let calls=0;renderStores=()=>{calls++;original()};

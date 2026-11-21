@@ -21,8 +21,13 @@ test('Shortcut sends a PDF, but only its signed-in owner may import or delete it
  const pair=await (await call('pair','admin-a')).json();assert.ok(pair.token.startsWith(A+'.'));
  const pdf='%PDF-1.4\nsynthetic test';
  const upload=await call('upload',pair.token,pdf);assert.equal(upload.status,200);
- const target=new URL((await upload.json()).url);assert.equal(target.origin,'https://app.test');
+ const shared=await upload.json();assert.equal(shared.appUrl,'webapp://app.test/Overgreen-/');
+ const target=new URL(shared.url);assert.equal(target.origin,'https://app.test');
  const id=new URLSearchParams(target.hash.slice(1)).get('extra-import');
+ assert.equal((await call('pending',pair.token)).status,401);
+ assert.equal((await call('pending','worker')).status,403);
+ assert.deepEqual((await (await call('pending','admin-b')).json()).imports,[]);
+ assert.deepEqual((await (await call('pending','admin-a')).json()).imports.map(x=>x.id),[id]);
  assert.equal((await call('import',pair.token,null,id)).status,401);
  assert.equal((await call('import','admin-b',null,id)).status,404);
  const download=await call('import','admin-a',null,id);assert.equal(download.status,200);assert.equal(await download.text(),pdf);
@@ -30,6 +35,7 @@ test('Shortcut sends a PDF, but only its signed-in owner may import or delete it
  assert.equal((await call('import','admin-a',null,id)).status,200);
  assert.equal((await call('delete','admin-a',null,id)).status,200);
  assert.equal((await call('import','admin-a',null,id)).status,404);
+ assert.deepEqual((await (await call('pending','admin-a')).json()).imports,[]);
  assert.ok([...objects.keys()].every(path=>path.startsWith('ios-extra-import/')));
 });
 test('Tokens are hashed, revocable, expiring, scoped and checked against active profiles',async()=>{
@@ -50,6 +56,7 @@ test('Rejects links/non-PDFs and oversized files; cleans only abandoned imported
  assert.equal((await call('upload',pair.token,new Uint8Array(10*1024*1024+1))).status,413);
  const expired='ios-extra-import/'+A+'/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.pdf';
  objects.set(expired,{blob:new Blob(['%PDF-']),created_at:'2020-01-01T00:00:00Z'});
+ assert.deepEqual((await (await call('pending','admin-a')).json()).imports,[]);
  objects.set('extra/existing/document.pdf',{blob:new Blob(['%PDF-']),created_at:'2020-01-01T00:00:00Z'});
  assert.equal((await call('upload',pair.token,'%PDF-1.4')).status,200);
  assert.equal(objects.has(expired),false);assert.equal(objects.has('extra/existing/document.pdf'),true);

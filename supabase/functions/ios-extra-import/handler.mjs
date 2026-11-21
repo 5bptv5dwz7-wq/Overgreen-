@@ -22,7 +22,7 @@ export function createHandler(db,base,appUrl){
     if(req.method!=='POST')return json({error:'Metodo non consentito.'},405);
     try{
       const url=new URL(req.url),action=url.searchParams.get('action')||'',token=(req.headers.get('authorization')||'').replace(/^Bearer /i,'');
-      if(!['pair','revoke','upload','import','delete'].includes(action))fail('Operazione non valida.');
+      if(!['pair','revoke','upload','pending','import','delete'].includes(action))fail('Operazione non valida.');
       let userId;
       if(action==='upload'){
         const parts=token.split('.');
@@ -48,6 +48,13 @@ export function createHandler(db,base,appUrl){
         return json({token:credential,expiresAt,uploadUrl:base+'/functions/v1/ios-extra-import?action=upload'});
       }
       if(action==='revoke'){await checked(await storage.remove([prefix+'/device.json']));return json({ok:true})}
+      if(action==='pending'){
+        const files=await checked(await storage.list(prefix,{limit:1000}));
+        const imports=files.filter(x=>x.name.endsWith('.pdf')&&UUID.test(x.name.slice(0,-4))&&Date.parse(x.created_at)>=Date.now()-DAY)
+          .sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at))
+          .map(x=>({id:x.name.slice(0,-4),createdAt:x.created_at}));
+        return json({imports});
+      }
       if(action==='upload'){
         // Reclaim abandoned imports on the next upload. Never touch normal attachments.
         const files=await checked(await storage.list(prefix,{limit:1000}));
@@ -60,7 +67,9 @@ export function createHandler(db,base,appUrl){
         const id=crypto.randomUUID();
         await checked(await storage.upload(prefix+'/'+id+'.pdf',content,{contentType:'application/pdf',upsert:false}));
         const target=new URL(appUrl);target.hash=new URLSearchParams({'extra-import':id}).toString();
-        return json({url:target.href});
+        // webapp:// launches the installed app but may discard query/hash data.
+        // The app retrieves its authenticated pending queue on foreground instead.
+        return json({url:target.href,appUrl:appUrl.replace(/^https?:/,'webapp:')});
       }
       const id=url.searchParams.get('id')||'';if(!UUID.test(id))fail('Documento non valido.');
       const path=prefix+'/'+id+'.pdf';

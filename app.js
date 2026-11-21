@@ -1,4 +1,4 @@
-const APP_VERSION='V331';
+const APP_VERSION='V332';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -994,7 +994,7 @@ async function loadAll(options={}){
   const warnings=wanted.filter(k=>d[k]?.error||!Array.isArray(d[k]?.data));if(warnings.length)toast('Alcuni dati non sono aggiornati. Premi Aggiorna per riprovare.');
   ensureCloudSettingsUi();syncImpersonationUi();if(typeof operationsDataUpdatedAt!=='undefined')operationsDataUpdatedAt=new Date();
   startupPerf.supabase=performance.now()-loadStarted;const renderStarted=performance.now();
-  viewDataVersion++;renderLoadedView();updateSyncUi();handleNotificationDeepLink();
+  viewDataVersion++;renderLoadedView();updateSyncUi();handleNotificationDeepLink();void window.OvergreenExtraShare?.receive();
   setTimeout(()=>window.OvergreenFleet?.sync(),0);
   const first=loadedScope!==attachmentMediaScope();loadedScope=attachmentMediaScope();if(first){extraDrafts.list().then(rows=>{if(rows.length)toast('Hai '+rows.length+' bozze extra da riprendere: riapri la chiusura del relativo lavoro.')}).catch(()=>{});cleanupPhotoRecoveryRows().catch(()=>{});processUploadQueue();setTimeout(()=>void runScheduleRollover(),50)}
   const lastUpdate=$('syncStatus');if(lastUpdate)lastUpdate.textContent='Ultimo aggiornamento dati: '+new Date().toLocaleTimeString('it-IT');
@@ -5540,6 +5540,7 @@ $('extraForm').onsubmit=async e=>{
   const up=await sb.storage.from('documenti').upload(path,pdf,{upsert:true,contentType:pdf.type||'application/pdf'});if(up.error)throw up.error;
   const data=await adminOperation('extra_create',{extra:{...payload,id:draft.id},members:workers,work_items:structuredRows,attachment:{id:draft.attachmentId,storage_path:path,nome_file:pdf.name,mime_type:pdf.type||'application/pdf',dimensione_bytes:pdf.size}});
   sessionStorage.removeItem(draftKey);
+  await window.OvergreenExtraShare?.saved();
   $('extraDialog').close();
   if(retro){
     const storeId=retro.storeId,noun=retro.client==='intesa'?'Ticket':'Target',number=$('extraTargetNumber').value.trim();
@@ -6019,6 +6020,7 @@ document.querySelectorAll('[data-stats-days]').forEach(b=>b.addEventListener('cl
 const refreshReportAndPdfCache=()=>{renderDailyReport();prewarmDailyReportPdfs()};$('reportDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportStartDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportEndDate')?.addEventListener('change',refreshReportAndPdfCache);$('reportMonth')?.addEventListener('change',refreshReportAndPdfCache);document.querySelectorAll('[data-report-mode]').forEach(b=>b.addEventListener('click',()=>{setReportMode(b.dataset.reportMode);prewarmDailyReportPdfs()}));$('reportClient')?.addEventListener('change',refreshReportAndPdfCache);$('reportType')?.addEventListener('change',refreshReportAndPdfCache);$('reportWorker')?.addEventListener('change',refreshReportAndPdfCache);$('reportRefresh')?.addEventListener('click',async()=>{await loadAll();dailyReportPdfCache.clear();dailyReportPdfPending.clear();renderDailyReport();prewarmDailyReportPdfs();toast('Report aggiornato')});$('shareDailyReport')?.addEventListener('click',shareDailyReport);$('exportDailyReportCompact')?.addEventListener('click',()=>exportDailyReportPdf('compact'));$('exportDailyReportFull')?.addEventListener('click',()=>exportDailyReportPdf('full'));$('exportDailyReportEconomics')?.addEventListener('click',()=>exportDailyReportPdf('economics'));
 
 function resetAppData(){
+ window.OvergreenExtraShare?.reset();
  closeClientReportPreview();
  document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());
  dataSync.reset();secondaryReads.clear();scheduleDeletePending.clear();loadedScope='';renderedViews.clear();lastLoadedSections.clear();lastLoadedRevision=-1;
@@ -6069,7 +6071,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=331').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=332').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

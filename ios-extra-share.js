@@ -58,30 +58,75 @@
   }
   function reset(){epoch++;importing=false;handled.clear();imported=null;lastCheck=0;for(const id of ['iosShareToken','iosShareUrl'])if($(id))$(id).value='';if($('iosShareCredentials'))$('iosShareCredentials').hidden=true;}
   const panel=document.createElement('section');panel.className='panel admin-only';panel.id='iosExtraSharePanel';
-  panel.innerHTML=`<h2>PDF da iPhone</h2><p>Condividi un PDF con il comando <strong>Nuovo extra Overgreen</strong>: il comando apre l’app sulla Home, che recupera il PDF e lo inserisce nel modulo extra. Il salvataggio resta da confermare.</p>
-  <div class="actions"><button type="button" id="iosSharePair">Configura Comandi Rapidi</button><button type="button" class="secondary" id="iosShareRecover">Recupera PDF condiviso</button><button type="button" class="secondary" id="iosShareRevoke">Revoca collegamento iPhone</button></div>
-  <p id="iosShareStatus" role="status"></p><div id="iosShareCredentials" hidden>
-  <p>Valido per 180 giorni. La nuova configurazione sostituisce quella precedente. Copia questi dati solo nel tuo comando rapido.</p>
-  <label>Indirizzo di invio<input id="iosShareUrl" readonly></label><button type="button" class="secondary" data-ios-copy="iosShareUrl">Copia indirizzo</button>
-  <label>Autorizzazione personale<textarea id="iosShareToken" readonly rows="3" autocomplete="off" spellcheck="false"></textarea></label><button type="button" class="secondary" data-ios-copy="iosShareToken">Copia autorizzazione</button></div>
-  <details><summary>Come configurare il comando sull’iPhone</summary><ol>
-  <li>Apri <strong>Comandi Rapidi</strong>, premi <strong>+</strong> e chiamalo <strong>Nuovo extra Overgreen</strong>. Nei dettagli attiva <strong>Mostra in Condividi</strong> e imposta come input <strong>PDF</strong> e <strong>File</strong>.</li>
-  <li>Aggiungi <strong>Ottieni contenuti dell’URL</strong>. Come URL incolla l’indirizzo di invio generato qui. Metodo: <strong>POST</strong>.</li>
-  <li>Espandi le opzioni: nelle intestazioni aggiungi <strong>Authorization</strong> e incolla l’autorizzazione personale completa (inizia con <strong>Bearer</strong>). Come corpo della richiesta scegli <strong>File</strong> e seleziona la variabile <strong>Input comando rapido</strong>.</li>
-  <li>Aggiungi <strong>Ottieni valore del dizionario</strong>: chiave <strong>appUrl</strong> (rispetta la U maiuscola), dizionario = risultato di <strong>Ottieni contenuti dell’URL</strong>.</li>
-  <li>Aggiungi <strong>Se</strong> il valore del dizionario <strong>ha un valore</strong>: nel ramo Sì aggiungi <strong>Apri URL</strong> con quel valore. Nel ramo Altrimenti aggiungi <strong>Mostra risultato</strong> con il risultato di <strong>Ottieni contenuti dell’URL</strong>, per leggere l’eventuale errore.</li>
-  </ol><p>Se avevi già configurato il comando per Safari, cambia solo la chiave <strong>url</strong> in <strong>appUrl</strong>. Non rigenerare l’autorizzazione.</p>
-  <p>Prima prova: apri un PDF nell’app File → Condividi → Nuovo extra Overgreen. Consenti la connessione a Supabase se richiesta. Apri l’app sulla Home con lo stesso amministratore usato per la configurazione. L’apertura tramite webapp:// dipende da iOS: se non parte, tocca tu l’icona di Overgreen; il PDF sarà comunque recuperato.</p>
-  <p>Massimo 10 MB per PDF. Se hai già un modulo extra aperto, chiudilo prima di recuperare il prossimo PDF. I PDF in attesa sono recuperabili per 24 ore e vengono ripuliti alla successiva importazione. Se Safari condivide soltanto un link, salva prima il PDF in File.</p></details>`;
+  panel.innerHTML=`<h2>PDF da iPhone</h2><p>Alla fine userai: <strong>apri il PDF → Condividi → Nuovo extra Overgreen</strong>. L’app si aprirà con il PDF già inserito.</p>
+  <p>Questa configurazione si fa una volta sola. Il comando con solo «URL» e «Apri URL» era una prova: qui creiamo quello completo per inviare anche il documento.</p>
+  <div class="actions"><button type="button" id="iosShareRecover" class="secondary">Recupera PDF già condiviso</button></div>
+  <section aria-label="Configurazione guidata iPhone" style="margin-top:16px;padding:16px;border:1px solid #a8cab5;border-radius:12px">
+  <p id="iosShareStepCount" aria-live="polite" class="muted"></p>
+  <div data-ios-step>
+    <h3>Prepara Overgreen</h3><p>Rimani qui e premi il pulsante sotto. Prepara i due valori che dovrai copiare nei passaggi successivi.</p>
+    <button type="button" id="iosSharePair">Prepara i dati da copiare</button>
+    <p id="iosShareStatus" role="status"></p>
+    <p>Se il comando completo funziona già, non rigenerare i dati: puoi leggere la guida con Avanti. La generazione di nuovi dati sostituisce il collegamento precedente.</p>
+  </div>
+  <div data-ios-step hidden>
+    <h3>Crea un nuovo comando</h3><ol><li>Apri l’app Apple <strong>Comandi Rapidi</strong>.</li><li>Premi <strong>+</strong> per creare un comando vuoto.</li><li>Chiamalo <strong>Nuovo extra Overgreen</strong>.</li><li>Apri i dettagli del comando e attiva <strong>Mostra in Condividi</strong>.</li><li>Nella riga iniziale «Ricevi … da Condividi», scegli <strong>PDF</strong> e <strong>File</strong>.</li></ol>
+    <p>Torna qui quando hai finito e premi Avanti. Se hai già un comando completo puoi correggere quello; lascia da parte quello di sola prova.</p>
+  </div>
+  <div data-ios-step hidden>
+    <h3>Aggiungi l’invio del PDF</h3><p>In Comandi Rapidi cerca e aggiungi l’azione <strong>Ottieni contenuti dell’URL</strong>.</p>
+    <ol><li>Premi qui <strong>Copia indirizzo di invio</strong>.</li><li>Torna al comando e incollalo nel campo <strong>URL</strong> di quell’azione.</li><li>Espandi le opzioni dell’azione e cambia il <strong>Metodo</strong> da GET a <strong>POST</strong>.</li></ol>
+    <button type="button" class="secondary" data-ios-copy="iosShareUrl">Copia indirizzo di invio</button>
+    <p>L’indirizzo copiato inizia con <strong>https://</strong>. In questo campo non va l’indirizzo <strong>webapp://</strong> della prova.</p>
+  </div>
+  <div data-ios-step hidden>
+    <h3>Autorizza l’invio</h3><p>Rimani nell’azione <strong>Ottieni contenuti dell’URL</strong>. Apri <strong>Intestazioni</strong> e aggiungi una riga.</p>
+    <p>Compila i due campi così:</p><ul><li><strong>Chiave:</strong> scrivi esattamente <code>Authorization</code>.</li><li><strong>Valore:</strong> incolla il testo copiato con il pulsante qui sotto.</li></ul>
+    <button type="button" class="secondary" data-ios-copy="iosShareToken">Copia autorizzazione completa</button>
+    <p>Il testo copiato contiene già <strong>Bearer</strong> e lo spazio: incollalo tutto, senza aggiungere o togliere nulla.</p>
+  </div>
+  <div data-ios-step hidden>
+    <h3>Scegli il PDF da inviare</h3><p>Sempre nell’azione <strong>Ottieni contenuti dell’URL</strong>:</p><ol><li>Alla voce <strong>Corpo della richiesta</strong> scegli <strong>File</strong>.</li><li>Tocca il campo del file e scegli la variabile <strong>Input comando rapido</strong>. Se necessario tieni premuto e usa «Seleziona variabile».</li></ol>
+    <p><strong>Non selezionare un PDF fisso.</strong> La variabile serve a usare ogni volta il documento su cui premi Condividi.</p>
+  </div>
+  <div data-ios-step hidden>
+    <h3>Leggi l’indirizzo per aprire Overgreen</h3><p>Sotto l’azione appena configurata, aggiungi <strong>Ottieni valore del dizionario</strong>.</p><ul><li>Nel campo <strong>Chiave</strong> scrivi <code>appUrl</code>, con la <strong>U maiuscola</strong>.</li><li>Come <strong>Dizionario</strong> seleziona il risultato dell’azione precedente: <strong>Contenuti dell’URL</strong>.</li></ul>
+    <p><code>appUrl</code> è una parola da scrivere, non un link da incollare. L’indirizzo che aprirà l’app viene restituito dopo l’invio del PDF.</p>
+  </div>
+  <div data-ios-step hidden>
+    <h3>Apri l’app dopo l’invio</h3><ol><li>Aggiungi l’azione <strong>Se</strong>.</li><li>Come dato scegli <strong>Valore del dizionario</strong>, il risultato del passaggio precedente.</li><li>Come condizione scegli <strong>ha un valore</strong>.</li><li>Tra <strong>Se</strong> e <strong>Altrimenti</strong> inserisci <strong>Apri URL</strong>. Il suo valore deve essere <strong>Valore del dizionario</strong>.</li><li>Tra <strong>Altrimenti</strong> e <strong>Fine se</strong> inserisci <strong>Mostra risultato</strong>. Qui seleziona <strong>Contenuti dell’URL</strong>, cioè la risposta dell’invio.</li></ol>
+    <p>Così, se l’invio riesce, si apre Overgreen. Se fallisce, il comando mostra il motivo.</p>
+  </div>
+  <div data-ios-step hidden>
+    <h3>Fai la prima prova</h3><ol><li>Salva il comando.</li><li>Apri un PDF nell’app <strong>File</strong> dell’iPhone.</li><li>Premi <strong>Condividi</strong> e scorri l’elenco delle azioni.</li><li>Tocca <strong>Nuovo extra Overgreen</strong>.</li><li>Consenti la connessione se l’iPhone la richiede.</li></ol>
+    <p>Si deve aprire Overgreen con il PDF nel modulo <strong>Nuovo extra</strong>. Controlla i dati e premi <strong>Crea extra</strong>.</p>
+    <p>Per questa prova parti dal PDF in File, non dal pulsante ▶︎ dentro Comandi Rapidi: senza un documento condiviso non c’è un PDF da inviare.</p>
+  </div>
+  <div class="actions" style="margin-top:16px"><button type="button" class="secondary" id="iosSharePrevious">Indietro</button><button type="button" id="iosShareNext">Avanti</button></div>
+  </section>
+  <details style="margin-top:16px"><summary>Il comando è già configurato o qualcosa non funziona?</summary>
+  <p><strong>Prima si apriva Safari:</strong> cambia solo la chiave <code>url</code> in <code>appUrl</code> nell’azione «Ottieni valore del dizionario». Non rigenerare l’autorizzazione.</p>
+  <p><strong>Si apre l’app ma manca il PDF:</strong> chiudi eventuali moduli extra già aperti e premi «Recupera PDF già condiviso» qui sopra. Usa lo stesso account amministratore con cui hai preparato il collegamento.</p>
+  <p><strong>Non parte l’app:</strong> aprila tu dall’icona sulla Home; recupererà il PDF in attesa.</p>
+  <p><strong>Il comando non compare in Condividi:</strong> controlla «Mostra in Condividi» e i tipi PDF e File nei dettagli del comando.</p>
+  <p>Massimo 10 MB per PDF. I documenti in attesa sono recuperabili per 24 ore. I nomi dei comandi possono variare leggermente con la versione di iOS.</p>
+  <button type="button" class="secondary" id="iosShareRevoke">Disattiva il collegamento con Comandi Rapidi</button></details>
+  <div id="iosShareCredentials" hidden><p>Se la copia automatica non riesce, tieni premuto il valore necessario e scegli Copia.</p><label>Indirizzo di invio<input id="iosShareUrl" readonly></label><label>Autorizzazione completa<textarea id="iosShareToken" readonly rows="3" autocomplete="off" spellcheck="false"></textarea></label></div>`;
   $('settingsView').appendChild(panel);
+  let step=0;
+  const steps=[...panel.querySelectorAll('[data-ios-step]')];
+  function showStep(index){step=Math.max(0,Math.min(steps.length-1,index));steps.forEach((el,i)=>el.hidden=i!==step);$('iosShareStepCount').textContent='Passaggio '+(step+1)+' di '+steps.length;$('iosSharePrevious').disabled=step===0;$('iosShareNext').hidden=step===steps.length-1;}
+  $('iosSharePrevious').onclick=()=>showStep(step-1);
+  $('iosShareNext').onclick=()=>showStep(step+1);
+  showStep(0);
   $('iosSharePair').onclick=async()=>{
-    if(!admin())return;const stamp=epoch,button=$('iosSharePair');button.disabled=true;$('iosShareStatus').textContent='Preparo il collegamento…';
-    try{const data=await request('pair');if(stamp!==epoch)return;$('iosShareUrl').value=data.uploadUrl;$('iosShareToken').value='Bearer '+data.token;$('iosShareCredentials').hidden=false;$('iosShareStatus').textContent='Collegamento pronto. Segui le istruzioni qui sotto.';panel.querySelector('details').open=true;}
+    if(!admin())return;if($('iosShareToken').value){showStep(1);return;}const stamp=epoch,button=$('iosSharePair');button.disabled=true;$('iosShareStatus').textContent='Preparo il collegamento…';
+    try{const data=await request('pair');if(stamp!==epoch)return;$('iosShareUrl').value=data.uploadUrl;$('iosShareToken').value='Bearer '+data.token;$('iosShareStatus').textContent='Dati pronti. Li copierai nei passaggi 3 e 4. Ora premi Avanti.';}
     catch(error){if(stamp===epoch)$('iosShareStatus').textContent=error.message}finally{button.disabled=false}
   };
   $('iosShareRevoke').onclick=async()=>{if(!admin())return;const button=$('iosShareRevoke');button.disabled=true;try{await request('revoke');reset();$('iosShareStatus').textContent='Collegamento revocato. Il comando non può più inviare PDF.'}catch(error){$('iosShareStatus').textContent=error.message}finally{button.disabled=false}};
   $('iosShareRecover').onclick=()=>void receive(true);
-  panel.querySelectorAll('[data-ios-copy]').forEach(button=>button.onclick=async()=>{const field=$(button.dataset.iosCopy);try{await navigator.clipboard.writeText(field.value);toast('Copiato.')}catch{field.focus();field.select();toast('Tieni premuto il testo e scegli Copia.')}});
+  panel.querySelectorAll('[data-ios-copy]').forEach(button=>button.onclick=async()=>{const field=$(button.dataset.iosCopy);if(!field.value){showStep(0);$('iosShareStatus').textContent='Prima premi Prepara i dati da copiare, poi torna a questo passaggio.';return;}try{await navigator.clipboard.writeText(field.value);toast('Copiato.')}catch{$('iosShareCredentials').hidden=false;field.focus();field.select();toast('Tieni premuto il testo e scegli Copia.')}});
   window.OvergreenExtraShare={receive,saved,reset};
   window.addEventListener('hashchange',()=>void receive());
   window.addEventListener('pageshow',()=>void receive());

@@ -124,7 +124,7 @@ function renderExtraEconomicsBook(){
   $('extraEconomicsBookExport').disabled=!extraEconomicsBookRows.length;
   for(const x of extraEconomicsBookRows){const st=stores.find(s=>s.id===x.extra.store_id),article=document.createElement('article');article.className='economic-book-row';
     article.innerHTML=`<div><strong>${esc(st?.nome||x.extra.nome_esterno||'Extra')} · ${esc(x.extra.numero_target||'Target non indicato')}</strong><p>${esc(x.extra.titolo||'')}</p><small>${esc(model.periodLabel(model.accountingPeriod(x.extra,x.row)))}${model.period(x.extra)==='open'?' · Aperto':''}${model.closureDate(x.extra)?' · Chiusura '+esc(model.closureDate(x.extra).split('-').reverse().join('/')):''} · ${esc(model.modes[x.row.pricing_mode]||'Modalità da scegliere')} · ${esc(economicsStatus(x.calc,x.row))}</small>${x.extra.categoria_target==='pulizie'?`<p><strong>${esc(model.cleaningInvoiceLabel(x.row,'pulizie'))}</strong></p>`:''}</div><div><strong>${esc(model.money(x.calc.total))}</strong><button type="button" class="secondary">Apri</button></div>`;
-    const select=document.createElement('input');select.type='checkbox';select.checked=!economicsExcludedIds.has(x.extra.id);select.setAttribute('aria-label','Includi '+(x.extra.numero_target||x.extra.titolo||'extra')+' nello ZIP');select.onchange=()=>{if(select.checked)economicsExcludedIds.delete(x.extra.id);else economicsExcludedIds.add(x.extra.id);updateEconomicsSelection()};article.prepend(select);
+    const select=document.createElement('input');select.type='checkbox';select.checked=!economicsExcludedIds.has(x.extra.id);select.setAttribute('aria-label','Includi '+(x.extra.numero_target||x.extra.titolo||'extra')+' in Excel e ZIP');select.onchange=()=>{if(select.checked)economicsExcludedIds.delete(x.extra.id);else economicsExcludedIds.add(x.extra.id);updateEconomicsSelection()};article.prepend(select);
     const button=article.querySelector('button');
     button.textContent=(economicsDaysByExtra.get(x.extra.id)||[]).length>1?'Giornate':'Apri';
     button.setAttribute('aria-expanded',String(expandedEconomics?.id===x.extra.id));
@@ -230,12 +230,14 @@ function addEconomicsWorksheet(workbook,rows,period=$('extraEconomicsMonth').val
   return ws;
 }
 async function exportExtraEconomics(){
+ const ids=new Set(extraEconomicsBookRows.filter(x=>!economicsExcludedIds.has(x.extra.id)).map(x=>x.extra.id));
+ if(!ids.size)return;
  await ensureLibraries('ExcelJS');
   if(!admin())return;if(!window.ExcelJS)return alert('Libreria Excel non disponibile. Aggiorna la pagina.');
   const b=$('extraEconomicsBookExport');if(b.disabled)return;b.disabled=true;
   try{
     await loadAll();if(!admin())return;if(extraEconomicsError)throw new Error(extraEconomicsError);
-    const rows=window.OvergreenEconomics.filterRows(extras.filter(workspaceMatches),extraEconomicsRecords,attachments,economicsBookFilter());if(!rows.length)throw new Error('Nessun extra da esportare.');
+    const rows=window.OvergreenEconomics.filterRows(extras.filter(workspaceMatches),extraEconomicsRecords,attachments,economicsBookFilter()).filter(x=>ids.has(x.extra.id));if(!rows.length)throw new Error('Nessun extra selezionato da esportare.');
     for(let i=0;i<rows.length;i++){
       if(!admin())return;
       $('extraEconomicsBookStatus').textContent=`Lettura numeri chiusura ${i+1}/${rows.length}…`;
@@ -253,7 +255,7 @@ async function exportExtraEconomics(){
     const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
     const missing=rows.filter(x=>!x.closureNumber).length;$('extraEconomicsBookStatus').textContent='Excel Eurospin generato.'+(missing?` ${missing} numeri chiusura da verificare, segnalati nelle note.`:'');
   }catch(error){if(admin())$('extraEconomicsBookStatus').textContent=error.message||'Esportazione non riuscita.'}
-  finally{if(admin())b.disabled=false}
+  finally{if(admin())updateEconomicsSelection()}
 }
 
 
@@ -261,7 +263,8 @@ async function exportExtraEconomics(){
 
 function updateEconomicsSelection(){
   const count=extraEconomicsBookRows.filter(x=>!economicsExcludedIds.has(x.extra.id)).length;
-  $('extraEconomicsSelectionCount').textContent=`${count} selezionati per ZIP`;
+  $('extraEconomicsSelectionCount').textContent=`${count} selezionati per Excel e ZIP`;
+  $('extraEconomicsBookExport').disabled=economicsZipBusy||!!extraEconomicsError||!count;
   $('extraEconomicsBookZip').disabled=economicsZipBusy||!!extraEconomicsError||!count;
   $('extraEconomicsBookReview').disabled=economicsZipBusy||!!extraEconomicsError||!count;
 }

@@ -35,6 +35,27 @@ test('failed economic fetch does not present a zero balance or allow export',asy
 function excelBook(){
  const sheets=[];return {sheets,addWorksheet(name){const rows=[];const sheet={name,rows,mergeCells(){this.getRow(1)},getCell(){return {}},getRow(n){while(rows.length<n)rows.push({values:[],getCell(){return {}}});return rows[n-1]},addRow(values){const r={values,getCell(){return {}}};rows.push(r);return r}};sheets.push(sheet);return sheet}};
 }
+test('Excel exports only checked extras and their totals after refreshing data',async()=>{
+ const c=uiSetup(),books=[],readIds=[];let downloads=0;
+ c.extras[0].numero_target='KEEP';
+ c.extras.push({...c.extras[0],id:'omit',numero_target:'OMIT'});
+ c.readAllRows=async table=>({data:table==='extra_labor_hours'?c.extras.map(e=>({extra_id:e.id,...cases[0].input,...model.rates('verde')})):[]});
+ await c.loadExtraEconomics();c.renderExtraEconomicsBook();
+ const checks=c.$('extraEconomicsBookList').querySelectorAll('input');checks[1].checked=false;checks[1].onchange();
+ c.ensureLibraries=async()=>{};
+ c.loadAll=async()=>{c.extras.push({...c.extras[0],id:'new',numero_target:'NEW'});await c.loadExtraEconomics();c.renderExtraEconomicsBook()};
+ c.readClosureNumberFromEurospinFile=async e=>{readIds.push(e.id);return {number:'123456'}};
+ c.window.ExcelJS={Workbook:class{constructor(){const b=excelBook();books.push(b);return Object.assign(b,{xlsx:{writeBuffer:async()=>new Uint8Array([1])}})}}};
+ c.Blob=Blob;c.URL={createObjectURL:()=>{downloads++;return 'blob:test'},revokeObjectURL(){}};c.setTimeout=()=>{};
+ await c.exportExtraEconomics();
+ assert.deepEqual(readIds,['e']);assert.equal(downloads,1);assert.equal(books.length,1);
+ const rows=books[0].sheets[0].rows;
+ assert.equal(rows.length,5);assert.equal(rows[2].values[3],'KEEP');
+ assert.equal(rows[4].values[16].result,rows[2].values[16]);
+ for(const checkbox of c.$('extraEconomicsBookList').querySelectorAll('input')){checkbox.checked=false;checkbox.onchange()}
+ assert.equal(c.$('extraEconomicsBookExport').disabled,true);
+ await c.exportExtraEconomics();assert.equal(downloads,1);
+});
 test('Eurospin export retains 18 exact headers, one sheet and unaccepted quote exclusion',()=>{
  const c=uiSetup(),book=excelBook(),input={...cases[8].input,...model.rates('verde')};
  c.addEconomicsWorksheet(book,[{extra:c.extras[0],row:input,calc:model.review(input,c.extras[0])}]);

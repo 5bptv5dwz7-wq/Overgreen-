@@ -1,4 +1,4 @@
-const APP_VERSION='V335';
+const APP_VERSION='V336';
 // The badge always reflects the JavaScript actually loaded on this device.
 if(document.getElementById('appVersion'))document.getElementById('appVersion').textContent=APP_VERSION.toLowerCase();
 // Request IDs survive uncertain network responses and page reloads in this tab.
@@ -4389,7 +4389,7 @@ async function analyzeEurospinClosureNumbers(){
   }finally{if(btn){btn.disabled=false;btn.textContent=old}}
 }
 function excelDateValue(dateString){
-  if(!dateString)return null;const [y,m,d]=String(dateString).slice(0,10).split('-').map(Number);return y&&m&&d?new Date(y,m-1,d):null
+  if(!dateString)return null;const [y,m,d]=String(dateString).slice(0,10).split('-').map(Number);return y&&m&&d?new Date(Date.UTC(y,m-1,d)):null
 }
 async function generateEurospinExcel(){
   await ensureLibraries('ExcelJS');
@@ -6071,7 +6071,7 @@ sb.auth.onAuthStateChange((event,s)=>{
   },0);
 });
 $('scheduleDate').value=tomorrow();renderSchedulePicker();
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=335').catch(console.error));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=336').catch(console.error));
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('closeClientReportPreview')?.addEventListener('click',closeClientReportPreview);

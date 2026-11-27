@@ -1,3 +1,12 @@
+// Excel stores calendar dates as UTC-based serials, not local-midnight instants.
+function economicsExcelCalendarDate(value){
+  if(!value)return null;
+  const match=String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!match)return null;
+  const [,y,m,d]=match;
+  return new Date(Date.UTC(Number(y),Number(m)-1,Number(d)));
+}
+
 /* Admin-only saved summaries and monthly Excel; no financial data in worker views. */
 let economicsExcludedIds=new Set(),economicsZipBusy=false;
 let extraEconomicsRecords=[],extraEconomicsError='',extraEconomicsBookRows=[];
@@ -196,7 +205,7 @@ function addEconomicsWorksheet(workbook,rows,period=$('extraEconomicsMonth').val
     const cleaning=(e.categoria_target||r.pricing_category)==='pulizie';
     const equipmentCost=cleaning&&r.equipment?(r.total_hours==null?null:Math.round(Number(r.total_hours)*500)):0;
     const laborWithoutEquipment=c.labor==null||equipmentCost==null?null:c.labor-equipmentCost;
-    const values=[(st?.nome||e.nome_esterno||'').toUpperCase(),excelDateValue(extraRequestDate(e)),excelDateValue(e.giorno_intervento||model.closureDate(e)),String(e.numero_target||''),x.closureNumber||'',e.titolo||'',r.operator_count??null,typeof r.dedicated_trip==='boolean'?(r.dedicated_trip?'SI':'NO'):'',euros(c.exit),r.total_hours??null,euros(laborWithoutEquipment),null,null,euros(c.labor),euros(hourlyTotal),({tariffa:'ORE',preventivo:'PREVENTIVO',consuntivo:'CONSUNTIVO'})[r.pricing_mode]||'',c.ready?euros(c.total):null,notes.join(' | ')];
+    const values=[(st?.nome||e.nome_esterno||'').toUpperCase(),economicsExcelCalendarDate(extraRequestDate(e)),economicsExcelCalendarDate(e.giorno_intervento||model.closureDate(e)),String(e.numero_target||''),x.closureNumber||'',e.titolo||'',r.operator_count??null,typeof r.dedicated_trip==='boolean'?(r.dedicated_trip?'SI':'NO'):'',euros(c.exit),r.total_hours??null,euros(laborWithoutEquipment),null,null,euros(c.labor),euros(hourlyTotal),({tariffa:'ORE',preventivo:'PREVENTIVO',consuntivo:'CONSUNTIVO'})[r.pricing_mode]||'',c.ready?euros(c.total):null,notes.join(' | ')];
     if(hasCleaning)values.splice(13,0,cleaning?(r.equipment?'SI':'NO'):'',cleaning?euros(equipmentCost):null);
     const row=ws.addRow(values);
     for(const col of [2,3])row.getCell(col).numFmt='dd/mm/yyyy';
@@ -363,7 +372,7 @@ function addMaintenanceWorksheet(workbook,rows,period){
     const cost=r.total_hours==null?null:Math.round(Number(r.total_hours)*equipment*100);
     const taxable=c.ready?c.total:null,vat=taxable==null?null:Math.round(taxable*.22),euros=v=>v==null?null:v/100;
     const notes=[model.cleaningInvoiceLabel(r,'manutenzioni'),r.economic_notes,!c.ready?economicsStatus(c,r)+' · escluso dai totali':'',!x.closureNumber?'Numero chiusura da verificare':'',r.pricing_mode==='preventivo'?'Ore e attrezzature informative: imponibile da preventivo':'',(r.expenses||[]).map(v=>v.description+': '+model.money(model.cents(v.amount))).join('; ')].filter(Boolean).join(' | ');
-    const row=ws.addRow([st?.nome||e.nome_esterno||'',excelDateValue(e.giorno_intervento||model.closureDate(e)),e.numero_target||'',x.closureNumber||'',e.titolo||'',r.operator_count??null,euros(c.exit),c.dayHours,r.hourly_rate==null?null:r.hourly_rate-equipment,c.nightHours,r.night_hourly_rate==null?null:r.night_hourly_rate-equipment,c.labor==null||cost==null?null:euros(c.labor-cost),equipment,euros(cost),euros(c.expenses),euros(c.discount),model.modes[r.pricing_mode]||'',euros(taxable),euros(vat),taxable==null?null:euros(taxable+vat),notes]);
+    const row=ws.addRow([st?.nome||e.nome_esterno||'',economicsExcelCalendarDate(e.giorno_intervento||model.closureDate(e)),e.numero_target||'',x.closureNumber||'',e.titolo||'',r.operator_count??null,euros(c.exit),c.dayHours,r.hourly_rate==null?null:r.hourly_rate-equipment,c.nightHours,r.night_hourly_rate==null?null:r.night_hourly_rate-equipment,c.labor==null||cost==null?null:euros(c.labor-cost),equipment,euros(cost),euros(c.expenses),euros(c.discount),model.modes[r.pricing_mode]||'',euros(taxable),euros(vat),taxable==null?null:euros(taxable+vat),notes]);
     row.getCell(2).numFmt='dd/mm/yyyy';row.alignment={wrapText:true,vertical:'top'};
     for(const i of [7,9,11,12,13,14,15,16,18,19,20])row.getCell(i).numFmt='#,##0.00 "€"';
   });
